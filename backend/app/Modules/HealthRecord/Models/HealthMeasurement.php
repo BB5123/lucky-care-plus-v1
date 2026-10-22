@@ -32,7 +32,10 @@ class HealthMeasurement extends Model
         'profile_id',
         'type',
         'value',
+        'secondary_value',
         'unit',
+        'context',
+        'note',
         'recorded_at',
         'recorded_by',
         'source',
@@ -43,6 +46,10 @@ class HealthMeasurement extends Model
     {
         return [
             'value' => 'decimal:4',
+            'secondary_value' => 'decimal:2',
+            // Free-text notes are field-encrypted at rest (.ai/06 §6) and are
+            // never written to a log or audit payload (N-02).
+            'note' => 'encrypted',
             'recorded_at' => 'datetime',
             'recorded_by' => 'integer',
             'version' => 'integer',

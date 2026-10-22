@@ -4,6 +4,9 @@ use App\Http\Controllers\WorkspacePingController;
 use App\Modules\Accounts\Http\Controllers\AuthController;
 use App\Modules\Accounts\Http\Controllers\OtpController;
 use App\Modules\Accounts\Http\Controllers\PinController;
+use App\Modules\HealthRecord\Http\Controllers\AllergyController;
+use App\Modules\HealthRecord\Http\Controllers\ConditionController;
+use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
 use App\Modules\Workspace\Http\Controllers\InvitationController;
 use App\Modules\Workspace\Http\Controllers\MembershipController;
 use App\Modules\Workspace\Http\Controllers\WorkspaceController;
@@ -73,6 +76,38 @@ Route::prefix('v1')->group(function (): void {
             'workspace.context',
             'authorize.permission:workspace.member.invite',
         ]);
+
+    // -- Health Vault (Phase 1) ---------------------------------------------
+    // Every route declares its frozen permission ID (AP-001); the Authorizer
+    // resolves the profile from the route and enforces scope + grant there.
+    Route::prefix('/workspaces/{workspace}/profiles/{profile}')
+        ->middleware(['auth:sanctum', 'throttle:60,1,health-vault', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/measurements/trend', [MeasurementController::class, 'trend'])
+                ->middleware('authorize.permission:health_measurement.read');
+            Route::get('/measurements', [MeasurementController::class, 'index'])
+                ->middleware('authorize.permission:health_measurement.read');
+            Route::post('/measurements', [MeasurementController::class, 'store'])
+                ->middleware('authorize.permission:health_measurement.create');
+            Route::patch('/measurements/{measurement}', [MeasurementController::class, 'update'])
+                ->middleware('authorize.permission:health_measurement.correct');
+            Route::delete('/measurements/{measurement}', [MeasurementController::class, 'destroy'])
+                ->middleware('authorize.permission:health_measurement.delete');
+
+            Route::get('/conditions', [ConditionController::class, 'index'])
+                ->middleware('authorize.permission:health_condition.read');
+            Route::post('/conditions', [ConditionController::class, 'store'])
+                ->middleware('authorize.permission:health_condition.create');
+            Route::patch('/conditions/{condition}', [ConditionController::class, 'update'])
+                ->middleware('authorize.permission:health_condition.correct');
+
+            Route::get('/allergies', [AllergyController::class, 'index'])
+                ->middleware('authorize.permission:allergy.read');
+            Route::post('/allergies', [AllergyController::class, 'store'])
+                ->middleware('authorize.permission:allergy.update');
+            Route::patch('/allergies/{allergy}', [AllergyController::class, 'update'])
+                ->middleware('authorize.permission:allergy.update');
+        });
 
     // Protection is declared on the route: authentication, server-side
     // workspace resolution, then the Authorizer pipeline. The endpoint itself
