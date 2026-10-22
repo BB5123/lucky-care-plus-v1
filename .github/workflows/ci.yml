@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (PHP 8.4, PostgreSQL 16)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lucky_care_plus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: lucky_care_plus_test
+      APP_ENV: testing
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      RETENTION_DRY_RUN: "true"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_pgsql, pgsql, redis
+          coverage: none
+
+      - name: Cache Composer vendor
+        uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: ${{ runner.os }}-php-8.4-vendor-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-8.4-vendor-
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # RLS is only enforced for non-superusers. The default `postgres` role has
+      # BYPASSRLS, so the test connection must be a dedicated runtime role that
+      # owns schema `public` (mirrors docker/postgres/init/01-app-role.sql).
+      - name: Create non-superuser runtime role
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 \
+            --host=127.0.0.1 \
+            --port=5432 \
+            --username=postgres \
+            --dbname=lucky_care_plus_test <<'SQL'
+          CREATE ROLE luckycare_app
+            LOGIN
+            PASSWORD 'luckycare_app_ci'
+            NOSUPERUSER
+            NOCREATEDB
+            NOCREATEROLE
+            NOBYPASSRLS;
+          GRANT ALL PRIVILEGES ON DATABASE lucky_care_plus_test TO luckycare_app;
+          ALTER SCHEMA public OWNER TO luckycare_app;
+          GRANT ALL ON SCHEMA public TO luckycare_app;
+          ALTER DATABASE lucky_care_plus_test OWNER TO luckycare_app;
+          SQL
+          {
+            echo "DB_USERNAME=luckycare_app"
+            echo "DB_PASSWORD=luckycare_app_ci"
+          } >> "$GITHUB_ENV"
+
+      - name: Check code style (Pint)
+        run: ./vendor/bin/pint --test
+
+      - name: Run test suite
+        run: php artisan test
+
+  frontend:
+    name: Frontend (Angular 22)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  mobile:
+    name: Mobile (Flutter stable)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
