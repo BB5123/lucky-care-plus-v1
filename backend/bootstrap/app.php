@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAuthorized;
+use App\Http\Middleware\ResolveSelfServiceContext;
 use App\Http\Middleware\ResolveWorkspaceContext;
 use App\Http\Responses\ProblemDetails;
 use Illuminate\Auth\AuthenticationException;
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'workspace.context' => ResolveWorkspaceContext::class,
+            'self.context' => ResolveSelfServiceContext::class,
             'authorize.permission' => EnsureAuthorized::class,
         ]);
     })

@@ -24,6 +24,16 @@ final class TenantContext
 
     private const WORKSPACE_KEY = 'app.workspace_id';
 
+    /**
+     * The authenticated actor for self-service (`/me`) requests.
+     *
+     * Workspace-scoped requests do not need it: the workspace context plus the
+     * authorization decision identify the caller. `/me` routes have no
+     * workspace, so the delivery ledger RLS policy uses this value to keep one
+     * user's rows invisible to another user in the same workspace.
+     */
+    private const ACTOR_KEY = 'app.user_id';
+
     public static function set(?string $tenantId, ?string $workspaceId): void
     {
         // One round trip for both settings. Both values stay parameterised and
@@ -32,6 +42,26 @@ final class TenantContext
             'select set_config(?, ?, true) as tenant, set_config(?, ?, true) as workspace',
             [self::TENANT_KEY, $tenantId, self::WORKSPACE_KEY, $workspaceId],
         );
+    }
+
+    public static function setActor(?int $userId): void
+    {
+        DB::selectOne(
+            'select set_config(?, ?, true) as actor',
+            [self::ACTOR_KEY, $userId === null ? '' : (string) $userId],
+        );
+    }
+
+    public static function actorId(): ?int
+    {
+        $value = self::current(self::ACTOR_KEY);
+
+        return $value === null ? null : (int) $value;
+    }
+
+    public static function clearActor(): void
+    {
+        DB::statement("select set_config('app.user_id', '', false)");
     }
 
     public static function clear(): void

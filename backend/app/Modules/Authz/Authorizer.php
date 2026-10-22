@@ -9,6 +9,7 @@ use App\Modules\Consent\Models\ConsentRecord;
 use App\Modules\Consent\Services\GrantChecker;
 use App\Modules\HealthRecord\Models\HealthProfile;
 use App\Modules\People\Models\Person;
+use App\Modules\Workspace\Models\Tenant;
 use App\Modules\Workspace\Models\Workspace;
 use App\Modules\Workspace\Models\WorkspaceMembership;
 use App\Modules\Workspace\Services\WorkspaceResolver;
@@ -159,6 +160,22 @@ final class Authorizer
         'integration.health_data.write' => 'third_party_share',
     ];
 
+    /**
+     * Permissions scoped to `self_membership` (baseline v1.1.0, Matrix E).
+     *
+     * They are the only permissions the Authorizer accepts together with a
+     * workspace-less {@see ResourceRef::forSelfMembership()} resource. The list
+     * is deliberately closed: a future permission that happens to have a null
+     * scope in `PERMISSION_MAP` must not silently become self-service.
+     *
+     * @var list<string>
+     */
+    private const SELF_MEMBERSHIP_PERMISSIONS = [
+        'notification.preference.read',
+        'notification.preference.update',
+        'notification.delivery.read',
+    ];
+
     public function __construct(
         private readonly PermissionCatalog $catalog,
         private readonly GrantChecker $grants,
@@ -264,6 +281,17 @@ final class Authorizer
         return self::PERMISSION_MAP[$permission] ?? null;
     }
 
+    /**
+     * True for the frozen `self_membership` permissions (Matrix E).
+     *
+     * `EnsureAuthorized` uses this to decide whether a route without a
+     * `{workspace}` may still be authorized through this single entry point.
+     */
+    public function supportsSelfService(string $permission): bool
+    {
+        return in_array($permission, self::SELF_MEMBERSHIP_PERMISSIONS, true);
+    }
+
     private function evaluate(
         ?User $actor,
         string $permission,
@@ -285,6 +313,17 @@ final class Authorizer
 
         if ($mapping === null || ! $this->catalog->allowsAction($mapping['action'])) {
             return Decision::deny('unknown_permission', 500, 'permission_not_mapped');
+        }
+
+        // [2b] Self-service (`self_membership`) decisions are about the
+        // actor's own rows and have no workspace to resolve. They still go
+        // through this pipeline so there is exactly one decision point.
+        if ($resource->isSelfService()) {
+            return $this->evaluateSelfService($actor, $permission, $resource, $mapping);
+        }
+
+        if ($resource->workspaceId === null) {
+            return Decision::deny('out_of_scope', 404, 'workspace_out_of_scope');
         }
 
         // [3] Workspace resolution. A missing workspace and a non-member are
@@ -372,6 +411,41 @@ final class Authorizer
 
             return Decision::allow();
         });
+    }
+
+    /**
+     * `self_membership` branch: the actor's own user id is the whole scope.
+     *
+     * There is no workspace and therefore no role gate: Matrix E marks all
+     * three notification actions `A` for every role, and the resource can only
+     * ever be the actor's own rows. A platform role adds no standing access
+     * here because the actor still only sees their own records (ABD-011).
+     *
+     * @param  array{scope: ?string, action: string}  $mapping
+     */
+    private function evaluateSelfService(
+        ?User $actor,
+        string $permission,
+        ResourceRef $resource,
+        array $mapping,
+    ): Decision {
+        if ($actor === null) {
+            return Decision::deny('unauthenticated', 401, 'not_authenticated');
+        }
+
+        // Defence in depth: a null-scope permission is not automatically a
+        // self-service permission. Only the frozen Matrix E list qualifies.
+        if ($mapping['scope'] !== null || ! $this->supportsSelfService($permission)) {
+            return Decision::deny('unknown_permission', 500, 'permission_not_self_service');
+        }
+
+        // The resource is built server-side from the authenticated session, so
+        // a mismatch means a programming error, not client input (N-01).
+        if ($resource->selfUserId !== $actor->id) {
+            return Decision::deny('forbidden', 403, 'self_scope_mismatch');
+        }
+
+        return Decision::allow();
     }
 
     /**
@@ -669,7 +743,13 @@ final class Authorizer
         ResourceRef $resource,
         Decision $decision,
     ): void {
-        $workspace = $this->workspaces->resolve($resource->workspaceId);
+        if ($resource->isSelfService()) {
+            $this->auditSelfServiceDecision($actor, $permission, $decision);
+
+            return;
+        }
+
+        $workspace = $this->workspaces->resolve((string) $resource->workspaceId);
 
         if (! $workspace instanceof Workspace) {
             // No trustworthy tenant context: there is nowhere safe to write,
@@ -692,6 +772,48 @@ final class Authorizer
                 'result' => $decision->allowed() ? 'allow' : 'deny',
                 'reason_code' => $decision->allowed() ? null : $decision->code(),
                 'metadata' => ['reason' => $decision->reason()],
+            ]);
+        });
+    }
+
+    /**
+     * A `/me` decision has no workspace, but an allow is still invalid without
+     * an audit row (F-11). `security_audit_logs.tenant_id` is mandatory while
+     * `workspace_id` is nullable by design (platform/system events), so the
+     * row is chained into the tenant directory (default tenant first) with
+     * `workspace_id = null`. That is server-side data only; the actor cannot
+     * influence it (N-01).
+     */
+    private function auditSelfServiceDecision(
+        ?User $actor,
+        string $permission,
+        Decision $decision,
+    ): void {
+        $tenantId = Tenant::query()
+            ->orderByRaw("case when slug = 'default' then 0 else 1 end")
+            ->orderBy('id')
+            ->value('id');
+
+        if (! is_string($tenantId) || $tenantId === '') {
+            throw new \RuntimeException(
+                'Self-service authorization audit requires a tenant directory row (F-11).'
+            );
+        }
+
+        TenantContext::run($tenantId, '', function () use ($actor, $permission, $decision): void {
+            $this->audit->record([
+                'actor_id' => $actor?->id,
+                'actor_type' => $actor === null ? 'anonymous' : 'user',
+                'action' => $permission !== '' ? $permission : 'unknown_permission',
+                'target_type' => 'user',
+                // `target_id` is uuid in the ledger; user ids are bigint.
+                'target_id' => null,
+                'result' => $decision->allowed() ? 'allow' : 'deny',
+                'reason_code' => $decision->allowed() ? null : $decision->code(),
+                'metadata' => [
+                    'reason' => $decision->reason(),
+                    'scope' => 'self_membership',
+                ],
             ]);
         });
     }

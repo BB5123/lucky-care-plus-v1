@@ -15,6 +15,8 @@ use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationAdherenceController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationPlanController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationRecordController;
+use App\Modules\Notifications\Http\Controllers\NotificationDeliveryController;
+use App\Modules\Notifications\Http\Controllers\NotificationPreferenceController;
 use App\Modules\Workspace\Http\Controllers\InvitationController;
 use App\Modules\Workspace\Http\Controllers\MembershipController;
 use App\Modules\Workspace\Http\Controllers\WorkspaceController;
@@ -56,6 +58,23 @@ Route::prefix('v1')->group(function (): void {
 
     Route::post('/auth/pin/verify', [PinController::class, 'verify'])
         ->middleware(['auth:sanctum', 'throttle:6,1,pin-verify']);
+
+    // -- Self-service notifications (P1.6, ADR-005) -------------------------
+    // No `{workspace}`: preferences and deliveries are user-owned. Each route
+    // declares its frozen permission ID; the Authorizer receives a
+    // `self_membership` resource and the query layer filters by the actor.
+    Route::prefix('/me')
+        ->middleware(['auth:sanctum', 'throttle:30,1,notification-self', 'self.context'])
+        ->group(function (): void {
+            Route::get('/notification-preferences', [NotificationPreferenceController::class, 'show'])
+                ->middleware('authorize.permission:notification.preference.read');
+            Route::patch('/notification-preferences', [NotificationPreferenceController::class, 'update'])
+                ->middleware('authorize.permission:notification.preference.update');
+            Route::get('/notifications/deliveries', [NotificationDeliveryController::class, 'index'])
+                ->middleware('authorize.permission:notification.delivery.read');
+            Route::post('/notifications/{delivery}/read', [NotificationDeliveryController::class, 'markRead'])
+                ->middleware('authorize.permission:notification.delivery.read');
+        });
 
     // -- Workspaces ---------------------------------------------------------
     Route::post('/workspaces', [WorkspaceController::class, 'store'])
