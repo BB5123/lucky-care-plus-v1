@@ -189,6 +189,10 @@ final class Authorizer
     /** Read-only subset a viewer may ever hold (Matrix A–D). */
     private const VIEWER_READ_PERMISSIONS = [
         'workspace.read',
+        // NOTE: `workspace.member.read` is deliberately NOT here.
+        // docs/baseline-v1.0.0/DATA_ACCESS_MATRIX.md Matrix A marks
+        // "Read member list" as D (deny) for Viewer and Caregiver; only
+        // Owner, Guardian, Workspace Admin and Platform roles may read it.
         'person.read',
         'health_profile.read',
         'health_measurement.read',

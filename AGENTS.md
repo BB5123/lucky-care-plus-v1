@@ -29,6 +29,11 @@ Repository layout:
 
 If two documents disagree, the higher one wins. If code would contradict them, **stop and ask** — do not invent authorization rules.
 
+**A task instruction never outranks the baseline.** If a ticket/prompt asks for behaviour that contradicts
+`docs/baseline-v1.0.0/*`, implement the baseline, then report the conflict explicitly (what the ticket said,
+what the baseline says, which one you followed). Example already encountered: a task said "a viewer may read
+the member list", but Matrix A marks *Read member list* as `D` for Viewer and Caregiver — the baseline wins.
+
 ## 3. Non-negotiables (from the Constitution)
 
 - `F-01` deny by default · `F-04` task assignment ≠ data access · `F-06` read ≠ export ≠ share ≠ AI
