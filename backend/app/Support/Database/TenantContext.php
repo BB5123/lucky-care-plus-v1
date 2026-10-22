@@ -37,6 +37,22 @@ final class TenantContext
     }
 
     /**
+     * Read the tenant currently set on the connection (null when absent).
+     */
+    public static function tenantId(): ?string
+    {
+        return self::current(self::TENANT_KEY);
+    }
+
+    /**
+     * Read the workspace currently set on the connection (null when absent).
+     */
+    public static function workspaceId(): ?string
+    {
+        return self::current(self::WORKSPACE_KEY);
+    }
+
+    /**
      * Run a callback with the given tenant/workspace context.
      *
      * The context is always restored in a `finally`, so a callback can never

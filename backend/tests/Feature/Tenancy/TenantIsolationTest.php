@@ -42,6 +42,8 @@ class TenantIsolationTest extends TestCase
 
     private string $foreignPersonId;
 
+    private string $healthProfileId;
+
     private User $user;
 
     protected function setUp(): void
@@ -155,6 +157,128 @@ class TenantIsolationTest extends TestCase
             'from_person_id' => $this->personId,
             'to_person_id' => $this->personId,
             'kinship' => 'self',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        // -- Phase 0.3a authorization tables ---------------------------------
+        // Fixtures exist so TEN-T02 proves the new RLS policies deny reads
+        // rather than merely counting empty tables.
+        $grantee = User::factory()->create();
+        $this->healthProfileId = Uuid7::generate();
+
+        DB::table('health_profiles')->insert([
+            'id' => $this->healthProfileId,
+            'tenant_id' => $this->tenantId,
+            'workspace_id' => $this->workspaceId,
+            'person_id' => $this->personId,
+            'managed_by_person_id' => null,
+            'version' => 1,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('care_relationships')->insert([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenantId,
+            'workspace_id' => $this->workspaceId,
+            'profile_id' => $this->healthProfileId,
+            'person_id' => $this->personId,
+            'ring' => 'inner',
+            'relationship_type' => 'self',
+            'status' => 'active',
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('delegations')->insert([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenantId,
+            'workspace_id' => $this->workspaceId,
+            'represented_person_id' => $this->personId,
+            'representative_user_id' => $this->user->id,
+            'level' => 'L1',
+            'evidence_document_id' => null,
+            'verified_by' => null,
+            'verified_at' => null,
+            'expires_at' => $now->copy()->addYear(),
+            'status' => 'pending',
+            'revoked_reason' => null,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('access_grants')->insert([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenantId,
+            'workspace_id' => $this->workspaceId,
+            'profile_id' => $this->healthProfileId,
+            'granted_by' => $this->user->id,
+            'grantee_user_id' => $grantee->id,
+            'resource_scope' => json_encode(['profile.basic']),
+            'allowed_actions' => json_encode(['read']),
+            'purpose' => 'tenancy-fixture',
+            'valid_from' => $now->copy()->subMinute(),
+            'expires_at' => $now->copy()->addYear(),
+            'status' => 'active',
+            'revoked_at' => null,
+            'revoked_by' => null,
+            'revocation_reason' => null,
+            'constraints' => json_encode([]),
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('consent_records')->insert([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenantId,
+            'workspace_id' => $this->workspaceId,
+            'profile_id' => $this->healthProfileId,
+            'consent_type' => 'health_processing',
+            'purpose' => 'care_coordination',
+            'scope' => json_encode(['profile.basic']),
+            'policy_version' => 'v1.0.0',
+            'consenting_subject_id' => $this->personId,
+            'legal_basis_type' => 'consent',
+            'granted_at' => $now,
+            'withdrawn_at' => null,
+            'evidence_reference' => null,
+            'superseded_by_id' => null,
+            'created_at' => $now,
+        ]);
+
+        DB::table('audit_events')->insert([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenantId,
+            'workspace_id' => $this->workspaceId,
+            'actor_id' => $this->user->id,
+            'actor_type' => 'user',
+            'action' => 'tenancy.fixture',
+            'target_type' => null,
+            'target_id' => null,
+            'result' => 'allow',
+            'reason_code' => null,
+            'metadata' => json_encode([]),
+            'occurred_at' => $now,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+
+        DB::table('security_audit_logs')->insert([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenantId,
+            'occurred_at' => $now,
+            'actor_id' => $this->user->id,
+            'actor_type' => 'user',
+            'action' => 'tenancy.fixture',
+            'target_type' => null,
+            'target_id' => null,
+            'result' => 'allow',
+            'reason_code' => null,
+            'workspace_id' => $this->workspaceId,
+            'metadata' => json_encode([]),
+            'prev_hash' => null,
+            'hash' => DB::raw("decode('00', 'hex')"),
             'created_at' => $now,
             'updated_at' => $now,
         ]);
@@ -273,6 +397,7 @@ class TenantIsolationTest extends TestCase
         // Sanity check: the rows exist when the correct context is set.
         TenantContext::run($this->tenantId, $this->workspaceId, function () {
             $this->assertSame(1, DB::table('persons')->where('id', $this->personId)->count());
+            $this->assertSame(1, DB::table('health_profiles')->where('id', $this->healthProfileId)->count());
         });
 
         TenantContext::clear();
@@ -284,6 +409,13 @@ class TenantIsolationTest extends TestCase
             'persons',
             'contact_points',
             'person_relationships',
+            'health_profiles',
+            'care_relationships',
+            'delegations',
+            'access_grants',
+            'consent_records',
+            'audit_events',
+            'security_audit_logs',
         ] as $table) {
             $this->assertSame(0, DB::table($table)->count(), "{$table} leaked rows without RLS context");
         }

@@ -3,6 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Modules\Consent\Models\AccessGrant;
+use App\Modules\Consent\Models\ConsentRecord;
+use App\Modules\HealthRecord\Models\HealthProfile;
 use App\Modules\People\Models\ContactPoint;
 use App\Modules\People\Models\Person;
 use App\Modules\Workspace\Models\Tenant;
@@ -71,7 +74,7 @@ class FoundationSeeder extends Seeder
                 ],
             );
 
-            Person::query()->updateOrCreate(
+            $caregiverPerson = Person::query()->updateOrCreate(
                 ['workspace_id' => $workspace->id, 'user_id' => $caregiver->id],
                 [
                     'tenant_id' => $tenant->id,
@@ -93,6 +96,79 @@ class FoundationSeeder extends Seeder
 
             $this->upsertContactPoint($tenant, $workspace, $dependent, 'phone', '0800000001', true);
             $this->upsertContactPoint($tenant, $workspace, $dependent, 'line', '@jaidee-dependent', false);
+
+            // -- Health profiles: one per person (ADR-009) -------------------
+            $this->upsertHealthProfile($tenant, $workspace, $ownerPerson, null);
+            $this->upsertHealthProfile($tenant, $workspace, $caregiverPerson, null);
+            $dependentProfile = $this->upsertHealthProfile($tenant, $workspace, $dependent, $ownerPerson->id);
+
+            // -- Access grants covering the positive and negative paths ------
+            $this->upsertGrant(
+                $tenant,
+                $workspace,
+                $dependentProfile,
+                $owner,
+                $caregiver,
+                'seeded_active_grant',
+                ['profile.basic', 'vitals', 'medications'],
+                ['read', 'create'],
+                now()->subDay(),
+                now()->addYear(),
+                'active',
+            );
+            $this->upsertGrant(
+                $tenant,
+                $workspace,
+                $dependentProfile,
+                $owner,
+                $caregiver,
+                'seeded_expired_grant',
+                ['profile.basic'],
+                ['read'],
+                now()->subYears(2),
+                now()->subDay(),
+                'expired',
+            );
+            $this->upsertGrant(
+                $tenant,
+                $workspace,
+                $dependentProfile,
+                $owner,
+                $caregiver,
+                'seeded_revoked_grant',
+                ['profile.basic', 'vitals'],
+                ['read'],
+                now()->subMonth(),
+                now()->addYear(),
+                'revoked',
+                revokedBy: $owner,
+            );
+
+            // Consent is append-only, so seed it only when it does not exist.
+            $hasConsent = ConsentRecord::query()
+                ->where('workspace_id', $workspace->id)
+                ->where('profile_id', $dependentProfile->id)
+                ->where('consent_type', 'health_processing')
+                ->where('purpose', 'care_coordination')
+                ->exists();
+
+            if (! $hasConsent) {
+                ConsentRecord::query()->create([
+                    'tenant_id' => $tenant->id,
+                    'workspace_id' => $workspace->id,
+                    'profile_id' => $dependentProfile->id,
+                    'consent_type' => 'health_processing',
+                    'purpose' => 'care_coordination',
+                    'scope' => ['profile.basic', 'vitals', 'medications'],
+                    'policy_version' => 'v1.0.0',
+                    'consenting_subject_id' => $dependent->id,
+                    'legal_basis_type' => 'consent',
+                    'granted_at' => now(),
+                    'withdrawn_at' => null,
+                    'evidence_reference' => 'seed:dev',
+                    'superseded_by_id' => null,
+                ]);
+            }
         });
     }
 
@@ -135,6 +211,64 @@ class FoundationSeeder extends Seeder
                 'workspace_id' => $workspace->id,
                 'value' => $value,
                 'is_primary' => $isPrimary,
+            ],
+        );
+    }
+
+    private function upsertHealthProfile(
+        Tenant $tenant,
+        Workspace $workspace,
+        Person $person,
+        ?string $managedByPersonId,
+    ): HealthProfile {
+        return HealthProfile::query()->updateOrCreate(
+            ['person_id' => $person->id],
+            [
+                'tenant_id' => $tenant->id,
+                'workspace_id' => $workspace->id,
+                'managed_by_person_id' => $managedByPersonId,
+                'version' => 1,
+            ],
+        );
+    }
+
+    /**
+     * @param  list<string>  $scopes
+     * @param  list<string>  $actions
+     */
+    private function upsertGrant(
+        Tenant $tenant,
+        Workspace $workspace,
+        HealthProfile $profile,
+        User $grantor,
+        User $grantee,
+        string $purpose,
+        array $scopes,
+        array $actions,
+        \DateTimeInterface $validFrom,
+        \DateTimeInterface $expiresAt,
+        string $status,
+        ?User $revokedBy = null,
+    ): AccessGrant {
+        return AccessGrant::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspace->id,
+                'profile_id' => $profile->id,
+                'grantee_user_id' => $grantee->id,
+                'purpose' => $purpose,
+            ],
+            [
+                'tenant_id' => $tenant->id,
+                'granted_by' => $grantor->id,
+                'resource_scope' => $scopes,
+                'allowed_actions' => $actions,
+                'valid_from' => $validFrom,
+                'expires_at' => $expiresAt,
+                'status' => $status,
+                'revoked_at' => $status === 'revoked' ? now()->subDay() : null,
+                'revoked_by' => $status === 'revoked' ? $revokedBy?->id : null,
+                'revocation_reason' => $status === 'revoked' ? 'seeded for negative tests' : null,
+                'constraints' => [],
             ],
         );
     }
