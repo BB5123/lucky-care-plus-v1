@@ -321,20 +321,29 @@ final class PurgeService
      */
     private function deleteRows(array $spec, array $ids): int
     {
-        $model = $spec['model'];
+        // `task_events` is append-only for every application path; the trigger
+        // only permits DELETE when retention explicitly opts in. Cascades from
+        // `care_tasks` hit the same trigger, so the flag is set for every type.
+        DB::selectOne('select set_config(?, ?, false)', ['app.retention_purge', 'on']);
 
-        if ($model !== null) {
-            /** @var class-string<Model> $model */
-            $rows = $model::query()->whereIn('id', $ids)->get();
+        try {
+            $model = $spec['model'];
 
-            foreach ($rows as $row) {
-                $row->delete();
+            if ($model !== null) {
+                /** @var class-string<Model> $model */
+                $rows = $model::query()->whereIn('id', $ids)->get();
+
+                foreach ($rows as $row) {
+                    $row->delete();
+                }
+
+                return $rows->count();
             }
 
-            return $rows->count();
+            return DB::table($spec['table'])->whereIn('id', $ids)->delete();
+        } finally {
+            DB::selectOne('select set_config(?, ?, false)', ['app.retention_purge', '']);
         }
-
-        return DB::table($spec['table'])->whereIn('id', $ids)->delete();
     }
 
     /**

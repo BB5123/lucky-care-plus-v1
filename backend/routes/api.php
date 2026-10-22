@@ -4,6 +4,9 @@ use App\Http\Controllers\WorkspacePingController;
 use App\Modules\Accounts\Http\Controllers\AuthController;
 use App\Modules\Accounts\Http\Controllers\OtpController;
 use App\Modules\Accounts\Http\Controllers\PinController;
+use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
+use App\Modules\CareCrm\Http\Controllers\CareTaskController;
+use App\Modules\CareCrm\Http\Controllers\TaskEvidenceController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
 use App\Modules\HealthRecord\Http\Controllers\ConditionController;
 use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
@@ -128,6 +131,49 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('authorize.permission:medication_record.create');
             Route::patch('/medication-records/{record}', [MedicationRecordController::class, 'update'])
                 ->middleware('authorize.permission:medication_record.correct');
+        });
+
+    // -- Care Tasks (Phase 1.3) ---------------------------------------------
+    // Workspace-scoped by ADR-005. Every route declares its frozen permission
+    // ID; the domain services enforce tier transitions, assignment and
+    // separation of duties after the authorizer has proven the role gate.
+    Route::prefix('/workspaces/{workspace}/care-tasks')
+        ->middleware(['auth:sanctum', 'throttle:60,1,care-tasks', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [CareTaskController::class, 'index'])
+                ->middleware('authorize.permission:care_task.read');
+            Route::post('/', [CareTaskController::class, 'store'])
+                ->middleware('authorize.permission:care_task.create');
+            Route::get('/{task}', [CareTaskController::class, 'show'])
+                ->middleware('authorize.permission:care_task.read');
+            Route::get('/{task}/events', [CareTaskController::class, 'events'])
+                ->middleware('authorize.permission:care_task.read');
+
+            Route::post('/{task}/assign', [CareTaskActionController::class, 'assign'])
+                ->middleware('authorize.permission:care_task.assign');
+            Route::post('/{task}/accept', [CareTaskActionController::class, 'accept'])
+                ->middleware('authorize.permission:care_task.accept');
+            Route::post('/{task}/decline', [CareTaskActionController::class, 'decline'])
+                ->middleware('authorize.permission:care_task.accept');
+            Route::post('/{task}/start', [CareTaskActionController::class, 'start'])
+                ->middleware('authorize.permission:care_task.start');
+            Route::post('/{task}/complete', [CareTaskActionController::class, 'complete'])
+                ->middleware('authorize.permission:care_task.complete');
+            Route::post('/{task}/verify', [CareTaskActionController::class, 'verify'])
+                ->middleware('authorize.permission:care_task.verify');
+            Route::post('/{task}/reject', [CareTaskActionController::class, 'reject'])
+                ->middleware('authorize.permission:care_task.verify');
+            Route::post('/{task}/reopen', [CareTaskActionController::class, 'reopen'])
+                ->middleware('authorize.permission:care_task.reopen');
+            Route::post('/{task}/cancel', [CareTaskActionController::class, 'cancel'])
+                ->middleware('authorize.permission:care_task.cancel');
+            Route::post('/{task}/block', [CareTaskActionController::class, 'block'])
+                ->middleware('authorize.permission:care_task.block');
+
+            Route::post('/{task}/evidence', [TaskEvidenceController::class, 'store'])
+                ->middleware('authorize.permission:care_task.evidence.create');
+            Route::get('/{task}/evidence', [TaskEvidenceController::class, 'index'])
+                ->middleware('authorize.permission:care_task.evidence.read');
         });
 
     // Protection is declared on the route: authentication, server-side
