@@ -35,6 +35,7 @@ final class AuthController extends Controller
             'name' => $validated['name'],
             'email' => Str::lower($validated['email']),
             'password' => $validated['password'],
+            'last_login_at' => now(),
         ]);
 
         return response()->json([
@@ -71,6 +72,9 @@ final class AuthController extends Controller
                 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
             );
         }
+
+        // A successful login is the activity clock for the inactivity flow.
+        $user->forceFill(['last_login_at' => now()])->save();
 
         return response()->json([
             'data' => [
