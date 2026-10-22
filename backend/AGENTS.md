@@ -38,3 +38,22 @@ php artisan route:list --path=api
 - Never trust `tenant_id`, `workspace_id`, `profile_id`, `role`, or consent flags from the client.
 - No health data in logs, exceptions, notification payloads, file names, or URLs.
 - Do not modify `docs/baseline-v1.0.0/*` or `references/*`.
+
+## Implementation notes (read before changing the request pipeline)
+
+1. **Authorization has exactly one entry point** — `App\Modules\Authz\Authorizer`. Controllers and jobs
+   must not compare roles or permissions themselves; they declare a permission ID and let the
+   `EnsureAuthorized` middleware / the authorizer decide.
+2. **`TenantContext` is transaction-scoped.** `set_config(..., true)` behaves like `SET LOCAL`, so it only
+   survives inside the transaction that set it. `ResolveWorkspaceContext` therefore wraps the whole
+   request in `DB::transaction`. Consequence: **never** put long-running work (exports, report generation,
+   big file streaming) directly in a controller — push it to a queued job, which must set its own context.
+3. **Workspace bootstrap** — `WorkspaceResolver` maps a workspace UUID to its tenant by walking the
+   `tenants` directory (1 iteration today with the default tenant). If a second tenant is added, replace
+   this with a cached directory lookup; it must never become an O(tenants) query per request.
+4. **Fail-closed auditing** — when the authorization stack itself throws, the request returns
+   `503 authorization_unavailable` and writes **no** audit row (no side effect). Every completed
+   allow/deny decision writes exactly one `security_audit_logs` row.
+5. **Permission drift guard** — `config/authorization.php` holds the 93 permission IDs.
+   `PermissionCatalogTest` parses `docs/baseline-v1.0.0/PERMISSION_CATALOG.md` and fails if the two diverge.
+   When the baseline changes, update the config in the same commit.

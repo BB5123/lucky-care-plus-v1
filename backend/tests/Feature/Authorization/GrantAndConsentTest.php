@@ -247,8 +247,12 @@ class GrantAndConsentTest extends TestCase
         $this->assertSame(2, DB::table('security_audit_logs')->count());
         $this->assertTrue($logger->verifyChain());
 
-        $seq = DB::table('security_audit_logs')->orderBy('seq')->pluck('seq')->all();
-        $this->assertSame([1, 2], array_map('intval', $seq));
+        // PostgreSQL sequences are not rolled back with the surrounding test
+        // transaction, so assert consecutive ordering rather than absolute
+        // values that depend on which tests ran earlier.
+        $seq = array_map('intval', DB::table('security_audit_logs')->orderBy('seq')->pluck('seq')->all());
+        $this->assertCount(2, $seq);
+        $this->assertSame($seq[0] + 1, $seq[1]);
     }
 
     public function test_audit_t02_security_log_is_append_only(): void
