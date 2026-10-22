@@ -22,6 +22,7 @@
 | [ADR-015](#adr-015--หลักฐานอำนาจผู้แทน-3-ระดับตามความเสี่ยง) | Legal representative evidence | ✅ Accepted | — |
 | [ADR-016](#adr-016--retention-ตามวัตถุประสงค์-pdpa--tenant-override) | Retention policy | ✅ Accepted | — |
 | [ADR-017](#adr-017--break-glass-เปิดให้ทุกแพ็กเกจ-ไม่ผูกกับราคา) | Break-glass access | ✅ Accepted | — |
+| [ADR-018](#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น) | G0 scoping | ✅ Accepted | — |
 
 ---
 
@@ -513,3 +514,40 @@
 **ผลกระทบ**: `04 §4.2` (BG-011…BG-015), `01` (features), `09` (ops runbook), `10` (`BG-T01…T05`), `12` (Phase 2), `TRACEABILITY`
 
 **ไม่กระทบ baseline**: ใช้ `break_glass.request/approve/use` ที่มีอยู่แล้ว
+
+---
+
+## ADR-018 · G0 scoping — capability-dependent checklist ย้ายไป gate ของ feature นั้น
+
+**บริบท** — `docs/SUMMARY.md §7` เขียน "Authorization Readiness Checklist" 10 ข้อไว้ก่อนเริ่มพัฒนา **ฟีเจอร์ทั้งหมด**
+แต่ `.ai/10-TESTING.md` §5 นำมาใช้เป็นเงื่อนไขของ **G0 (Foundation)** ตรงๆ ผลคือ:
+
+- ข้อ 8 (*AI Context และ Export authorization tests*) ต้องการ AI gateway / export endpoint ที่ **ยังไม่มีใน Phase 0** — เป็นการกันไม่ให้ *เปิดใช้* ฟีเจอร์นั้น ไม่ใช่การพิสูจน์ foundation
+- ข้อ 2 (*Matrix ครบทุก role/ข้อมูล*) ทำได้ใน Phase 0 เพราะเป็นงานทดสอบล้วน แต่ยังไม่ได้ทำ
+
+การปล่อยให้ G0 ค้างเพราะข้อ 8 = gate ตันด้วยเหตุผลผิด (phase mismatch) และเสี่ยงที่จะถูก "แก้" ด้วยการลดความเข้มงวดในภายหลัง
+
+**การตัดสิน**
+
+1. **G0 = foundation เท่านั้น** — พิสูจน์ว่า *โครง* ปลอดภัย: สิทธิ์, สิทธิ์ระดับข้อมูล, audit, isolation, CI
+2. checklist ข้อที่ **ขึ้นกับ capability ที่ยังไม่ถูกสร้าง** ให้ประเมินที่ gate ของ capability นั้น:
+   - ข้อ 8 (AI/export) → **G4 (AI gate)** และเพิ่ม `AI-*` / `EXPORT-*` เป็นเงื่อนไขของ G4
+3. **ข้อ 2 (Matrix conformance) ยังอยู่ใน G0** — เป็นงานทดสอบ ไม่ต้องรอฟีเจอร์ จึงต้องปิดที่ G0
+4. **การเลื่อนไม่ใช่การผ่าน** — ข้อที่เลื่อนต้องแสดงสถานะ `⏭ deferred → G4 (ADR-018)` และต้องมี gate ปลายทางรับไว้ ห้ามติ๊ก ✅
+5. ห้ามใช้ ADR นี้เพื่อผ่อนข้ออื่น — ถ้ามีข้อใหม่ที่ต้องเลื่อน ต้องมี ADR ของตัวเอง
+
+**เหตุผล**
+- ทำให้ G0 ตอบคำถามที่มันตั้งใจถาม ("โครงปลอดภัยพอจะเริ่มสร้างฟีเจอร์หรือยัง") ไม่ใช่ "ทำทุกอย่างเสร็จหรือยัง"
+- ข้อ 8 ยังถูกบังคับ — แค่ย้ายไปจุดที่มันมีความหมาย (ก่อน *เปิด* AI/export ไม่ใช่ก่อน *เริ่ม* Phase 1)
+- ลดแรงจูงใจที่จะ "ลดเกณฑ์" เมื่อ gate ค้าง
+
+**ทางเลือกที่ตัดทิ้ง**
+| ทางเลือก | เหตุผล |
+|---|---|
+| ปล่อยให้ G0 ค้างจนถึง Phase 3 | หยุด development 3 เฟสด้วยเหตุผลที่ไม่เกี่ยวกับ foundation |
+| ติ๊กข้อ 8 ว่าผ่าน | เป็นการโกหก — ไม่มีเทสต์และไม่มีฟีเจอร์ |
+| ลบข้อ 8 ออกจาก checklist | สูญเสียข้อกำหนดจริงที่ต้องบังคับตอนเปิด AI |
+
+**ผลกระทบ**: `.ai/10-TESTING.md` (§5 G0/G4), `backend/docs/G0-CHECKLIST.md` (สถานะข้อ 2 และ 8 + คะแนนรวม)
+
+**ไม่กระทบ baseline**: checklist มาจาก `SUMMARY.md` (historical) ไม่ใช่ baseline ที่ freeze

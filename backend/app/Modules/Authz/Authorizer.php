@@ -159,62 +159,12 @@ final class Authorizer
         'integration.health_data.write' => 'third_party_share',
     ];
 
-    /** Health/care domains that require a relationship or grant. */
-    private const HEALTH_PERMISSION_PREFIXES = [
-        'person.',
-        'health_profile.',
-        'health_condition.',
-        'allergy.',
-        'health_measurement.',
-        'medication_plan.',
-        'medication_record.',
-        'appointment.',
-        'care_plan.',
-        'care_task.',
-        'care_relationship.',
-        'medical_document.',
-        'timeline.',
-        'ai.',
-        'integration.',
-        'health_report.',
-        'data_export.',
-    ];
-
-    /** Deletion is denied by default for health records (ABD-011). */
-    private const DELETION_PERMISSIONS = [
-        'health_measurement.delete',
-        'medical_document.delete',
-    ];
-
-    /** Read-only subset a viewer may ever hold (Matrix A–D). */
-    private const VIEWER_READ_PERMISSIONS = [
-        'workspace.read',
-        // NOTE: `workspace.member.read` is deliberately NOT here.
-        // docs/baseline-v1.0.0/DATA_ACCESS_MATRIX.md Matrix A marks
-        // "Read member list" as D (deny) for Viewer and Caregiver; only
-        // Owner, Guardian, Workspace Admin and Platform roles may read it.
-        'person.read',
-        'health_profile.read',
-        'health_measurement.read',
-        'health_condition.read',
-        'allergy.read',
-        'medication_plan.read',
-        'medication_record.read',
-        'appointment.read',
-        'medical_document.read',
-        'care_plan.read',
-        'care_task.read',
-        'care_task.evidence.read',
-        'timeline.read',
-        'notification.preference.read',
-        'notification.delivery.read',
-    ];
-
     public function __construct(
         private readonly PermissionCatalog $catalog,
         private readonly GrantChecker $grants,
         private readonly SecurityAuditLogger $audit,
         private readonly WorkspaceResolver $workspaces,
+        private readonly RoleGate $gate,
     ) {}
 
     public function authorize(
@@ -310,7 +260,7 @@ final class Authorizer
             // [4] Role gate. Role never replaces scope/grant checks, but a
             // role that can never hold an action (e.g. viewer + update) is a
             // hard deny before any resource lookup.
-            if (! $this->roleAllows($membership->role, $permission, $mapping['action'])) {
+            if (! $this->gate->permits($membership->role, $permission, $mapping['action'])) {
                 return Decision::deny('forbidden', 403, 'role_cannot_hold_permission');
             }
 
@@ -417,190 +367,6 @@ final class Authorizer
         }
 
         return $purposes;
-    }
-
-    /**
-     * Coarse role gate from docs/baseline-v1.0.0/DATA_ACCESS_MATRIX.md.
-     * It is intentionally conservative: it can only remove access, never add
-     * it, because the grant/ownership check still runs afterwards.
-     */
-    private function roleAllows(string $role, string $permission, string $action): bool
-    {
-        // ABD-011 / ABD-012: deletion and break-glass are disabled in the MVP.
-        if (in_array($permission, self::DELETION_PERMISSIONS, true)) {
-            return false;
-        }
-
-        if (str_starts_with($permission, 'break_glass.')) {
-            return false;
-        }
-
-        return match ($role) {
-            'profile_owner' => $this->ownerAllows($permission, $action),
-            'legal_guardian' => $this->guardianAllows($permission, $action),
-            'caregiver', 'healthcare_professional' => $this->caregiverAllows($permission, $action),
-            'workspace_admin' => $this->workspaceAdminAllows($permission, $action),
-            'viewer' => $this->viewerAllows($permission, $action),
-            'platform_support' => $this->platformSupportAllows($permission, $action),
-            'platform_admin' => $this->platformAdminAllows($permission, $action),
-            default => false,
-        };
-    }
-
-    private function ownerAllows(string $permission, string $action): bool
-    {
-        if ($this->isNotificationPermission($permission)) {
-            return true;
-        }
-
-        if (in_array($permission, [
-            'workspace.read',
-            'workspace.update',
-            'workspace.member.read',
-            'workspace.member.invite',
-            'workspace.member.suspend',
-            'workspace.member.remove',
-            'workspace.invitation.accept',
-            'audit_event.read_own',
-        ], true)) {
-            return true;
-        }
-
-        if (
-            str_starts_with($permission, 'workspace.')
-            || str_starts_with($permission, 'audit_event.')
-            || str_starts_with($permission, 'platform.')
-            || str_starts_with($permission, 'security_')
-            || $permission === 'legal_authority.verify'
-        ) {
-            return false;
-        }
-
-        return $this->isHealthPermission($permission)
-            || str_starts_with($permission, 'access_grant.')
-            || str_starts_with($permission, 'consent.');
-    }
-
-    private function guardianAllows(string $permission, string $action): bool
-    {
-        if ($this->isNotificationPermission($permission)) {
-            return true;
-        }
-
-        if (in_array($permission, [
-            'workspace.read',
-            'workspace.invitation.accept',
-            'audit_event.read_own',
-        ], true)) {
-            return true;
-        }
-
-        if (
-            str_starts_with($permission, 'workspace.')
-            || str_starts_with($permission, 'audit_event.')
-            || str_starts_with($permission, 'platform.')
-            || str_starts_with($permission, 'security_')
-            || $permission === 'legal_authority.verify'
-        ) {
-            return false;
-        }
-
-        return $this->isHealthPermission($permission)
-            || str_starts_with($permission, 'access_grant.')
-            || str_starts_with($permission, 'consent.');
-    }
-
-    private function caregiverAllows(string $permission, string $action): bool
-    {
-        if ($this->isNotificationPermission($permission)) {
-            return true;
-        }
-
-        if (in_array($permission, ['workspace.read', 'workspace.invitation.accept'], true)) {
-            return true;
-        }
-
-        if (
-            str_starts_with($permission, 'workspace.')
-            || str_starts_with($permission, 'access_grant.')
-            || str_starts_with($permission, 'consent.')
-            || str_starts_with($permission, 'audit_event.')
-            || str_starts_with($permission, 'platform.')
-            || str_starts_with($permission, 'security_')
-            || $permission === 'legal_authority.verify'
-        ) {
-            return false;
-        }
-
-        return $this->isHealthPermission($permission);
-    }
-
-    private function workspaceAdminAllows(string $permission, string $action): bool
-    {
-        if ($this->isNotificationPermission($permission)) {
-            return true;
-        }
-
-        if ($permission === 'workspace.invitation.accept') {
-            return true;
-        }
-
-        // Task evidence may contain health data; workspace administration is
-        // not health-data access (F-03 / ABD-002).
-        if (str_starts_with($permission, 'care_task.evidence.')) {
-            return false;
-        }
-
-        return str_starts_with($permission, 'workspace.')
-            || str_starts_with($permission, 'care_task.');
-    }
-
-    private function viewerAllows(string $permission, string $action): bool
-    {
-        if ($permission === 'workspace.invitation.accept') {
-            return true;
-        }
-
-        return $action === 'read'
-            && in_array($permission, self::VIEWER_READ_PERMISSIONS, true);
-    }
-
-    private function platformSupportAllows(string $permission, string $action): bool
-    {
-        return $permission === 'platform.user.support'
-            || $permission === 'workspace.read'
-            || $permission === 'workspace.invitation.accept'
-            || $this->isNotificationPermission($permission);
-    }
-
-    private function platformAdminAllows(string $permission, string $action): bool
-    {
-        if ($this->isNotificationPermission($permission)) {
-            return true;
-        }
-
-        if ($permission === 'workspace.invitation.accept') {
-            return true;
-        }
-
-        return str_starts_with($permission, 'platform.')
-            || str_starts_with($permission, 'workspace.');
-    }
-
-    private function isNotificationPermission(string $permission): bool
-    {
-        return str_starts_with($permission, 'notification.');
-    }
-
-    private function isHealthPermission(string $permission): bool
-    {
-        foreach (self::HEALTH_PERMISSION_PREFIXES as $prefix) {
-            if (str_starts_with($permission, $prefix)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

@@ -183,11 +183,11 @@
 
 | Gate | เงื่อนไขผ่าน | ผ่านเมื่อ |
 |---|---|---|
-| **G0 · Foundation** | Unit + Feature ของ authorization ผ่าน 100%; `TEN-*` ผ่าน; checklist §7 baseline ครบ | ก่อนเริ่มฟีเจอร์สุขภาพ |
+| **G0 · Foundation** | Unit + Feature ของ authorization ผ่าน 100%; `TEN-*` ผ่าน; checklist §7 ที่ **อยู่ในขอบเขต Phase 0** ครบ (ข้อที่ขึ้นกับ capability ใช้ [ADR-018](DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น) เลื่อนไป gate ของมัน) | ก่อนเริ่มฟีเจอร์สุขภาพ |
 | **G1 · Core MVP** | `ISO-*`, `GRANT-*`, `CT-*`, `AP-*`, `SEN-*`, `RET-*` ผ่าน; ไม่มี high severity | ก่อน internal pilot |
 | **G2 · Product validation** | ทดสอบกับ 10–15 ครอบครัว + ตัดสินราคา (ADR-011) | ก่อนขาย |
 | **G3 · Coordination** | `RC-*`, `ES-*`, `AS-*`, `DB-*` ผ่าน | ก่อน Phase 2 release |
-| **G4 · AI** | `AIG-*` + evaluation §7 ใน `08` ผ่านตามเกณฑ์ | ก่อนเปิด AI |
+| **G4 · AI** | `AIG-*` + evaluation §7 ใน `08` ผ่านตามเกณฑ์; **`AI-*` และ `EXPORT-*` ของ checklist §7 ข้อ 8 ต้องครบที่ gate นี้** (ADR-018) | ก่อนเปิด AI |
 | **G5 · Scale** | load test ผ่าน (p95 < 400ms dashboard), backup restore test | ก่อน production |
 | **G6 · Compliance** | security review + legal review + DPA ครบ | ก่อนเปิดขายจริง |
 

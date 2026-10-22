@@ -1,8 +1,8 @@
 # G0 Evidence — Phase 0 (Foundation) exit gate
 
-**Status: ⬜ G0 has NOT passed.** 7 of the 10 Authorization Readiness items are
-proven; 3 remain open (Matrix conformance, AI/export authorization tests,
-CI enforcement on GitHub). Per `.ai/12-ROADMAP.md`, Phase 1 must not start
+**Status: ⬜ G0 has NOT passed.** 8 of the 10 Authorization Readiness items are
+proven, **1 is deferred to G4 by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น)**,
+and **1 remains open**: branch protection on `main`. Per `.ai/12-ROADMAP.md`, Phase 1 must not start
 until G0 is green.
 
 - Repository: `lucky-care-plus-v1`
@@ -54,40 +54,42 @@ baseline §7 checklist is complete. `.ai/12-ROADMAP.md` adds two Phase 0 exit cr
 |---|---|---|---|
 | G0-a | Authorization Unit + Feature tests pass 100% | `php artisan test` → **69 passed / 823 assertions**. Authorization-focused suites: `AuthorizerTest` 11/488, `GrantAndConsentTest` 9/21, `PermissionCatalogTest` 2/24, `WorkspaceContextMiddlewareTest` 4/16 → 26 tests, 0 failures. | ✅ |
 | G0-b | `TEN-*` passes | `php artisan test --filter=TenantIsolationTest` → **5 passed / 35 assertions** (`TEN-T01..T05`). RLS is `ENABLE` + `FORCE` in `database/migrations/2026_10_22_150700_enable_row_level_security.php`; tests run as non-superuser `luckycare_app`. | ✅ |
-| G0-c | Baseline §7 readiness checklist complete (10 items) | Section 2 below: **7 ✅ / 3 ⬜**. Open: items 2 (Matrix conformance), 8 (AI/export), 10 (CI on GitHub + branch protection). | ⬜ |
+| G0-c | Baseline §7 readiness checklist complete (10 items) | Section 2 below: **8 ✅ / 1 ⏭ (item 8 → G4, ADR-018) / 1 ⬜ (item 10, branch protection)**. See §3 for the single remaining action. | ⬜ |
 | G0-d | (Roadmap) No endpoint without a permission annotation | `php artisan test --filter=RoutePermissionCoverageTest` → **4 passed / 34 assertions**. All 14 `api/v1` route entries are either permission-guarded (4) or explicitly allowlisted with a written reason (10); every declared permission ID exists in the 93-ID catalog. | ✅ |
 | G0-e | (Roadmap) PHI leak scan passes | `php artisan test --filter=PhiLeakTest` → **3 passed / 6 assertions**. Scans every `app/**/*.php` `Log::*()` call for PHI/credential tokens; empty allowlist; scanner has a planted-leak self-test. Scope: log calls only. | ✅ |
 
 ## 2. Authorization Readiness Checklist (10 items) — `docs/SUMMARY.md` §7
 
-Legend: ✅ = proven by a test/command listed in the row · ⬜ = not done or not proven.
+Legend: ✅ = proven by a test/command listed in the row · ⏭ = deferred to a later gate by an ADR
+· ⬜ = not done or not proven.
 
 | # | Item | Evidence (command/file) | Status |
 |---|---|---|---|
 | 1 | Permission Catalog with explicit Action and Resource | `backend/config/authorization.php` (93 IDs, normative v1.1.0). `PermissionCatalogTest` parses `docs/baseline-v1.0.0/PERMISSION_CATALOG.md` and fails on drift: **CATALOG-T01/T02, 2 passed / 24 assertions**. | ✅ |
-| 2 | Permission Matrix covers every primary role and every health-data type | Matrix A–E is frozen in `docs/baseline-v1.0.0/DATA_ACCESS_MATRIX.md`; `Authorizer::PERMISSION_MAP` maps all 93 IDs to a scope/action (`AuthorizerTest::test_auth_005`, 488 assertions); `MembershipTest::test_mem_t01_viewer_and_caregiver_are_denied_the_member_list` pins one Matrix A row. **Missing:** no automated Matrix A–E ↔ `Authorizer::roleAllows` conformance test. Guardian L1/L2/L3 tiers and break-glass rows are intentionally not implemented (Phase 2 / disabled), so the matrix is not yet fully enforced. | ⬜ |
+| 2 | Permission Matrix covers every primary role and every health-data type | **`MatrixConformanceTest`** parses `docs/baseline-v1.0.0/DATA_ACCESS_MATRIX.md` Matrices A–E (47 rows), maps every row to permission IDs, and asserts each of the 8 roles against `RoleGate`: **1 test / 590 assertions**, with a floor that fails the build if the parser finds too few cells. It found and fixed six real disagreements, including **caregiver could create person/health profiles** (Matrix B says `D`). Break-glass stays denied per ADR-002 via a named `MVP_DISABLED_PERMISSIONS` list; guardian `C` cells pass the gate while authority verification remains Phase 2. | ✅ |
 | 3 | Workspace Isolation and Profile Isolation rules | RLS `ENABLE`/`FORCE` migration + `TEN-T01..T05` (5/35); `WorkspaceContextMiddlewareTest ISO-T01..T04` (4/16: cross-workspace rows hidden, context cleared after request); `AUTH-003` non-member → 404 without existence leak; `AUTH-004` same-workspace member without a grant on another person's profile → 403. Connection is non-superuser. | ✅ |
 | 4 | Grant, Consent, and revocation checks | `GrantAndConsentTest` (9/21): GRANT-T01 active / T02 expired / T03 revoked, CONSENT-T01 withdraw once / T02 no other mutation; `AuthorizerTest` GRANT-T04/T05 (scope+action containment) and CONSENT-T03/T04 (AI purpose). | ✅ |
 | 5 | Every endpoint has an authorization policy and declares its scope | `RoutePermissionCoverageTest AP-001..004` (4/34): 14 `api/v1` entries = 4 guarded + 10 allowlisted; guarded routes must carry `EnsureAuthorized` and a catalog ID. Scope/action is declared centrally per permission in `Authorizer::PERMISSION_MAP` and checked by `AUTH-005`. | ✅ |
 | 6 | Negative tests for every risky action | For every endpoint that exists in Phase 0: AUTH-003/004, ISO-T02, WS-T02, MEM-T01 (viewer + caregiver denied), MEM-T02, INV-T01, plus auth negatives (wrong password, OTP exhausted/expired, PIN lockout/weak PIN). Future health endpoints must add their own negative test in the same change (`.ai/10-TESTING.md` §1). | ✅ |
 | 7 | IDOR tests for APIs that accept a resource ID | The only enumerable resource ID exposed today is the workspace UUID. `WS-T02`, `MEM-T02`, `ISO-T02`, and `AUTH-003` prove non-members get 404 with no existence leak. Invitation links use an unguessable bearer token, not an ID. Profile-scoped routes do not exist yet, so a profile-ID cross-workspace IDOR test is deferred to the Phase 1 endpoints. | ✅ |
-| 8 | AI Context and Export authorization tests before enabling those features | Partial: consent gating exists at the decision layer (`Authorizer::CONSENT_REQUIRED_PURPOSES`, CONSENT-T03/T04). **Missing:** no AI gateway/provider or export job/endpoint exists, and there are no `AI-*` or `EXPORT-*` tests. The features are not enabled, so there is no current exposure — but this item is not ready to enable them. | ⬜ |
+| 8 | AI Context and Export authorization tests before enabling those features | ⏭ **Deferred to G4 by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น).** No AI gateway, provider or export endpoint exists in Phase 0, so there is nothing to authorize yet and no current exposure. Consent gating at the decision layer is already proven (CONSENT-T03/T04). `.ai/10-TESTING.md` G4 now **requires** `AI-*` and `EXPORT-*` before AI is enabled. | ⏭ |
 | 9 | Audit policy for health-data access and permission changes | `SecurityAuditLogger` (hash chain, append-only, PHI-key rejection) with AUDIT-T01/T02/T03; every allow/deny decision writes exactly one row (AUDIT-T03); login denial is audited (`LoginTest`); retention purge batches are audited (RET-T06). Policy: `.ai/09-SECURITY-PRIVACY.md` (N-02) and `.ai/06-DATA-MODEL.md` §5. Note: grant/consent mutation endpoints do not exist yet; their mutation audit must land with those endpoints. | ✅ |
 | 10 | CI enforces authorization tests and they must pass before merge | `.github/workflows/ci.yml` runs on push-to-main and PR: Pint + full `php artisan test` against PostgreSQL 16 with the **non-superuser** role, plus frontend build and `flutter analyze`. **Verified on GitHub: run #1 (`4cee485`) — all three jobs green** (`Backend` 38 s incl. role bootstrap, `Frontend` 21 s, `Mobile` 83 s). **Still missing:** branch protection / required status check is a repository setting that cannot be configured from this working tree. | ⬜ |
 
 ## 3. What is left before G0 can be marked passed
 
-1. **Checklist item 2 — Matrix conformance.** Add a test that encodes Matrix A–E cells and
-   asserts `Authorizer` decisions for each role/action/scope combination, or explicitly
-   scope the test to the permissions enabled in Phase 1. Complete guardian tiers and
-   break-glass only when those phases start.
-2. **Checklist item 8 — AI/export.** Add `AI-*` and `EXPORT-*` suites before those features
-   are exposed; today they are intentionally absent/disabled.
-3. **Checklist item 10 — CI enforcement.** ~~Push the workflow and get a green run~~ ✅ done
-   (run #1, all green). Remaining: configure branch protection on `main` so the `CI` checks are
-   required before merge — a repository-admin action outside this working tree.
+**One action remains — and it is a repository setting, not code:**
 
-Until all three are closed, `.ai/12-ROADMAP.md` forbids starting Phase 1.
+1. **Configure branch protection on `main`** so the `CI` checks are required before merge
+   (Settings → Branches → add rule → require status checks: `Backend (PHP 8.4, PostgreSQL 16)`,
+   `Frontend (Angular 22)`, `Mobile (Flutter stable)`).
+
+Everything else is closed:
+- ~~Item 2 — Matrix conformance~~ ✅ `MatrixConformanceTest` (47 rows / 590 assertions).
+- ~~Item 8 — AI/export~~ ⏭ deferred to **G4** by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น); `.ai/10-TESTING.md` G4 now requires `AI-*` and `EXPORT-*`.
+- ~~Item 10 — CI exists and is green~~ ✅ run #1; enforcement still pending the point above.
+
+Until branch protection is enabled, `.ai/12-ROADMAP.md` still forbids starting Phase 1.
 
 ## 4. CI status notes (verified on GitHub)
 
