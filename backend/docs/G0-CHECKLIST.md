@@ -73,7 +73,7 @@ Legend: ✅ = proven by a test/command listed in the row · ⬜ = not done or no
 | 7 | IDOR tests for APIs that accept a resource ID | The only enumerable resource ID exposed today is the workspace UUID. `WS-T02`, `MEM-T02`, `ISO-T02`, and `AUTH-003` prove non-members get 404 with no existence leak. Invitation links use an unguessable bearer token, not an ID. Profile-scoped routes do not exist yet, so a profile-ID cross-workspace IDOR test is deferred to the Phase 1 endpoints. | ✅ |
 | 8 | AI Context and Export authorization tests before enabling those features | Partial: consent gating exists at the decision layer (`Authorizer::CONSENT_REQUIRED_PURPOSES`, CONSENT-T03/T04). **Missing:** no AI gateway/provider or export job/endpoint exists, and there are no `AI-*` or `EXPORT-*` tests. The features are not enabled, so there is no current exposure — but this item is not ready to enable them. | ⬜ |
 | 9 | Audit policy for health-data access and permission changes | `SecurityAuditLogger` (hash chain, append-only, PHI-key rejection) with AUDIT-T01/T02/T03; every allow/deny decision writes exactly one row (AUDIT-T03); login denial is audited (`LoginTest`); retention purge batches are audited (RET-T06). Policy: `.ai/09-SECURITY-PRIVACY.md` (N-02) and `.ai/06-DATA-MODEL.md` §5. Note: grant/consent mutation endpoints do not exist yet; their mutation audit must land with those endpoints. | ✅ |
-| 10 | CI enforces authorization tests and they must pass before merge | `.github/workflows/ci.yml` authors the pipeline on push-to-main and PR: Pint + full `php artisan test` with PostgreSQL 16 and the non-superuser role. Local equivalents are green (69 tests, Pint passed). **Missing:** the workflow has never executed on GitHub, and branch protection / required status check is a repository setting that cannot be verified from this working tree. | ⬜ |
+| 10 | CI enforces authorization tests and they must pass before merge | `.github/workflows/ci.yml` runs on push-to-main and PR: Pint + full `php artisan test` against PostgreSQL 16 with the **non-superuser** role, plus frontend build and `flutter analyze`. **Verified on GitHub: run #1 (`4cee485`) — all three jobs green** (`Backend` 38 s incl. role bootstrap, `Frontend` 21 s, `Mobile` 83 s). **Still missing:** branch protection / required status check is a repository setting that cannot be configured from this working tree. | ⬜ |
 
 ## 3. What is left before G0 can be marked passed
 
@@ -83,26 +83,31 @@ Legend: ✅ = proven by a test/command listed in the row · ⬜ = not done or no
    break-glass only when those phases start.
 2. **Checklist item 8 — AI/export.** Add `AI-*` and `EXPORT-*` suites before those features
    are exposed; today they are intentionally absent/disabled.
-3. **Checklist item 10 — CI enforcement.** Push the workflow, get a green run, then configure
-   branch protection with the CI checks required before merge.
+3. **Checklist item 10 — CI enforcement.** ~~Push the workflow and get a green run~~ ✅ done
+   (run #1, all green). Remaining: configure branch protection on `main` so the `CI` checks are
+   required before merge — a repository-admin action outside this working tree.
 
 Until all three are closed, `.ai/12-ROADMAP.md` forbids starting Phase 1.
 
-## 4. CI status notes (honest current state)
+## 4. CI status notes (verified on GitHub)
 
-- `backend` job: expected green — locally `php artisan test` (69/823) and `pint --test` pass.
-  The workflow recreates the non-superuser role before running tests. The CI path was rehearsed
-  end-to-end against the local PostgreSQL 16 container: a scratch database was created, the
-  exact role-bootstrap statements were run, `php artisan migrate --force` and the full
-  `php artisan test` suite passed as that role (`usesuper = false`, `usebypassrls = false`),
-  then the scratch database/role were dropped.
-- `frontend` job: `npm run build` passes locally (Angular 22.1, output to a temp directory,
-  221.55 kB initial bundle).
-- `mobile` job: **will fail** on `flutter analyze`. The template test
-  `mobile/test/widget_test.dart` imports `package:mobile/main.dart`, but the package is named
-  `lucky_care` (`mobile/pubspec.yaml: name: lucky_care`), so analyzer reports `uri_does_not_exist` and
-  `creation_with_non_type`. This is outside this task's allowed edit scope (`backend/`,
-  `.github/` only) and was deliberately not hidden with `continue-on-error`.
+GitHub Actions run **#1** for commit `4cee485` (`chore(phase-0): CI pipeline, guard tests and G0 evidence`):
+
+| Job | Result | Duration |
+|---|---|---|
+| `Backend (PHP 8.4, PostgreSQL 16)` | ✅ success | 38 s (incl. `Create non-superuser runtime role`, Pint, full suite) |
+| `Frontend (Angular 22)` | ✅ success | 21 s (`npm ci` + `npm run build`) |
+| `Mobile (Flutter stable)` | ✅ success | 83 s (`flutter pub get` + `flutter analyze`) |
+
+Run URL: <https://github.com/BB5123/lucky-care-plus-v1/actions/runs/39822288584>
+
+Notes:
+- The backend job creates `luckycare_app` (`NOSUPERUSER NOBYPASSRLS`) and hands it `public`, so the RLS
+  assertions in CI are real — not bypassed by the service container's superuser.
+- The mobile job was red on the first local rehearsal (`package:mobile/main.dart` vs package `lucky_care`);
+  the import was corrected before this run, and the analyzer is now clean.
+- **Branch protection is not configured.** Until `main` requires the `CI` checks before merge, item 10
+  stays open: the pipeline exists and passes, but it is not yet *enforcing*.
 
 ## 5. Files that provide this evidence
 
