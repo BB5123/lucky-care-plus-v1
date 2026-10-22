@@ -130,6 +130,7 @@ final class CareTaskService
         User $actor,
         array $input,
         ?string $idempotencyKey = null,
+        bool $authorize = true,
     ): array {
         $profile = HealthProfile::query()
             ->where('tenant_id', $workspace->tenant_id)
@@ -153,13 +154,21 @@ final class CareTaskService
 
         // Creation is a profile-scoped write: the Authorizer proves the actor
         // owns the profile or holds a usable `tasks`/create grant (F-01).
-        $this->ensureAllowed(
-            $this->authorizer->authorize(
-                $actor,
-                'care_task.create',
-                ResourceRef::forProfile($workspace->id, $profile->id),
-            ),
-        );
+        //
+        // Server-generated follow-up tasks (APT-004) are the one exception:
+        // the caller has already passed the owning domain permission (e.g.
+        // `appointment.update`) and the task is a mandatory side effect, not a
+        // client-supplied work item. The row still goes through this service,
+        // so it gets its `task_events` and `audit_events` rows.
+        if ($authorize) {
+            $this->ensureAllowed(
+                $this->authorizer->authorize(
+                    $actor,
+                    'care_task.create',
+                    ResourceRef::forProfile($workspace->id, $profile->id),
+                ),
+            );
+        }
 
         $assigneeId = isset($input['assignee_user_id']) ? (int) $input['assignee_user_id'] : null;
 
@@ -216,7 +225,9 @@ final class CareTaskService
                     'completed_at' => null,
                     'idempotency_key' => $idempotencyKey,
                     'version' => 1,
-                    'source' => 'manual',
+                    // Provenance: distinguishes a human-created task from a
+                    // server-generated side effect (e.g. APT-004 follow-up).
+                    'source' => $input['source'] ?? 'manual',
                 ]);
 
                 if ($assigneeId !== null) {

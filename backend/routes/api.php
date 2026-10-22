@@ -4,6 +4,7 @@ use App\Http\Controllers\WorkspacePingController;
 use App\Modules\Accounts\Http\Controllers\AuthController;
 use App\Modules\Accounts\Http\Controllers\OtpController;
 use App\Modules\Accounts\Http\Controllers\PinController;
+use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskController;
 use App\Modules\CareCrm\Http\Controllers\TaskEvidenceController;
@@ -174,6 +175,29 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('authorize.permission:care_task.evidence.create');
             Route::get('/{task}/evidence', [TaskEvidenceController::class, 'index'])
                 ->middleware('authorize.permission:care_task.evidence.read');
+        });
+
+    // -- Appointments (Phase 1.4) -------------------------------------------
+    // A profile-scoped coordination surface (APT-001). Every route declares
+    // its frozen permission ID; the domain service owns the lifecycle and the
+    // optimistic-locking version after the authorizer has proven the grant.
+    Route::prefix('/workspaces/{workspace}/profiles/{profile}/appointments')
+        ->middleware(['auth:sanctum', 'throttle:60,1,appointments', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [AppointmentController::class, 'index'])
+                ->middleware('authorize.permission:appointment.read');
+            Route::post('/', [AppointmentController::class, 'store'])
+                ->middleware('authorize.permission:appointment.create');
+            Route::get('/{appointment}', [AppointmentController::class, 'show'])
+                ->middleware('authorize.permission:appointment.read');
+            Route::patch('/{appointment}', [AppointmentController::class, 'update'])
+                ->middleware('authorize.permission:appointment.update');
+            Route::post('/{appointment}/cancel', [AppointmentController::class, 'cancel'])
+                ->middleware('authorize.permission:appointment.cancel');
+            Route::post('/{appointment}/attended', [AppointmentController::class, 'attended'])
+                ->middleware('authorize.permission:appointment.update');
+            Route::patch('/{appointment}/documents', [AppointmentController::class, 'documents'])
+                ->middleware('authorize.permission:appointment.update');
         });
 
     // Protection is declared on the route: authentication, server-side
