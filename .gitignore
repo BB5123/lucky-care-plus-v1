@@ -1,0 +1,45 @@
+# ─── Reference material (not part of the deliverable) ───────────────────────
+# Cloned upstream projects kept only for design/pattern reference.
+/references/
+
+# ─── Local tooling / scratch ────────────────────────────────────────────────
+/.dsh-scratch/
+/.dsh-tools/
+
+# ─── Secrets ────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+auth.json
+
+# ─── Dependencies / build output (safety net; sub-projects have their own) ──
+**/node_modules/
+**/vendor/
+**/dist/
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/public/build/
+**/public/hot
+**/storage/*.key
+
+# ─── OS / editor noise ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ─── Test / coverage cache ─────────────────────────────────────────────────
+.phpunit.result.cache
+.phpunit.cache/
+coverage/

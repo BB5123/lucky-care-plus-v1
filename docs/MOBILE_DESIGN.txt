@@ -1,0 +1,29 @@
+ใน docs/PDFs/ มีเอกสารการใช้งานแอพเป๋าตังค์และหมอพร้อม ซึ่งนำมาประกอบการออกแบบ UI/UX
+
+***Register***
+Splash->Intro->Consent (A,B)->Register(Email+Password, PhoneNumber, Gmail)->PhoneNumber->OTP->Setup PIN->Confirm PIN->Workspace->Profile Select (Netflix Style)->Dashboard Profile 
+
+**paotang**
+Splash->Intro->Consent->Register(Email+Password, PhoneNumber, Gmail)->PhoneNumber->OTP->Setup PIN->Confirm PIN
+
+**morprompt**
+Dashboard Profile 
+
+***Login***
+Splash->Enter PIN->Workspace->Profile Select (Netflix Style)->Dashboard Profile 
+
+**paotang**
+Splash->Enter PIN 
+
+**morprompt**
+Dashboard Profile 
+
+ตั้งแต่ Dashboard ใช้ UI/UX ของ morprompt 
+
+ใน Dashboard มี BottomTab 5 Tab มีดังนี้
+
+- Home แสดงรายการสรุปต่างๆ ทั่วไปที่เกี่ยวข้องกับแอพ
+- Health Metric แสดงรายการ Health Metric ต่างๆ สำหรับป้องในละประเภท ป้อนหรือแก้ไขด้วย BottomSheet
+- Chat คุยกับ AI ที่ค่อยให้คำแนะนำเบื้องต้นทางการแพทย์ มีปุ่ม < เพื่อกลับหน้า Home
+- Appoint
+- CRM
