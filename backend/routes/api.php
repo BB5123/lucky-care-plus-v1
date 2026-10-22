@@ -7,6 +7,9 @@ use App\Modules\Accounts\Http\Controllers\PinController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
 use App\Modules\HealthRecord\Http\Controllers\ConditionController;
 use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
+use App\Modules\HealthRecord\Http\Controllers\MedicationAdherenceController;
+use App\Modules\HealthRecord\Http\Controllers\MedicationPlanController;
+use App\Modules\HealthRecord\Http\Controllers\MedicationRecordController;
 use App\Modules\Workspace\Http\Controllers\InvitationController;
 use App\Modules\Workspace\Http\Controllers\MembershipController;
 use App\Modules\Workspace\Http\Controllers\WorkspaceController;
@@ -107,6 +110,24 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('authorize.permission:allergy.update');
             Route::patch('/allergies/{allergy}', [AllergyController::class, 'update'])
                 ->middleware('authorize.permission:allergy.update');
+
+            // -- Medications -------------------------------------------------
+            Route::get('/medication-adherence', [MedicationAdherenceController::class, 'index'])
+                ->middleware('authorize.permission:medication_record.read');
+            Route::get('/medication-plans', [MedicationPlanController::class, 'index'])
+                ->middleware('authorize.permission:medication_plan.read');
+            Route::post('/medication-plans', [MedicationPlanController::class, 'store'])
+                ->middleware('authorize.permission:medication_plan.create');
+            Route::patch('/medication-plans/{plan}', [MedicationPlanController::class, 'update'])
+                ->middleware('authorize.permission:medication_plan.update');
+            Route::post('/medication-plans/{plan}/discontinue', [MedicationPlanController::class, 'discontinue'])
+                ->middleware('authorize.permission:medication_plan.discontinue');
+            Route::get('/medication-records', [MedicationRecordController::class, 'index'])
+                ->middleware('authorize.permission:medication_record.read');
+            Route::post('/medication-records', [MedicationRecordController::class, 'store'])
+                ->middleware('authorize.permission:medication_record.create');
+            Route::patch('/medication-records/{record}', [MedicationRecordController::class, 'update'])
+                ->middleware('authorize.permission:medication_record.correct');
         });
 
     // Protection is declared on the route: authentication, server-side
