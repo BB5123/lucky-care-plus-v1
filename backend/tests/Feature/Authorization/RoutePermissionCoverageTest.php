@@ -49,6 +49,7 @@ class RoutePermissionCoverageTest extends TestCase
         'POST api/v1/auth/otp/verify' => 'Self-service: verifies an OTP for the caller\'s own account.',
         'POST api/v1/auth/pin/setup' => 'Self-service: sets the caller\'s own PIN.',
         'POST api/v1/auth/pin/verify' => 'Self-service: verifies the caller\'s own PIN.',
+        'GET api/v1/workspaces/{workspace}/dashboard' => 'ADR-010 aggregate: the controller authorizes every card separately through Authorizer (CRM-023); one route-level permission cannot express per-card visibility.',
     ];
 
     /**

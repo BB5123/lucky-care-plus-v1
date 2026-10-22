@@ -2,6 +2,7 @@
 
 namespace App\Modules\Consent\Models;
 
+use App\Modules\Consent\Services\AuthzVersion;
 use App\Modules\HealthRecord\Models\HealthProfile;
 use App\Modules\People\Models\Person;
 use App\Modules\Workspace\Models\Tenant;
@@ -64,6 +65,11 @@ class ConsentRecord extends Model
             $consent->id ??= Uuid7::generate();
             $consent->created_at ??= now();
         });
+
+        // Consent is an authorization input (F-06/F-08). New rows and the
+        // withdrawal transition must invalidate cached dashboard payloads.
+        static::saved(fn (ConsentRecord $consent) => AuthzVersion::bump((string) $consent->workspace_id));
+        static::deleted(fn (ConsentRecord $consent) => AuthzVersion::bump((string) $consent->workspace_id));
     }
 
     protected static function newFactory(): ConsentRecordFactory

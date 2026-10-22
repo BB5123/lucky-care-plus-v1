@@ -3,6 +3,7 @@
 namespace App\Modules\Consent\Models;
 
 use App\Models\User;
+use App\Modules\Consent\Services\AuthzVersion;
 use App\Modules\HealthRecord\Models\HealthProfile;
 use App\Modules\Workspace\Models\Tenant;
 use App\Modules\Workspace\Models\Workspace;
@@ -67,6 +68,13 @@ class AccessGrant extends Model
         static::creating(function (AccessGrant $grant) {
             $grant->id ??= Uuid7::generate();
         });
+
+        // F-08 / `.ai/03-AUTHORIZATION.md §7`: a grant mutation (create,
+        // update, revoke, delete) must make every cached dashboard/decision
+        // key for this workspace unreachable. Model events cover every write
+        // path, including future services, rather than relying on each caller.
+        static::saved(fn (AccessGrant $grant) => AuthzVersion::bump((string) $grant->workspace_id));
+        static::deleted(fn (AccessGrant $grant) => AuthzVersion::bump((string) $grant->workspace_id));
     }
 
     protected static function newFactory(): AccessGrantFactory

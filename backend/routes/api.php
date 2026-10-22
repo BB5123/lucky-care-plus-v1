@@ -8,6 +8,7 @@ use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskController;
 use App\Modules\CareCrm\Http\Controllers\TaskEvidenceController;
+use App\Modules\Dashboard\Http\Controllers\DashboardController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
 use App\Modules\HealthRecord\Http\Controllers\ConditionController;
 use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
@@ -199,6 +200,19 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/{appointment}/documents', [AppointmentController::class, 'documents'])
                 ->middleware('authorize.permission:appointment.update');
         });
+
+    // -- Dashboard (Phase 1.5, ADR-010) -------------------------------------
+    // No `authorize.permission` here on purpose: the dashboard aggregates five
+    // cards over several permissions and must prove each card separately
+    // (ADR-010, CRM-023). The controller delegates to the Authorizer per
+    // `(card, profile)`; `workspace.context` already returns 404 to
+    // non-members before the controller runs.
+    Route::get('/workspaces/{workspace}/dashboard', DashboardController::class)
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,dashboard',
+            'workspace.context',
+        ]);
 
     // Protection is declared on the route: authentication, server-side
     // workspace resolution, then the Authorizer pipeline. The endpoint itself

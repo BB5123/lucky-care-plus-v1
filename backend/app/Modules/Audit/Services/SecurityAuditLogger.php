@@ -40,35 +40,73 @@ final class SecurityAuditLogger
      */
     public function record(array $event): void
     {
-        $this->assertNoPhi($event);
+        $this->recordMany([$event]);
+    }
 
-        $tenantId = TenantContext::tenantId() ?? $event['tenant_id'] ?? null;
-        if (! is_string($tenantId) || $tenantId === '') {
-            throw new InvalidArgumentException(
-                'Security audit events require a server-side tenant context (N-01).'
-            );
+    /**
+     * Append several decisions as one contiguous chain segment.
+     *
+     * The dashboard authorizes every card separately, which produces one audit
+     * row per card. Appending them through one lock/one tail read keeps the
+     * chain atomic (no fork between two cards of the same request) and avoids
+     * paying the advisory-lock round trip per card.
+     *
+     * @param  list<array<string, mixed>>  $events
+     */
+    public function recordMany(array $events): void
+    {
+        if ($events === []) {
+            return;
         }
+
+        $context = TenantContext::pair();
+        $defaultTenantId = $context['tenant_id'];
 
         // The active context wins over any value supplied by the caller, so a
         // payload cannot redirect a row into another tenant/workspace (N-01).
-        $workspaceId = TenantContext::workspaceId() ?? $event['workspace_id'] ?? null;
+        $activeWorkspaceId = $context['workspace_id'];
 
-        $row = [
-            'id' => is_string($event['id'] ?? null) ? $event['id'] : Uuid7::generate(),
-            'tenant_id' => $tenantId,
-            'occurred_at' => $this->normaliseTimestamp($event['occurred_at'] ?? null),
-            'actor_id' => $event['actor_id'] ?? null,
-            'actor_type' => $this->requiredString($event, 'actor_type'),
-            'action' => $this->requiredString($event, 'action'),
-            'target_type' => $event['target_type'] ?? null,
-            'target_id' => $event['target_id'] ?? null,
-            'result' => $this->requiredString($event, 'result'),
-            'reason_code' => $event['reason_code'] ?? null,
-            'workspace_id' => is_string($workspaceId) && $workspaceId !== '' ? $workspaceId : null,
-            'metadata' => $this->normaliseMetadata($event['metadata'] ?? []),
-        ];
+        $rows = [];
 
-        DB::transaction(function () use ($row): void {
+        foreach ($events as $event) {
+            $this->assertNoPhi($event);
+
+            $eventTenantId = $defaultTenantId ?? ($event['tenant_id'] ?? null);
+
+            if (! is_string($eventTenantId) || $eventTenantId === '') {
+                throw new InvalidArgumentException(
+                    'Security audit events require a server-side tenant context (N-01).'
+                );
+            }
+
+            $workspaceId = $activeWorkspaceId ?? ($event['workspace_id'] ?? null);
+
+            $rows[] = [
+                'id' => is_string($event['id'] ?? null) ? $event['id'] : Uuid7::generate(),
+                'tenant_id' => $eventTenantId,
+                'occurred_at' => $this->normaliseTimestamp($event['occurred_at'] ?? null),
+                'actor_id' => $event['actor_id'] ?? null,
+                'actor_type' => $this->requiredString($event, 'actor_type'),
+                'action' => $this->requiredString($event, 'action'),
+                'target_type' => $event['target_type'] ?? null,
+                'target_id' => $event['target_id'] ?? null,
+                'result' => $this->requiredString($event, 'result'),
+                'reason_code' => $event['reason_code'] ?? null,
+                'workspace_id' => is_string($workspaceId) && $workspaceId !== '' ? $workspaceId : null,
+                'metadata' => $this->normaliseMetadata($event['metadata'] ?? []),
+            ];
+        }
+
+        // Tenant consistency is non-negotiable: a mixed batch would silently
+        // write rows into two chains under one lock. Callers resolve the
+        // workspace once, so this is a server bug and never client input.
+        $tenantIds = array_unique(array_column($rows, 'tenant_id'));
+
+        if (count($tenantIds) !== 1) {
+            throw new InvalidArgumentException('Security audit batches must share one tenant (N-01).');
+        }
+
+        DB::transaction(function () use ($rows): void {
             DB::select('select pg_advisory_xact_lock(?)', [self::CHAIN_LOCK]);
 
             $previous = DB::selectOne(
@@ -77,16 +115,26 @@ final class SecurityAuditLogger
             );
 
             $prevHex = $previous?->hash_hex;
-            $prevRaw = $prevHex === null ? '' : (hex2bin($prevHex) ?: '');
-            $hashHex = hash('sha256', $prevRaw.$this->canonicalJson($row));
+            $hashes = [];
 
-            DB::insert(
-                'insert into security_audit_logs '
-                .'(id, tenant_id, occurred_at, actor_id, actor_type, action, target_type, target_id, '
-                .'result, reason_code, workspace_id, metadata, prev_hash, hash, created_at, updated_at) '
-                .'values (?, ?, ?::timestamptz, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, '
-                ."decode(?, 'hex'), decode(?, 'hex'), now(), now())",
-                [
+            // Compute the chain first, then append the whole segment with one
+            // INSERT. The hashes only depend on the rows and the previous tail,
+            // not on the database-assigned `seq`.
+            foreach ($rows as $index => $row) {
+                $prevRaw = $prevHex === null ? '' : (hex2bin($prevHex) ?: '');
+                $hashes[$index] = hash('sha256', $prevRaw.$this->canonicalJson($row));
+                $prevHex = $hashes[$index];
+            }
+
+            $values = [];
+            $bindings = [];
+
+            foreach ($rows as $index => $row) {
+                $values[] = '(?, ?, ?::timestamptz, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, '
+                    ."decode(?, 'hex'), decode(?, 'hex'), now(), now())";
+
+                $bindings = [
+                    ...$bindings,
                     $row['id'],
                     $row['tenant_id'],
                     $row['occurred_at'],
@@ -99,9 +147,17 @@ final class SecurityAuditLogger
                     $row['reason_code'],
                     $row['workspace_id'],
                     $this->canonicalJson($row['metadata']),
-                    $prevHex,
-                    $hashHex,
-                ],
+                    $index === 0 ? ($previous?->hash_hex) : $hashes[$index - 1],
+                    $hashes[$index],
+                ];
+            }
+
+            DB::insert(
+                'insert into security_audit_logs '
+                .'(id, tenant_id, occurred_at, actor_id, actor_type, action, target_type, target_id, '
+                .'result, reason_code, workspace_id, metadata, prev_hash, hash, created_at, updated_at) '
+                .'values '.implode(', ', $values),
+                $bindings,
             );
         });
     }

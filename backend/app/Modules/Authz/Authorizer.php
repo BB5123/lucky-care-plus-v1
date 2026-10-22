@@ -198,6 +198,65 @@ final class Authorizer
     }
 
     /**
+     * Authorize several `(permission, profile)` checks for one workspace in a
+     * single pass.
+     *
+     * Aggregate read models must prove every card separately (ADR-010,
+     * CRM-023), which would otherwise cost a full pipeline round trip — and a
+     * hash-chained audit append — per card. This method keeps the same rules
+     * as {@see authorize()} (catalog, membership, role gate, ownership/usable
+     * grant, consent) and appends one audit row per decision, but shares the
+     * workspace/membership/profile/grant lookups.
+     *
+     * The workspace is trusted server-side context (`workspace.context` has
+     * already resolved it); the caller must never rebuild it from client input
+     * (N-01).
+     *
+     * @param  list<array{permission: string, profile_id: ?string}>  $checks
+     * @return list<Decision> in the same order as `$checks`
+     */
+    public function authorizeBatch(?User $actor, Workspace $workspace, array $checks): array
+    {
+        if ($checks === []) {
+            return [];
+        }
+
+        try {
+            return $this->withinWorkspace($workspace, function () use ($actor, $workspace, $checks): array {
+                $decisions = $this->evaluateBatch($actor, $workspace, $checks);
+
+                try {
+                    $this->auditBatch($actor, $workspace, $checks, $decisions);
+                } catch (Throwable $e) {
+                    report($e);
+
+                    // An allow is not valid without its audit row (F-11). A
+                    // deny stays a deny even if the audit append failed.
+                    foreach ($decisions as $index => $decision) {
+                        if ($decision->allowed()) {
+                            $decisions[$index] = Decision::deny(
+                                'authorization_unavailable',
+                                503,
+                                'audit_unavailable',
+                            );
+                        }
+                    }
+                }
+
+                return array_values($decisions);
+            });
+        } catch (Throwable $e) {
+            report($e);
+
+            return array_fill(
+                0,
+                count($checks),
+                Decision::deny('authorization_unavailable', 503, 'dependency_unavailable'),
+            );
+        }
+    }
+
+    /**
      * @return array{scope: ?string, action: string}|null
      */
     public function mappingFor(string $permission): ?array
@@ -313,6 +372,236 @@ final class Authorizer
 
             return Decision::allow();
         });
+    }
+
+    /**
+     * Run the callback with the workspace's tenant/workspace context, unless
+     * the request already carries exactly that context (the usual case behind
+     * `workspace.context`).
+     */
+    private function withinWorkspace(Workspace $workspace, callable $callback): mixed
+    {
+        if (TenantContext::matches($workspace->tenant_id, $workspace->id)) {
+            return $callback();
+        }
+
+        return TenantContext::run($workspace->tenant_id, $workspace->id, $callback);
+    }
+
+    /**
+     * @param  list<array{permission: string, profile_id: ?string}>  $checks
+     * @return list<Decision>
+     */
+    private function evaluateBatch(?User $actor, Workspace $workspace, array $checks): array
+    {
+        $count = count($checks);
+
+        // [1] Authentication.
+        if ($actor === null) {
+            return array_fill(0, $count, Decision::deny('unauthenticated', 401, 'not_authenticated'));
+        }
+
+        // [3] Active membership. A non-member is indistinguishable from an
+        // unknown workspace: both are 404 (no enumeration).
+        $membership = WorkspaceMembership::query()
+            ->where('workspace_id', $workspace->id)
+            ->where('user_id', $actor->id)
+            ->where('status', 'active')
+            ->first();
+
+        if ($membership === null) {
+            return array_fill(0, $count, Decision::deny('out_of_scope', 404, 'not_a_member'));
+        }
+
+        $profileIds = [];
+
+        foreach ($checks as $check) {
+            $profileId = $check['profile_id'] ?? null;
+
+            if (is_string($profileId) && Str::isUuid($profileId)) {
+                $profileIds[$profileId] = true;
+            }
+        }
+
+        $profileIds = array_keys($profileIds);
+
+        $profiles = $profileIds === []
+            ? collect()
+            : HealthProfile::query()
+                ->where('workspace_id', $workspace->id)
+                ->whereIn('id', $profileIds)
+                ->get()
+                ->keyBy('id');
+
+        $personIds = $profiles->pluck('person_id')->filter()->unique()->values()->all();
+
+        $ownedPersonIds = $personIds === []
+            ? []
+            : array_fill_keys(
+                Person::query()
+                    ->whereIn('id', $personIds)
+                    ->where('user_id', $actor->id)
+                    ->pluck('id')
+                    ->all(),
+                true,
+            );
+
+        $grantsByProfile = [];
+
+        if ($profileIds !== []) {
+            $grants = AccessGrant::query()
+                ->where('workspace_id', $workspace->id)
+                ->whereIn('profile_id', $profileIds)
+                ->where('grantee_user_id', $actor->id)
+                ->where('status', 'active')
+                ->whereNull('revoked_at')
+                ->get();
+
+            foreach ($grants as $grant) {
+                $grantsByProfile[(string) $grant->profile_id][] = $grant;
+            }
+        }
+
+        // [6] Consent rows that could be required by any check, fetched once.
+        $purposes = [];
+
+        foreach ($checks as $check) {
+            foreach ($this->requiredConsentPurposes((string) $check['permission'], null) as $purpose) {
+                $purposes[$purpose] = true;
+            }
+        }
+
+        $consents = [];
+
+        if ($purposes !== [] && $profileIds !== []) {
+            $rows = ConsentRecord::query()
+                ->whereIn('profile_id', $profileIds)
+                ->whereIn('purpose', array_keys($purposes))
+                ->whereNull('withdrawn_at')
+                ->get();
+
+            foreach ($rows as $row) {
+                $consents[$row->profile_id.'|'.$row->purpose] = true;
+            }
+        }
+
+        $decisions = [];
+
+        foreach ($checks as $check) {
+            $permission = (string) $check['permission'];
+            $mapping = $this->mappingFor($permission);
+
+            // [2] The permission must exist in the frozen catalog and have an
+            // explicit scope/action mapping. Missing = server bug, never 403.
+            if (! $this->catalog->has($permission) || $mapping === null || ! $this->catalog->allowsAction($mapping['action'])) {
+                $decisions[] = Decision::deny('unknown_permission', 500, 'permission_not_mapped');
+
+                continue;
+            }
+
+            // [4] Role gate.
+            if (! $this->gate->permits($membership->role, $permission, $mapping['action'])) {
+                $decisions[] = Decision::deny('forbidden', 403, 'role_cannot_hold_permission');
+
+                continue;
+            }
+
+            $profileId = $check['profile_id'] ?? null;
+
+            // [5] Resource scope.
+            if ($profileId !== null) {
+                $profile = is_string($profileId) ? $profiles->get($profileId) : null;
+
+                if (! is_string($profileId) || ! Str::isUuid($profileId) || $profile === null) {
+                    $decisions[] = Decision::deny('out_of_scope', 404, 'profile_out_of_scope');
+
+                    continue;
+                }
+
+                if ($mapping['scope'] !== null) {
+                    $owner = isset($ownedPersonIds[(string) $profile->person_id]);
+                    $granted = false;
+
+                    if (! $owner) {
+                        foreach ($grantsByProfile[(string) $profile->id] ?? [] as $grant) {
+                            if ($this->grants->isUsable($grant, $mapping['scope'], $mapping['action'])) {
+                                $granted = true;
+
+                                break;
+                            }
+                        }
+                    }
+
+                    if (! $owner && ! $granted) {
+                        $decisions[] = Decision::deny('forbidden', 403, 'scope_not_granted');
+
+                        continue;
+                    }
+                }
+            }
+
+            // [6] Consent.
+            $consent = $this->batchConsentDecision($permission, is_string($profileId) ? $profileId : null, $consents);
+
+            if ($consent !== null) {
+                $decisions[] = $consent;
+
+                continue;
+            }
+
+            $decisions[] = Decision::allow();
+        }
+
+        return $decisions;
+    }
+
+    /**
+     * @param  array<string, bool>  $consents  "profile_id|purpose" => true
+     */
+    private function batchConsentDecision(string $permission, ?string $profileId, array $consents): ?Decision
+    {
+        foreach ($this->requiredConsentPurposes($permission, null) as $purpose) {
+            if ($profileId === null) {
+                return Decision::deny('no_consent', 403, 'profile_required_for_consent');
+            }
+
+            if (! isset($consents[$profileId.'|'.$purpose])) {
+                return Decision::deny('no_consent', 403, 'consent_missing');
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * One audit row per decision, appended as a single chain segment.
+     *
+     * @param  list<array{permission: string, profile_id: ?string}>  $checks
+     * @param  list<Decision>  $decisions
+     */
+    private function auditBatch(?User $actor, Workspace $workspace, array $checks, array $decisions): void
+    {
+        $events = [];
+
+        foreach ($checks as $index => $check) {
+            $decision = $decisions[$index];
+            $permission = (string) $check['permission'];
+            $profileId = $check['profile_id'] ?? null;
+            $targetId = is_string($profileId) && $profileId !== '' ? $profileId : $workspace->id;
+
+            $events[] = [
+                'actor_id' => $actor?->id,
+                'actor_type' => $actor === null ? 'anonymous' : 'user',
+                'action' => $permission !== '' ? $permission : 'unknown_permission',
+                'target_type' => is_string($profileId) && $profileId !== '' ? 'health_profile' : 'workspace',
+                'target_id' => $targetId,
+                'result' => $decision->allowed() ? 'allow' : 'deny',
+                'reason_code' => $decision->allowed() ? null : $decision->code(),
+                'metadata' => ['reason' => $decision->reason()],
+            ];
+        }
+
+        $this->audit->recordMany($events);
     }
 
     /**
