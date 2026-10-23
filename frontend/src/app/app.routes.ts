@@ -56,6 +56,22 @@ export const routes: Routes = [
         loadComponent: () => import('./features/tasks/task-detail').then((m) => m.TaskDetail),
       },
       {
+        path: 'timeline',
+        title: 'ไทม์ไลน์ | LuckyCare+',
+        data: { title: 'ไทม์ไลน์' },
+        loadComponent: () =>
+          import('./features/timeline/timeline.page').then((m) => m.TimelinePage),
+      },
+      {
+        path: 'notifications',
+        title: 'การแจ้งเตือน | LuckyCare+',
+        data: { title: 'การแจ้งเตือน' },
+        loadComponent: () =>
+          import('./features/notifications/notification-centre.page').then(
+            (m) => m.NotificationCentrePage,
+          ),
+      },
+      {
         path: 'appointments',
         title: 'นัดหมาย | LuckyCare+',
         data: { title: 'นัดหมาย' },

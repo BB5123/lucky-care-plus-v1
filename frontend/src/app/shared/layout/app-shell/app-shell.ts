@@ -1,7 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Subscription, filter, firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../core/auth/auth.service';
+import { NotificationsService } from '../../../core/notifications/notifications.service';
 import { ElderModeService } from '../../../core/preferences/elder-mode.service';
 import { WorkspaceService } from '../../../core/workspace/workspace.service';
 
@@ -20,12 +28,15 @@ export class AppShell {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly workspace = inject(WorkspaceService);
+  private readonly notifications = inject(NotificationsService);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly elderMode = inject(ElderModeService);
 
   protected readonly user = this.auth.user;
   protected readonly workspaces = this.workspace.activeWorkspaces;
   protected readonly currentWorkspace = this.workspace.currentWorkspace;
+  protected readonly unreadCount = this.notifications.unreadCount;
   protected readonly loggingOut = signal(false);
 
   /** The five IA destinations from .ai/MOBILE_DESIGN.md §3. */
@@ -33,6 +44,7 @@ export class AppShell {
     { path: '/dashboard', label: 'หน้าแรก' },
     { path: '/health', label: 'คลังสุขภาพ' },
     { path: '/tasks', label: 'งานดูแล' },
+    { path: '/timeline', label: 'ไทม์ไลน์' },
     { path: '/appointments', label: 'นัดหมาย' },
     { path: '/family', label: 'ครอบครัวและสิทธิ์' },
   ];
@@ -47,12 +59,27 @@ export class AppShell {
     return Array.from(name)[0]?.toUpperCase() ?? '?';
   });
 
+  private readonly navigationSubscription: Subscription;
+
   constructor() {
     // Boot the workspace context after authentication. The dashboard shows the
     // invite empty-state; this call only makes the shell header aware of it.
     void this.workspace.load().catch(() => {
       // The dashboard surfaces a retryable error itself.
     });
+
+    // Refresh the badge after each navigation, never on a timer (no polling).
+    this.navigationSubscription = this.router.events
+      .pipe(filter((event): event is NavigationEnd => event instanceof NavigationEnd))
+      .subscribe(() => {
+        void this.notifications.refreshUnreadCount();
+      });
+
+    this.destroyRef.onDestroy(() => {
+      this.navigationSubscription.unsubscribe();
+    });
+
+    void this.notifications.refreshUnreadCount();
   }
 
   protected changeWorkspace(event: Event): void {
@@ -81,6 +108,7 @@ export class AppShell {
     try {
       await firstValueFrom(this.auth.logout());
       this.workspace.reset();
+      this.notifications.reset();
     } finally {
       this.loggingOut.set(false);
       await this.router.navigate(['/login']);

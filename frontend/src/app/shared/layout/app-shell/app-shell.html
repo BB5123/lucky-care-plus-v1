@@ -26,6 +26,28 @@
     </div>
 
     <div class="flex items-center gap-2">
+      <a
+        class="relative flex min-h-12 items-center gap-2 rounded-md px-2 text-sm text-ink hover:bg-surface-muted"
+        routerLink="/notifications"
+        data-testid="shell-notifications-link"
+        [attr.aria-label]="
+          unreadCount() > 0
+            ? 'การแจ้งเตือน ' + unreadCount() + ' รายการที่ยังไม่อ่าน'
+            : 'การแจ้งเตือน'
+        "
+      >
+        <span>แจ้งเตือน</span>
+        @if (unreadCount() > 0) {
+          <span
+            class="badge bg-info text-white"
+            data-testid="shell-notification-badge"
+            aria-hidden="true"
+          >
+            {{ unreadCount() }}
+          </span>
+        }
+      </a>
+
       <label class="flex min-h-12 cursor-pointer items-center gap-2 text-sm text-ink">
         <input
           class="h-4 w-4"
