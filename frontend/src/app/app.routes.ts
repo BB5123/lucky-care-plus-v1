@@ -76,8 +76,15 @@ export const routes: Routes = [
         title: 'นัดหมาย | LuckyCare+',
         data: { title: 'นัดหมาย' },
         loadComponent: () =>
-          import('./features/placeholder/under-construction.page').then(
-            (m) => m.UnderConstructionPage,
+          import('./features/appointments/appointments.page').then((m) => m.AppointmentsPage),
+      },
+      {
+        path: 'appointments/:appointmentId',
+        title: 'รายละเอียดนัดหมาย | LuckyCare+',
+        data: { title: 'รายละเอียดนัดหมาย' },
+        loadComponent: () =>
+          import('./features/appointments/appointment-detail.page').then(
+            (m) => m.AppointmentDetailPage,
           ),
       },
       {

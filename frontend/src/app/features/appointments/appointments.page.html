@@ -1,0 +1,93 @@
+<section class="mx-auto w-full max-w-2xl">
+  <header class="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl">นัดหมาย</h1>
+      <p class="mt-1 text-sm text-ink-muted">
+        นัดหมายที่กำลังจะถึงและประวัติการเข้ารับบริการ พร้อมรายการเอกสารที่ต้องเตรียม
+      </p>
+    </div>
+  </header>
+
+  @if (pageLoading()) {
+    <div class="flex flex-col gap-3" aria-busy="true">
+      <p class="sr-only" role="status">กำลังโหลดนัดหมาย</p>
+      <div class="h-12 animate-pulse rounded-lg bg-surface-muted"></div>
+      <div class="h-32 animate-pulse rounded-lg bg-surface-muted"></div>
+    </div>
+  } @else if (pageError(); as message) {
+    <div class="alert alert-error" role="alert">
+      <p>{{ message }}</p>
+      <button class="btn btn-secondary mt-3" type="button" (click)="retry()">ลองอีกครั้ง</button>
+    </div>
+  } @else if (!hasWorkspace()) {
+    <div class="card" data-testid="appointments-no-workspace">
+      <h2 class="text-xl">ยังไม่มีครอบครัว</h2>
+      <p class="mt-2 text-sm text-ink-muted">
+        คุณยังไม่ได้รับคำเชิญให้เข้าร่วมครอบครัว กรุณารอการเชิญจากสมาชิกในครอบครัว
+      </p>
+    </div>
+  } @else {
+    @if (family().length > 1) {
+      <section class="mb-4" aria-label="เลือกโปรไฟล์สุขภาพ">
+        <div class="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="สมาชิกในครอบครัว">
+          @for (member of family(); track member.person_id) {
+            <button
+              type="button"
+              class="flex min-h-12 shrink-0 items-center gap-2 rounded-full border px-4 text-sm"
+              [attr.data-profile-id]="member.profile_id"
+              [class.border-info]="selectedProfileId() === member.profile_id"
+              [class.bg-surface-muted]="selectedProfileId() === member.profile_id"
+              [class.border-line]="selectedProfileId() !== member.profile_id"
+              [class.bg-white]="selectedProfileId() !== member.profile_id"
+              [attr.aria-pressed]="selectedProfileId() === member.profile_id"
+              (click)="selectProfile(member.profile_id)"
+            >
+              {{ member.display_name || 'ไม่ระบุชื่อ' }}
+            </button>
+          }
+        </div>
+      </section>
+    } @else if (selectedProfileName(); as name) {
+      <p class="mb-4 text-sm text-ink-muted">กำลังดูข้อมูลของ {{ name }}</p>
+    }
+
+    @if (selectedProfileId(); as profileId) {
+      @if (announcement(); as message) {
+        <div class="alert alert-success mb-4" role="status" aria-live="polite">{{ message }}</div>
+      }
+
+      @if (!formOpen()) {
+        <div class="mb-4 flex flex-wrap gap-2">
+          <button
+            class="btn btn-primary"
+            type="button"
+            data-testid="appointment-create-open"
+            (click)="openForm()"
+          >
+            เพิ่มนัดหมาย
+          </button>
+        </div>
+      }
+
+      @if (formOpen()) {
+        <app-appointment-form
+          [profileId]="profileId"
+          mode="create"
+          (saved)="onSaved($event)"
+          (cancelled)="closeForm()"
+          (reloadRequested)="closeForm()"
+        />
+      }
+
+      <app-appointment-list [profileId]="profileId" />
+    } @else {
+      <div class="card" data-testid="appointments-no-profile">
+        <h2 class="text-xl">ไม่พบโปรไฟล์สุขภาพ</h2>
+        <p class="mt-2 text-sm text-ink-muted">
+          คุณอาจไม่มีสิทธิ์อ่านนัดหมายของคนในครอบครัว หรือยังไม่ได้เลือกโปรไฟล์สุขภาพ
+        </p>
+        <button class="btn btn-secondary mt-4" type="button" (click)="retry()">ลองอีกครั้ง</button>
+      </div>
+    }
+  }
+</section>
