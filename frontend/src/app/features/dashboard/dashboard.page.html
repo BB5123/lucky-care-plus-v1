@@ -1,52 +1,137 @@
 <section class="mx-auto w-full max-w-2xl">
-  <header class="mb-4">
-    <h1 class="text-2xl">หน้าแรก</h1>
-    @if (user(); as account) {
-      <p class="mt-1 text-sm text-ink-muted">สวัสดี {{ account.name }}</p>
+  <header class="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl">หน้าแรก</h1>
+      @if (user(); as account) {
+        <p
+          class="mt-1 text-ink-muted"
+          [class.text-sm]="!elderMode.enabled()"
+          [class.text-xl]="elderMode.enabled()"
+        >
+          สวัสดี {{ account.name }}
+        </p>
+      }
+      @if (currentWorkspace(); as account) {
+        <p
+          class="mt-1 text-ink-muted"
+          [class.text-xs]="!elderMode.enabled()"
+          [class.text-xl]="elderMode.enabled()"
+        >
+          ครอบครัว: {{ account.name }}
+        </p>
+      }
+    </div>
+
+    @if (!elderMode.enabled() && data()) {
+      <button
+        class="btn btn-secondary"
+        type="button"
+        aria-label="รีเฟรชข้อมูลหน้าแรก"
+        [attr.aria-busy]="refreshing()"
+        [disabled]="refreshing()"
+        (click)="refresh()"
+      >
+        @if (refreshing()) {
+          <span class="spinner" aria-hidden="true"></span>
+          <span>กำลังอัปเดต...</span>
+        } @else {
+          <span>รีเฟรช</span>
+        }
+      </button>
     }
   </header>
 
-  @if (loading()) {
+  @if (pageLoading()) {
     <div class="card" aria-busy="true" aria-live="polite">
-      <p class="sr-only">กำลังโหลดข้อมูล</p>
+      <p class="sr-only">กำลังโหลดข้อมูลหน้าแรก</p>
       <div class="animate-pulse">
         <div class="h-4 w-[40%] rounded-md bg-surface-muted"></div>
         <div class="mt-3 h-4 w-[70%] rounded-md bg-surface-muted"></div>
         <div class="mt-3 h-4 w-[55%] rounded-md bg-surface-muted"></div>
       </div>
     </div>
-  } @else if (errorMessage(); as message) {
+  } @else if (pageError(); as message) {
     <div class="alert alert-error" role="alert">
       <p>{{ message }}</p>
-      <button class="btn btn-secondary mt-3" type="button" (click)="load()">ลองอีกครั้ง</button>
+      <button class="btn btn-secondary mt-3" type="button" (click)="initialize()">
+        ลองอีกครั้ง
+      </button>
+    </div>
+  } @else if (!hasWorkspace()) {
+    <div class="card" data-testid="dashboard-no-workspace">
+      <h2 class="text-xl">ยังไม่มีครอบครัว</h2>
+      <p class="mt-2 text-sm text-ink-muted">
+        คุณยังไม่ได้รับคำเชิญให้เข้าร่วมครอบครัว กรุณารอการเชิญจากสมาชิกในครอบครัว
+        หรือติดต่อผู้ดูแลระบบ
+      </p>
+      <a class="btn btn-secondary mt-4" routerLink="/family">ครอบครัวและสิทธิ์</a>
+    </div>
+  } @else if (unavailable()) {
+    <div class="card" data-testid="dashboard-unavailable">
+      <h2 class="text-xl">ไม่พบข้อมูลครอบครัวนี้</h2>
+      <p class="mt-2 text-sm text-ink-muted">
+        คุณอาจไม่มีสิทธิ์เข้าถึงข้อมูลนี้ หรือสิทธิ์ของคุณถูกเปลี่ยนแล้ว
+      </p>
+      <a class="btn btn-secondary mt-4" routerLink="/family">ตรวจสอบสิทธิ์</a>
     </div>
   } @else {
-    <div class="card">
-      <h2 class="text-xl">ครอบครัวของคุณ</h2>
+    @if (generatedLabel(); as label) {
+      <p
+        class="mb-3 text-ink-muted tabular-nums"
+        [class.text-xs]="!elderMode.enabled()"
+        [class.text-xl]="elderMode.enabled()"
+      >
+        อัปเดตเมื่อ {{ label }}
+      </p>
+    }
 
-      @if (memberships().length === 0) {
-        <div class="mt-4">
-          <p class="text-sm text-ink-muted">ยังไม่มีครอบครัวที่เชื่อมโยงกับบัญชีนี้</p>
-          <a class="btn btn-secondary mt-4" routerLink="/family">ไปที่ครอบครัวและสิทธิ์</a>
-        </div>
-      } @else {
-        <ul class="mt-4 flex flex-col gap-2">
-          @for (membership of memberships(); track membership.id) {
-            <li
-              class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line px-3 py-2"
-            >
-              <span class="text-base font-medium text-ink">{{ membership.name }}</span>
-              <span class="badge">{{ roleLabel(membership.role) }}</span>
-            </li>
-          }
-        </ul>
-      }
-    </div>
+    @if (showDashboardError()) {
+      <div class="alert alert-error mb-4" role="alert">
+        <p>{{ dashboardError() }}</p>
+        <button class="btn btn-secondary mt-3" type="button" (click)="retry()">ลองอีกครั้ง</button>
+      </div>
+    }
 
-    @if (needsPhoneVerification()) {
-      <div class="alert alert-info mt-4">
-        <p>ยังไม่ได้ยืนยันเบอร์โทรศัพท์ กรุณายืนยันเพื่อความปลอดภัยของบัญชี</p>
-        <a class="btn btn-secondary mt-3" routerLink="/verify-phone">ยืนยันเบอร์โทรศัพท์</a>
+    @if (elderMode.enabled()) {
+      <app-elder-focus [dashboard]="data()" [loading]="initialLoading()" (retry)="retry()" />
+    } @else if (initialLoading()) {
+      <div class="flex flex-col gap-4" aria-busy="true">
+        <app-family-switcher [loading]="true" (retry)="retry()" />
+        <app-priority-banner [loading]="true" (retry)="retry()" />
+        <app-tasks-today [loading]="true" (retry)="retry()" />
+        <app-vitals-snapshot [loading]="true" (retry)="retry()" />
+        <app-next-appointment [loading]="true" (retry)="retry()" />
+      </div>
+    } @else if (data(); as dashboard) {
+      <div class="flex flex-col gap-4">
+        @if (dashboard.family.visible) {
+          <app-family-switcher
+            [zone]="dashboard.family"
+            [selectedProfileId]="selectedProfileId()"
+            (retry)="retry()"
+            (profileSelected)="selectPerson($event)"
+          />
+        }
+
+        @if (dashboard.alerts.visible && dashboard.alerts.items.length > 0) {
+          <app-priority-banner
+            [zone]="dashboard.alerts"
+            [personNames]="personNames()"
+            (retry)="retry()"
+          />
+        }
+
+        @if (dashboard.tasks_today.visible) {
+          <app-tasks-today [zone]="dashboard.tasks_today" (retry)="retry()" />
+        }
+
+        @if (dashboard.vitals.visible) {
+          <app-vitals-snapshot [zone]="dashboard.vitals" (retry)="retry()" />
+        }
+
+        @if (dashboard.next_appointment.visible) {
+          <app-next-appointment [zone]="dashboard.next_appointment" (retry)="retry()" />
+        }
       </div>
     }
   }

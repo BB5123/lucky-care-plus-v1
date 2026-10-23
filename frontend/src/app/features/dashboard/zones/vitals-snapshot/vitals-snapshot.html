@@ -1,0 +1,91 @@
+@if (loading()) {
+  <section class="grid grid-cols-2 gap-3" aria-busy="true">
+    <p class="sr-only" role="status">กำลังโหลดค่าสุขภาพล่าสุด</p>
+    @for (placeholder of skeletons; track placeholder) {
+      <div class="h-[128px] animate-pulse rounded-lg bg-surface-muted"></div>
+    }
+  </section>
+} @else if (error(); as message) {
+  <div class="alert alert-error" role="alert">
+    <p>{{ message }}</p>
+    <button class="btn btn-secondary mt-3" type="button" (click)="retry.emit()">ลองอีกครั้ง</button>
+  </div>
+} @else if (zone(); as z) {
+  @if (z.visible) {
+    <section aria-labelledby="vitals-heading">
+      <h2 id="vitals-heading" class="mb-2 text-xl">ค่าสุขภาพล่าสุด</h2>
+
+      @if (z.cards.length === 0) {
+        <div class="card">
+          <p class="text-sm text-ink-muted">ยังไม่มีค่าสุขภาพที่บันทึกใน 7 วันล่าสุด</p>
+        </div>
+      } @else {
+        <div class="grid grid-cols-2 gap-3">
+          @for (card of z.cards; track card.person_id + ':' + card.type) {
+            <article class="rounded-lg border border-line bg-white p-3">
+              <header class="flex items-start justify-between gap-2">
+                <h3 class="text-sm font-medium text-ink">{{ typeLabel(card.type) }}</h3>
+                <span
+                  class="text-xs"
+                  [class.text-danger]="card.status === 'critical'"
+                  [class.text-warning]="
+                    card.status === 'high' || card.status === 'warning' || card.status === 'yellow'
+                  "
+                  [class.text-success]="card.status === 'normal' || card.status === 'green'"
+                  [class.text-ink-muted]="
+                    card.status !== 'critical' &&
+                    card.status !== 'high' &&
+                    card.status !== 'warning' &&
+                    card.status !== 'yellow' &&
+                    card.status !== 'normal' &&
+                    card.status !== 'green'
+                  "
+                >
+                  {{ statusLabel(card.status) }}
+                </span>
+              </header>
+
+              <p class="mt-2 text-2xl font-semibold text-ink tabular-nums">
+                {{ displayValue(card) }}
+                <span class="text-sm font-normal text-ink-muted">{{ unit(card) }}</span>
+              </p>
+
+              <p class="mt-1 text-xs text-ink-muted tabular-nums">
+                7 วัน: ต่ำสุด {{ minValue(card) }} · สูงสุด {{ maxValue(card) }} · เฉลี่ย
+                {{ avgValue(card) }} ({{ card.trend_7d.count }} ครั้ง)
+              </p>
+
+              @if (hasSparkline(card)) {
+                <svg
+                  class="mt-2 h-[28px] w-full text-info"
+                  viewBox="0 0 100 28"
+                  preserveAspectRatio="none"
+                  role="img"
+                  [attr.aria-label]="sparklineLabel(card)"
+                >
+                  <rect
+                    x="0"
+                    y="4"
+                    width="100"
+                    height="20"
+                    rx="2"
+                    class="fill-current opacity-20"
+                  />
+                  <line
+                    x1="0"
+                    x2="100"
+                    [attr.y1]="sparkAvgY(card)"
+                    [attr.y2]="sparkAvgY(card)"
+                    class="stroke-current"
+                    stroke-width="2"
+                  />
+                  <circle cx="98" [attr.cy]="sparkAvgY(card)" r="2.5" class="fill-current" />
+                </svg>
+              }
+            </article>
+          }
+        </div>
+      }
+    </section>
+  }
+}

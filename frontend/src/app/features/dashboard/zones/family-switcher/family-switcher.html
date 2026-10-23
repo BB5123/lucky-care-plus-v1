@@ -1,0 +1,68 @@
+@if (loading()) {
+  <section class="card" aria-busy="true">
+    <p class="sr-only" role="status">กำลังโหลดสมาชิกในครอบครัว</p>
+    <div class="flex gap-2">
+      @for (placeholder of skeletons; track placeholder) {
+        <div class="h-12 w-[96px] animate-pulse rounded-full bg-surface-muted"></div>
+      }
+    </div>
+  </section>
+} @else if (error(); as message) {
+  <div class="alert alert-error" role="alert">
+    <p>{{ message }}</p>
+    <button class="btn btn-secondary mt-3" type="button" (click)="retry.emit()">ลองอีกครั้ง</button>
+  </div>
+} @else if (zone(); as z) {
+  @if (z.visible) {
+    <section aria-label="เลือกสมาชิกในครอบครัว">
+      @if (z.members.length === 0) {
+        <div class="card">
+          <p class="text-sm text-ink-muted">ยังไม่มีสมาชิกที่คุณเข้าถึงได้ในครอบครัวนี้</p>
+        </div>
+      } @else {
+        <div class="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="สมาชิกในครอบครัว">
+          <button
+            type="button"
+            data-profile-id="all"
+            class="flex min-h-12 shrink-0 items-center gap-2 rounded-full border px-4 text-sm"
+            [class.border-info]="selectedProfileId() === null"
+            [class.bg-surface-muted]="selectedProfileId() === null"
+            [class.border-line]="selectedProfileId() !== null"
+            [class.bg-white]="selectedProfileId() !== null"
+            [attr.aria-pressed]="selectedProfileId() === null"
+            (click)="select(null)"
+          >
+            ทุกคน
+          </button>
+
+          @for (member of z.members; track member.person_id) {
+            <button
+              type="button"
+              [attr.data-profile-id]="member.profile_id"
+              class="flex min-h-12 shrink-0 items-center gap-2 rounded-full border px-4 text-sm"
+              [class.border-info]="selectedProfileId() === member.profile_id"
+              [class.bg-surface-muted]="selectedProfileId() === member.profile_id"
+              [class.border-line]="selectedProfileId() !== member.profile_id"
+              [class.bg-white]="selectedProfileId() !== member.profile_id"
+              [attr.aria-pressed]="selectedProfileId() === member.profile_id"
+              (click)="select(member.profile_id)"
+            >
+              <span
+                class="h-2 w-2 shrink-0 rounded-full"
+                [class.bg-success]="member.status === 'green'"
+                [class.bg-warning]="member.status === 'yellow'"
+                [class.bg-danger]="member.status === 'red'"
+                [class.bg-ink-muted]="
+                  member.status !== 'green' && member.status !== 'yellow' && member.status !== 'red'
+                "
+                aria-hidden="true"
+              ></span>
+              <span class="max-w-[120px] truncate">{{ member.display_name || 'ไม่ระบุชื่อ' }}</span>
+              <span class="sr-only">{{ statusLabel(member.status) }}</span>
+            </button>
+          }
+        </div>
+      }
+    </section>
+  }
+}

@@ -1,0 +1,80 @@
+@if (loading()) {
+  <section class="card" aria-busy="true">
+    <p class="sr-only" role="status">กำลังโหลดภารกิจวันนี้</p>
+    <div class="animate-pulse">
+      <div class="h-4 w-[40%] rounded-md bg-surface-muted"></div>
+      <div class="mt-3 h-2 w-full rounded-full bg-surface-muted"></div>
+      <div class="mt-4 h-12 w-full rounded-md bg-surface-muted"></div>
+    </div>
+  </section>
+} @else if (error(); as message) {
+  <div class="alert alert-error" role="alert">
+    <p>{{ message }}</p>
+    <button class="btn btn-secondary mt-3" type="button" (click)="retry.emit()">ลองอีกครั้ง</button>
+  </div>
+} @else if (zone(); as z) {
+  @if (z.visible) {
+    <section class="card" aria-labelledby="tasks-today-heading">
+      <div class="flex items-center justify-between gap-2">
+        <h2 id="tasks-today-heading" class="text-xl">ภารกิจวันนี้</h2>
+
+        @if (z.overdue > 0) {
+          <span class="badge bg-danger text-white">เลยกำหนด {{ z.overdue }}</span>
+        }
+      </div>
+
+      @if (z.total === 0) {
+        <p class="mt-3 text-sm text-ink-muted">วันนี้ยังไม่มีงานที่ต้องทำ</p>
+      } @else {
+        <div class="mt-3 flex items-center justify-between text-sm">
+          <span class="text-ink-muted">สำเร็จ</span>
+          <span class="font-medium text-ink tabular-nums">{{ z.done }}/{{ z.total }}</span>
+        </div>
+
+        <div
+          class="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-muted"
+          role="progressbar"
+          aria-label="ความคืบหน้าของภารกิจวันนี้"
+          aria-valuemin="0"
+          [attr.aria-valuemax]="z.total"
+          [attr.aria-valuenow]="z.done"
+        >
+          <div class="h-2 rounded-full bg-success" [style.width.%]="progressPercent(z)"></div>
+        </div>
+
+        <ul class="mt-4 flex flex-col gap-2">
+          @for (task of z.items; track task.id) {
+            <li>
+              <a
+                class="flex min-h-12 items-center justify-between gap-3 rounded-md border border-line px-3 py-2 hover:bg-surface-muted"
+                routerLink="/tasks"
+              >
+                <span class="min-w-0">
+                  <span class="block truncate text-base text-ink">{{ task.title }}</span>
+                  @if (task.profile_display_name) {
+                    <span class="block truncate text-xs text-ink-muted">
+                      {{ task.profile_display_name }}
+                    </span>
+                  }
+                </span>
+
+                <span class="flex shrink-0 items-center gap-2">
+                  <span class="text-xs text-ink-muted tabular-nums">
+                    {{ dueTime(task.due_at) }}
+                  </span>
+                  <span
+                    class="badge"
+                    [class.bg-success]="task.status === 'completed'"
+                    [class.text-white]="task.status === 'completed'"
+                  >
+                    {{ statusLabel(task.status) }}
+                  </span>
+                </span>
+              </a>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  }
+}

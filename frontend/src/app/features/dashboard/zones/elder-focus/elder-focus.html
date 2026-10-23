@@ -1,0 +1,24 @@
+@if (loading()) {
+  <section class="card text-xl" aria-busy="true">
+    <p class="sr-only" role="status">กำลังโหลดสิ่งที่ต้องทำ</p>
+    <div class="animate-pulse">
+      <div class="h-4 w-[40%] rounded-md bg-surface-muted"></div>
+      <div class="mt-4 h-6 w-[80%] rounded-md bg-surface-muted"></div>
+      <div class="mt-6 h-12 w-full rounded-md bg-surface-muted"></div>
+    </div>
+  </section>
+} @else if (error(); as message) {
+  <section class="card text-xl">
+    <p class="text-ink" role="alert">{{ message }}</p>
+    <button class="btn btn-primary mt-4 w-full text-xl" type="button" (click)="retry.emit()">
+      ลองอีกครั้ง
+    </button>
+  </section>
+} @else if (action(); as next) {
+  <section class="card text-xl">
+    <p class="text-xl font-medium text-ink-muted">สิ่งที่ต้องทำตอนนี้</p>
+    <h2 class="mt-2 text-2xl">{{ next.title }}</h2>
+    <p class="mt-2 text-xl text-ink-muted">{{ next.detail }}</p>
+    <a class="btn btn-primary mt-6 w-full text-xl" [routerLink]="next.link">{{ next.label }}</a>
+  </section>
+}

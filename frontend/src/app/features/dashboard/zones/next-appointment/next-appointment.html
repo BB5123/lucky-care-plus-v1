@@ -1,0 +1,38 @@
+@if (loading()) {
+  <section class="card" aria-busy="true">
+    <p class="sr-only" role="status">กำลังโหลดนัดหมายถัดไป</p>
+    <div class="animate-pulse">
+      <div class="h-4 w-[30%] rounded-md bg-surface-muted"></div>
+      <div class="mt-3 h-6 w-[70%] rounded-md bg-surface-muted"></div>
+      <div class="mt-3 h-4 w-[50%] rounded-md bg-surface-muted"></div>
+    </div>
+  </section>
+} @else if (error(); as message) {
+  <div class="alert alert-error" role="alert">
+    <p>{{ message }}</p>
+    <button class="btn btn-secondary mt-3" type="button" (click)="retry.emit()">ลองอีกครั้ง</button>
+  </div>
+} @else if (zone(); as z) {
+  @if (z.visible) {
+    <section class="card" aria-labelledby="next-appointment-heading">
+      <h2 id="next-appointment-heading" class="text-xl">นัดหมายถัดไป</h2>
+
+      @if (z.title === null) {
+        <p class="mt-3 text-sm text-ink-muted">ยังไม่มีนัดหมายที่กำลังจะมาถึง</p>
+      } @else {
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <p class="w-full text-xl font-medium text-ink">{{ z.title }}</p>
+          @if (z.status !== null) {
+            <span class="badge">{{ statusLabel(z.status) }}</span>
+          }
+        </div>
+
+        <p class="mt-2 text-sm text-ink-muted tabular-nums">
+          {{ formatDateTime(z.scheduled_at) }}
+        </p>
+
+        <a class="btn btn-secondary mt-4" routerLink="/appointments">เตรียมเอกสาร</a>
+      }
+    </section>
+  }
+}
