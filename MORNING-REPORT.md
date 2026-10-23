@@ -134,7 +134,30 @@ npx prettier --check "src/**/*.{ts,html,css}"
 
 ---
 
-## 9. Merge order
+## 10. Final verification (run at 03:41 on the `overnight` branch)
+
+Every command below was run from a clean tree after the last commit.
+
+| Command | Result |
+|---|---|
+| `php artisan migrate:fresh --seed` | ✅ all migrations + seeder |
+| `php artisan test` | ✅ **216 passed / 2,540 assertions** |
+| `./vendor/bin/pint --test` | ✅ 373 files |
+| `npm test` (frontend) | ✅ **70 passed / 28 files** |
+| `npm run build` | ✅ clean |
+| `npm run check:encoding` | ✅ passed (including the new double-encoding detector) |
+| `npx prettier --check` | ✅ clean |
+| `php artisan schedule:list` | 5 commands (§ below) |
+
+`schedule:list`: `retention:purge` (03:00), `retention:inactivity` (04:00), `notifications:send-due`
+(hourly), `notifications:send-appointment-reminders` (09:00 ICT), `tasks:materialise` (00:15 ICT),
+`tasks:escalate` (every 15 min).
+
+**Still to do before this can merge:** push the branch (§1). Everything else is green.
+
+---
+
+## 11. Merge order
 
 `overnight` is one linear branch on top of `main`; a single PR is enough:
 
