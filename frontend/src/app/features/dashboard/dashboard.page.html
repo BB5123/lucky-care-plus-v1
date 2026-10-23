@@ -1,0 +1,53 @@
+<section class="mx-auto w-full max-w-2xl">
+  <header class="mb-4">
+    <h1 class="text-2xl">หน้าแรก</h1>
+    @if (user(); as account) {
+      <p class="mt-1 text-sm text-ink-muted">สวัสดี {{ account.name }}</p>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="card" aria-busy="true" aria-live="polite">
+      <p class="sr-only">กำลังโหลดข้อมูล</p>
+      <div class="animate-pulse">
+        <div class="h-4 w-[40%] rounded-md bg-surface-muted"></div>
+        <div class="mt-3 h-4 w-[70%] rounded-md bg-surface-muted"></div>
+        <div class="mt-3 h-4 w-[55%] rounded-md bg-surface-muted"></div>
+      </div>
+    </div>
+  } @else if (errorMessage(); as message) {
+    <div class="alert alert-error" role="alert">
+      <p>{{ message }}</p>
+      <button class="btn btn-secondary mt-3" type="button" (click)="load()">ลองอีกครั้ง</button>
+    </div>
+  } @else {
+    <div class="card">
+      <h2 class="text-xl">ครอบครัวของคุณ</h2>
+
+      @if (memberships().length === 0) {
+        <div class="mt-4">
+          <p class="text-sm text-ink-muted">ยังไม่มีครอบครัวที่เชื่อมโยงกับบัญชีนี้</p>
+          <a class="btn btn-secondary mt-4" routerLink="/family">ไปที่ครอบครัวและสิทธิ์</a>
+        </div>
+      } @else {
+        <ul class="mt-4 flex flex-col gap-2">
+          @for (membership of memberships(); track membership.id) {
+            <li
+              class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line px-3 py-2"
+            >
+              <span class="text-base font-medium text-ink">{{ membership.name }}</span>
+              <span class="badge">{{ roleLabel(membership.role) }}</span>
+            </li>
+          }
+        </ul>
+      }
+    </div>
+
+    @if (needsPhoneVerification()) {
+      <div class="alert alert-info mt-4">
+        <p>ยังไม่ได้ยืนยันเบอร์โทรศัพท์ กรุณายืนยันเพื่อความปลอดภัยของบัญชี</p>
+        <a class="btn btn-secondary mt-3" routerLink="/verify-phone">ยืนยันเบอร์โทรศัพท์</a>
+      </div>
+    }
+  }
+</section>
