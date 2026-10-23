@@ -1,0 +1,112 @@
+<section class="mx-auto w-full max-w-md py-6">
+  <div class="card">
+    <header class="mb-6">
+      <p class="font-heading text-sm font-medium text-info">LuckyCare+</p>
+      <h1 class="mt-1 text-2xl">ยืนยันเบอร์โทรศัพท์</h1>
+      <p class="mt-2 text-sm text-ink-muted">
+        เราจะส่งรหัส 6 หลักไปยังเบอร์โทรศัพท์ของคุณ รหัสมีอายุ 5 นาที
+      </p>
+    </header>
+
+    <form [formGroup]="form" (ngSubmit)="verify()" novalidate>
+      @if (errorMessage(); as message) {
+        <div class="alert alert-error mb-4" role="alert">{{ message }}</div>
+      }
+
+      @if (successMessage(); as message) {
+        <div class="alert alert-success mb-4" role="status" aria-live="polite">{{ message }}</div>
+      }
+
+      <div class="field">
+        <label class="field-label" for="verify-phone">เบอร์โทรศัพท์</label>
+        <input
+          id="verify-phone"
+          class="field-input numeric-tabular"
+          type="tel"
+          formControlName="phone"
+          autocomplete="tel"
+          inputmode="tel"
+          aria-describedby="verify-phone-hint verify-phone-error"
+          [attr.aria-invalid]="phone.touched && phone.invalid ? 'true' : null"
+        />
+        <p id="verify-phone-hint" class="field-hint">0812345678 หรือ +66812345678</p>
+        @if (phone.touched && phone.hasError('required')) {
+          <p id="verify-phone-error" class="field-error">กรุณากรอกเบอร์โทรศัพท์</p>
+        } @else if (phone.touched && phone.hasError('pattern')) {
+          <p id="verify-phone-error" class="field-error">รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง</p>
+        }
+      </div>
+
+      <button
+        class="btn btn-secondary mb-4 w-full"
+        type="button"
+        (click)="requestCode()"
+        [disabled]="requesting() || resendIn() > 0"
+      >
+        @if (requesting()) {
+          <span class="spinner" aria-hidden="true"></span>
+          <span>กำลังส่งรหัส...</span>
+        } @else if (resendIn() > 0) {
+          <span class="numeric-tabular">ส่งรหัสอีกครั้งได้ใน {{ resendLabel() }}</span>
+        } @else {
+          <span>{{ requestMessage() ? 'ส่งรหัสอีกครั้ง' : 'ส่งรหัส' }}</span>
+        }
+      </button>
+
+      @if (requestMessage(); as message) {
+        <div class="alert alert-info mb-4" role="status" aria-live="polite">
+          <p>{{ message }}</p>
+          @if (expiresIn() > 0) {
+            <p class="numeric-tabular mt-1">รหัสจะหมดอายุใน {{ expiresLabel() }}</p>
+          } @else {
+            <p class="mt-1">รหัสหมดอายุแล้ว กรุณาส่งรหัสใหม่</p>
+          }
+        </div>
+      }
+
+      <div class="field">
+        <label class="field-label" for="verify-code">รหัสยืนยัน 6 หลัก</label>
+        <input
+          id="verify-code"
+          class="field-input numeric-tabular"
+          type="text"
+          formControlName="code"
+          autocomplete="one-time-code"
+          inputmode="numeric"
+          maxlength="6"
+          [attr.aria-invalid]="code.touched && code.invalid ? 'true' : null"
+          [attr.aria-describedby]="code.touched && code.invalid ? 'verify-code-error' : null"
+        />
+        @if (code.touched && code.hasError('required')) {
+          <p id="verify-code-error" class="field-error">กรุณากรอกรหัสยืนยัน</p>
+        } @else if (code.touched && code.hasError('pattern')) {
+          <p id="verify-code-error" class="field-error">รหัสยืนยันต้องเป็นตัวเลข 6 หลัก</p>
+        }
+      </div>
+
+      <button class="btn btn-primary w-full" type="submit" [disabled]="verifying()">
+        @if (verifying()) {
+          <span class="spinner" aria-hidden="true"></span>
+          <span>กำลังยืนยัน...</span>
+        } @else {
+          <span>ยืนยัน</span>
+        }
+      </button>
+    </form>
+
+    @if (demoCode(); as code) {
+      <section class="alert alert-warning mt-6" aria-labelledby="demo-title">
+        <h2 id="demo-title" class="text-sm font-semibold">โหมดสาธิตสำหรับนักพัฒนา</h2>
+        <p class="mt-1">เซิร์ฟเวอร์ส่งรหัสกลับมาเพื่อใช้ทดสอบบนเครื่องนี้เท่านั้น</p>
+        <p class="numeric-tabular mt-2 text-xl font-semibold">{{ code }}</p>
+        <button class="btn btn-secondary mt-3 w-full" type="button" (click)="useDemoCode(code)">
+          ใช้รหัสนี้
+        </button>
+      </section>
+    }
+
+    <p class="mt-6 text-center text-sm text-ink-muted">
+      <a class="link" routerLink="/dashboard">ยืนยันภายหลัง</a>
+    </p>
+  </div>
+</section>

@@ -1,59 +1,65 @@
-# Frontend
+# LuckyCare+ — Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.1.7.
+Angular 22 + Tailwind CSS 4 web application for LuckyCare+.
 
-## Development server
+## Requirements
 
-To start a local development server, run:
+- Node.js 22+ (the repository is developed with Node 26)
+- The Laravel API running on `http://127.0.0.1:8000`
+- PostgreSQL, Redis and MinIO from the repository root (`docker compose up -d`)
 
-```bash
-ng serve
-```
+## Run the frontend and API together
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Open two terminals from the repository root.
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+Terminal 1 — API:
 
 ```bash
-ng generate component component-name
+cd backend
+php artisan serve --host=127.0.0.1 --port=8000
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+Terminal 2 — web app:
 
 ```bash
-ng generate --help
+cd frontend
+npm start
 ```
 
-## Building
+Open `http://localhost:4200/`. `proxy.conf.json` forwards every `/api` request to
+`http://127.0.0.1:8000`, so the browser only talks to the dev server and CORS is
+never involved. `angular.json` wires the proxy into `serve.options.proxyConfig`.
 
-To build the project run:
+If the API runs on a different host or port, update the proxy target and keep the
+client's default `API_BASE_URL` (`/api/v1`) unchanged.
+
+## Build and test
 
 ```bash
-ng build
+npm run build
+npm test -- --run
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+The `test` script wraps Angular's Vitest builder and accepts the conventional
+`--run` flag (the Angular 22 CLI itself exposes `--watch=false` instead).
 
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+Formatting:
 
 ```bash
-ng test
+npx prettier --check "src/**/*.{ts,html,css}"
 ```
 
-## Running end-to-end tests
+## Structure
 
-For end-to-end (e2e) testing, run:
+| Path                              | Contents                                             |
+| --------------------------------- | ---------------------------------------------------- |
+| `src/app/core/api`                | API base URL token and problem-details handling      |
+| `src/app/core/auth`               | Session signals, interceptor and route guards        |
+| `src/app/core/device`             | Stable non-sensitive `device_name`                   |
+| `src/app/features/auth`           | Login, registration and phone verification           |
+| `src/app/features/dashboard`      | Authenticated dashboard placeholder (`GET /me`)      |
+| `src/app/features/placeholder`    | Under-construction pages for unimplemented IA routes |
+| `src/app/shared/layout/app-shell` | Top bar, IA rail, user menu and logout               |
 
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Design tokens live in `src/styles.css`. Use the named Tailwind tokens
+(`bg-surface`, `text-ink-muted`, `rounded-lg`, …) instead of raw values.
