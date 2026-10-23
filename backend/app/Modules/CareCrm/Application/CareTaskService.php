@@ -132,6 +132,7 @@ final class CareTaskService
         array $input,
         ?string $idempotencyKey = null,
         bool $authorize = true,
+        ?string $initialStatus = null,
     ): array {
         $profile = HealthProfile::query()
             ->where('tenant_id', $workspace->tenant_id)
@@ -147,7 +148,13 @@ final class CareTaskService
             $existing = $this->findByIdempotencyKey($workspace, $idempotencyKey);
 
             if ($existing instanceof CareTask) {
-                $this->assertVisible($existing, $actor);
+                // System-generated callers (the recurring materialiser) have
+                // already scoped the row to this workspace; they do not hold a
+                // grant on the profile and must still see an existing
+                // occurrence instead of receiving a 404.
+                if ($authorize) {
+                    $this->assertVisible($existing, $actor);
+                }
 
                 return [$existing, false];
             }
@@ -188,8 +195,9 @@ final class CareTaskService
                 $assigneeId,
                 $tier,
                 $idempotencyKey,
+                $initialStatus,
             ): array {
-                $initialStatus = match ($tier) {
+                $status = $initialStatus ?? match ($tier) {
                     CareTask::TIER_ROUTINE => CareTask::STATUS_SCHEDULED,
                     CareTask::TIER_CLINICAL => $assigneeId !== null
                         ? CareTask::STATUS_ASSIGNED
@@ -197,12 +205,21 @@ final class CareTaskService
                     default => CareTask::STATUS_OPEN,
                 };
 
+                if (! in_array($status, [
+                    CareTask::STATUS_SCHEDULED,
+                    CareTask::STATUS_OPEN,
+                    CareTask::STATUS_ASSIGNED,
+                ], true)) {
+                    throw new \InvalidArgumentException('Unsupported initial care-task status.');
+                }
+
                 $task = CareTask::query()->create([
                     'tenant_id' => $profile->tenant_id,
                     'workspace_id' => $profile->workspace_id,
                     'profile_id' => $profile->id,
                     'created_by' => $actor->id,
                     'template_id' => $input['template_id'] ?? null,
+                    'occurrence_key' => $input['occurrence_key'] ?? null,
                     'tier' => $tier,
                     'type' => $input['type'],
                     'title' => $input['title'],
@@ -211,7 +228,7 @@ final class CareTaskService
                     'scheduled_for' => $input['scheduled_for'] ?? null,
                     'due_at' => $input['due_at'] ?? null,
                     'timezone' => $input['timezone'] ?? 'Asia/Bangkok',
-                    'status' => $initialStatus,
+                    'status' => $status,
                     'outcome' => null,
                     'verification' => CareTask::VERIFICATION_NOT_REQUIRED,
                     // Clinical work always requires a second pair of eyes
@@ -250,7 +267,7 @@ final class CareTaskService
                     $actor,
                     'created',
                     null,
-                    $initialStatus,
+                    $status,
                     'care_task.create',
                     null,
                     ['tier' => $tier, 'type' => $task->type, 'version' => 1],

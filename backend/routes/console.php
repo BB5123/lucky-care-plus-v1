@@ -30,3 +30,10 @@ Schedule::command('notifications:send-appointment-reminders')
     ->dailyAt('09:00')
     ->timezone('Asia/Bangkok')
     ->withoutOverlapping();
+
+// P2.1: materialise recurring care-task occurrences just after midnight so the
+// day's work exists before the hourly reminder scan runs.
+Schedule::command('tasks:materialise')
+    ->dailyAt('00:15')
+    ->timezone('Asia/Bangkok')
+    ->withoutOverlapping();

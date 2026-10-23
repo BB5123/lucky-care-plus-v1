@@ -82,6 +82,7 @@ class CareTask extends Model
         'profile_id',
         'created_by',
         'template_id',
+        'occurrence_key',
         'tier',
         'type',
         'title',
@@ -141,6 +142,11 @@ class CareTask extends Model
     public function profile(): BelongsTo
     {
         return $this->belongsTo(HealthProfile::class, 'profile_id');
+    }
+
+    public function template(): BelongsTo
+    {
+        return $this->belongsTo(CareTaskTemplate::class, 'template_id');
     }
 
     public function creator(): BelongsTo

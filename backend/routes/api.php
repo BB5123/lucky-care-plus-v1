@@ -7,6 +7,7 @@ use App\Modules\Accounts\Http\Controllers\PinController;
 use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskController;
+use App\Modules\CareCrm\Http\Controllers\CareTaskTemplateController;
 use App\Modules\CareCrm\Http\Controllers\TaskEvidenceController;
 use App\Modules\Dashboard\Http\Controllers\DashboardController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
@@ -219,6 +220,28 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('authorize.permission:appointment.update');
             Route::patch('/{appointment}/documents', [AppointmentController::class, 'documents'])
                 ->middleware('authorize.permission:appointment.update');
+        });
+
+    // -- Recurring care-task templates (Phase 2.1) --------------------------
+    // The frozen catalog has no `care_task.template.*` permission yet
+    // (see backend/docs/CR-003-proposal-template-permissions.md). Until the
+    // change request is approved, the adjacent care-task permissions gate the
+    // surface: read for listing, create for every schedule mutation.
+    Route::prefix('/workspaces/{workspace}/profiles/{profile}/task-templates')
+        ->middleware(['auth:sanctum', 'throttle:60,1,task-templates', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [CareTaskTemplateController::class, 'index'])
+                ->middleware('authorize.permission:care_task.read');
+            Route::post('/', [CareTaskTemplateController::class, 'store'])
+                ->middleware('authorize.permission:care_task.create');
+            Route::get('/{template}', [CareTaskTemplateController::class, 'show'])
+                ->middleware('authorize.permission:care_task.read');
+            Route::patch('/{template}', [CareTaskTemplateController::class, 'update'])
+                ->middleware('authorize.permission:care_task.create');
+            Route::post('/{template}/deactivate', [CareTaskTemplateController::class, 'deactivate'])
+                ->middleware('authorize.permission:care_task.create');
+            Route::post('/{template}/exceptions', [CareTaskTemplateController::class, 'addException'])
+                ->middleware('authorize.permission:care_task.create');
         });
 
     // -- Dashboard (Phase 1.5, ADR-010) -------------------------------------
