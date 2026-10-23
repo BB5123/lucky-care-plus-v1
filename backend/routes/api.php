@@ -12,11 +12,14 @@ use App\Modules\CareCrm\Http\Controllers\EscalationPolicyController;
 use App\Modules\CareCrm\Http\Controllers\TaskEvidenceController;
 use App\Modules\Dashboard\Http\Controllers\DashboardController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
+use App\Modules\HealthRecord\Http\Controllers\BriefController;
 use App\Modules\HealthRecord\Http\Controllers\ConditionController;
+use App\Modules\HealthRecord\Http\Controllers\HealthReportController;
 use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationAdherenceController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationPlanController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationRecordController;
+use App\Modules\HealthRecord\Http\Controllers\ReportShareController;
 use App\Modules\Notifications\Http\Controllers\NotificationDeliveryController;
 use App\Modules\Notifications\Http\Controllers\NotificationPreferenceController;
 use App\Modules\Timeline\Http\Controllers\TimelineController;
@@ -40,6 +43,13 @@ Route::prefix('v1')->group(function (): void {
 
     Route::post('/auth/login', [AuthController::class, 'login'])
         ->middleware('throttle:6,1,auth-login');
+
+    // -- Public Doctor Brief (Phase 2.3, DB-003) ----------------------------
+    // No auth middleware on purpose: the clinic has no account and the random
+    // 256-bit token is the whole capability. Only the token is in the path; the
+    // clinical payload is the response body (DB-004).
+    Route::get('/briefs/{token}', BriefController::class)
+        ->middleware('throttle:60,1,doctor-brief');
 
     Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept'])
         ->middleware(['auth:sanctum', 'throttle:30,1,invitation-accept']);
@@ -221,6 +231,25 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('authorize.permission:appointment.update');
             Route::patch('/{appointment}/documents', [AppointmentController::class, 'documents'])
                 ->middleware('authorize.permission:appointment.update');
+        });
+
+    // -- Doctor Brief snapshots (Phase 2.3) ---------------------------------
+    // Read, create and export are distinct frozen permissions (F-06). The
+    // section composition is narrower still: each section is separately
+    // authorized inside DoctorBriefBuilder.
+    Route::prefix('/workspaces/{workspace}/profiles/{profile}/health-reports')
+        ->middleware(['auth:sanctum', 'throttle:60,1,health-reports', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [HealthReportController::class, 'index'])
+                ->middleware('authorize.permission:health_report.read');
+            Route::post('/', [HealthReportController::class, 'store'])
+                ->middleware('authorize.permission:health_report.create');
+            Route::get('/{report}', [HealthReportController::class, 'show'])
+                ->middleware('authorize.permission:health_report.read');
+            Route::post('/{report}/share', [ReportShareController::class, 'store'])
+                ->middleware('authorize.permission:health_report.export');
+            Route::delete('/{report}/shares/{share}', [ReportShareController::class, 'destroy'])
+                ->middleware('authorize.permission:health_report.export');
         });
 
     // -- Recurring care-task templates (Phase 2.1) --------------------------
