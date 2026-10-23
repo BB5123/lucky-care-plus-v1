@@ -23,7 +23,7 @@
 | [ADR-016](#adr-016--retention-ตามวัตถุประสงค์-pdpa--tenant-override) | Retention policy | ✅ Accepted | — |
 | [ADR-017](#adr-017--break-glass-เปิดให้ทุกแพ็กเกจ-ไม่ผูกกับราคา) | Break-glass access | ✅ Accepted | — |
 | [ADR-018](#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น) | G0 scoping | ✅ Accepted | — |
-| [ADR-019](#adr-019--เริ่ม-phase-1-ขณะ-g0-ข้อ-10-ยังเปิด-time-boxed-override) | Phase 1 start override | ⚠️ Accepted (time-boxed) | — |
+| [ADR-019](#adr-019--เริ่ม-phase-1-ขณะ-g0-ข้อ-10-ยังเปิด-time-boxed-override) | Phase 1 start override | ⛔ Superseded 2026-10-23 | — |
 
 ---
 
@@ -556,6 +556,11 @@
 ---
 
 ## ADR-019 · เริ่ม Phase 1 ขณะ G0 ข้อ 10 ยังเปิด (time-boxed override)
+
+> **สถานะ: ⛔ Superseded — 2026-10-23**
+> branch protection ถูกเปิดแล้ว (ruleset `Allow AI Push`: บังคับ PR + required status checks 3 ตัว
+> และห้าม force-push) จึงไม่ต้องใช้ข้อยกเว้นอีก เงื่อนไขข้อ 3 (วันหมดอายุ 2026-11-06) สิ้นผลไปพร้อมกัน
+> หลักฐาน: `backend/docs/G0-CHECKLIST.md` §3 · G0 ผ่านแล้ว (9 ✅ / 1 ⏭ ไป G4 ตาม ADR-018)
 
 **บริบท** — หลัง ADR-018, G0 เหลือเพียงข้อ 10: **branch protection** ที่ยังไม่ถูกเปิดบน GitHub
 (CI เขียวแล้ว 2 รอบ, workflow ทำงานจริง, สิทธิ์ admin ของ repo อยู่นอกมือทีมพัฒนา)
