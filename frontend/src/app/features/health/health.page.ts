@@ -13,12 +13,14 @@ import { Subscription } from 'rxjs';
 import { toUserMessage } from '../../core/api/problem-details';
 import { DashboardService } from '../../core/dashboard/dashboard.service';
 import { HealthRecordService } from '../../core/health-record/health-record.service';
+import { MedicationService } from '../../core/medication/medication.service';
 import { WorkspaceService } from '../../core/workspace/workspace.service';
 import { AllergyList } from './allergies/allergy-list';
 import { ConditionList } from './conditions/condition-list';
 import { MeasurementList } from './measurements/measurement-list';
+import { MedicationPlanList } from '../medication/medication-plan-list';
 
-type HealthTab = 'measurements' | 'conditions' | 'allergies';
+type HealthTab = 'measurements' | 'conditions' | 'allergies' | 'medications';
 
 interface HealthTabDefinition {
   readonly id: HealthTab;
@@ -27,7 +29,7 @@ interface HealthTabDefinition {
 
 @Component({
   selector: 'app-health-page',
-  imports: [MeasurementList, ConditionList, AllergyList],
+  imports: [MeasurementList, ConditionList, AllergyList, MedicationPlanList],
   templateUrl: './health.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -36,12 +38,14 @@ export class HealthPage {
   private readonly workspace = inject(WorkspaceService);
   private readonly dashboard = inject(DashboardService);
   private readonly health = inject(HealthRecordService);
+  private readonly medication = inject(MedicationService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly tabs: readonly HealthTabDefinition[] = [
     { id: 'measurements', label: 'ค่าที่วัด' },
     { id: 'conditions', label: 'โรคประจําตัว' },
     { id: 'allergies', label: 'การแพ้ยา' },
+    { id: 'medications', label: 'ยา' },
   ];
 
   protected readonly activeTab = signal<HealthTab>('measurements');
@@ -119,6 +123,7 @@ export class HealthPage {
         this.selectedProfileId.set(null);
         this.announcement.set(null);
         this.health.reset();
+        this.medication.reset();
         this.dashboard.invalidate();
         void this.initialize();
       });
@@ -165,6 +170,7 @@ export class HealthPage {
 
     this.announcement.set(null);
     this.health.reset();
+    this.medication.reset();
     this.selectedProfileId.set(profileId);
   }
 

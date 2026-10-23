@@ -1,9 +1,43 @@
+import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
+import { API_BASE_URL } from '../api/api-base.token';
+import { toUserMessage } from '../api/problem-details';
 import { MembershipSummary } from '../auth/auth.models';
 import { AuthService } from '../auth/auth.service';
 
 const WORKSPACE_STORAGE_KEY = 'luckycare.workspace';
+
+/** One row of `GET /workspaces/{workspace}/members`. */
+export interface WorkspaceMember {
+  readonly user_id: number;
+  readonly name: string | null;
+  readonly role: string;
+  readonly status: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readMember(value: unknown): WorkspaceMember | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const userId = value['user_id'];
+
+  if (typeof userId !== 'number' || !Number.isFinite(userId)) {
+    return null;
+  }
+
+  return {
+    user_id: userId,
+    name: typeof value['name'] === 'string' ? value['name'] : null,
+    role: typeof value['role'] === 'string' ? value['role'] : 'member',
+    status: typeof value['status'] === 'string' ? value['status'] : 'active',
+  };
+}
 
 function readStoredWorkspaceId(): string | null {
   try {
@@ -39,12 +73,19 @@ function removeStoredWorkspaceId(): void {
 @Injectable({ providedIn: 'root' })
 export class WorkspaceService {
   private readonly auth = inject(AuthService);
+  private readonly http = inject(HttpClient);
+  private readonly baseUrl = inject(API_BASE_URL);
 
   private readonly workspacesState = signal<readonly MembershipSummary[]>([]);
   private readonly currentState = signal<MembershipSummary | null>(null);
   private readonly loadingState = signal(false);
+  private readonly membersState = signal<readonly WorkspaceMember[]>([]);
+  private readonly membersLoadingState = signal(false);
+  private readonly membersErrorState = signal<string | null>(null);
 
   private inFlight: Promise<void> | null = null;
+  private membersInFlight: Promise<void> | null = null;
+  private membersWorkspaceId: string | null = null;
   private loadedForUserId: string | null = null;
 
   readonly workspaces = this.workspacesState.asReadonly();
@@ -54,6 +95,35 @@ export class WorkspaceService {
   readonly currentWorkspace = this.currentState.asReadonly();
   readonly loading = this.loadingState.asReadonly();
   readonly hasWorkspace = computed(() => this.currentState() !== null);
+
+  /**
+   * Active members of the current workspace, loaded only when a screen needs
+   * them (the care-task assign picker). Unknown members are never invented.
+   */
+  readonly members = this.membersState.asReadonly();
+  readonly membersLoading = this.membersLoadingState.asReadonly();
+  readonly membersError = this.membersErrorState.asReadonly();
+
+  async loadMembers(): Promise<void> {
+    const workspaceId = this.currentState()?.workspace_id ?? null;
+
+    if (workspaceId === null) {
+      this.membersState.set([]);
+      return;
+    }
+
+    if (this.membersWorkspaceId === workspaceId) {
+      return;
+    }
+
+    if (this.membersInFlight !== null) {
+      return this.membersInFlight;
+    }
+
+    this.membersInFlight = this.fetchMembers(workspaceId);
+
+    return this.membersInFlight;
+  }
 
   /**
    * Hydrates the workspace list after authentication.
@@ -105,6 +175,7 @@ export class WorkspaceService {
 
     this.currentState.set(next);
     writeStoredWorkspaceId(workspaceId);
+    this.clearMembers();
 
     return true;
   }
@@ -115,7 +186,41 @@ export class WorkspaceService {
     this.loadingState.set(false);
     this.inFlight = null;
     this.loadedForUserId = null;
+    this.clearMembers();
     removeStoredWorkspaceId();
+  }
+
+  private async fetchMembers(workspaceId: string): Promise<void> {
+    this.membersLoadingState.set(true);
+    this.membersErrorState.set(null);
+
+    try {
+      const response = await firstValueFrom(
+        this.http.get<{ readonly data?: unknown }>(
+          `${this.baseUrl}/workspaces/${encodeURIComponent(workspaceId)}/members`,
+        ),
+      );
+      const rows = Array.isArray(response.data) ? response.data : [];
+
+      this.membersState.set(
+        rows.map((row) => readMember(row)).filter((row): row is WorkspaceMember => row !== null),
+      );
+      this.membersWorkspaceId = workspaceId;
+    } catch (error) {
+      this.membersState.set([]);
+      this.membersErrorState.set(toUserMessage(error));
+    } finally {
+      this.membersLoadingState.set(false);
+      this.membersInFlight = null;
+    }
+  }
+
+  private clearMembers(): void {
+    this.membersInFlight = null;
+    this.membersWorkspaceId = null;
+    this.membersState.set([]);
+    this.membersLoadingState.set(false);
+    this.membersErrorState.set(null);
   }
 
   private async fetch(): Promise<void> {
@@ -132,6 +237,7 @@ export class WorkspaceService {
   }
 
   private hydrate(memberships: readonly MembershipSummary[]): void {
+    this.clearMembers();
     this.workspacesState.set(memberships);
 
     const active = memberships.filter((item) => item.status === 'active');

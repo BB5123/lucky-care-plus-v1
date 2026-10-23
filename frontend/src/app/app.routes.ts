@@ -47,10 +47,13 @@ export const routes: Routes = [
         path: 'tasks',
         title: 'งานดูแล | LuckyCare+',
         data: { title: 'งานดูแล' },
-        loadComponent: () =>
-          import('./features/placeholder/under-construction.page').then(
-            (m) => m.UnderConstructionPage,
-          ),
+        loadComponent: () => import('./features/tasks/tasks.page').then((m) => m.TasksPage),
+      },
+      {
+        path: 'tasks/:taskId',
+        title: 'รายละเอียดงาน | LuckyCare+',
+        data: { title: 'รายละเอียดงาน' },
+        loadComponent: () => import('./features/tasks/task-detail').then((m) => m.TaskDetail),
       },
       {
         path: 'appointments',

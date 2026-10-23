@@ -95,6 +95,9 @@
           @case ('allergies') {
             <app-allergy-list [profileId]="profileId" (saved)="onSaved()" />
           }
+          @case ('medications') {
+            <app-medication-plan-list [profileId]="profileId" (saved)="onSaved()" />
+          }
         }
       </div>
     } @else {
