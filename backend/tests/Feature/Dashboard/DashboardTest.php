@@ -399,8 +399,13 @@ class DashboardTest extends TestCase
         }
 
         $body = $response->getContent();
-        $this->assertStringNotContainsString('187', $body);
-        $this->assertStringNotContainsString('111', $body);
+        // Do not assert on a short bare number: the body is full of UUIDs and
+        // timestamps, and "187" or "111" can appear inside a random UUID — that
+        // made this test flaky (green locally, red on CI). Assert on the field
+        // names the values would have to live in instead.
+        $this->assertStringNotContainsString('"latest"', $body);
+        $this->assertStringNotContainsString('"secondary_value"', $body);
+        $this->assertStringNotContainsString('"recorded_at"', $body);
         $this->assertStringNotContainsString('Hidden task title', $body);
         $this->assertStringNotContainsString('Hidden appointment title', $body);
 
