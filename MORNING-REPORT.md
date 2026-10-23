@@ -101,6 +101,19 @@ Nothing is marked DONE without that evidence.
 Known limitation: the unread badge caps at 100 because the deliveries endpoint exposes no total count
 (fixing it needs a backend field, which was out of scope).
 
+**FE-6 Appointments tab — ✅ DONE (second attempt)**
+
+The first attempt came back with every Thai syllable double-encoded (`เธเธ…`) as valid UTF-8 with no
+replacement character, so the old encoding guard passed it. I discarded the attempt, taught the guard
+that pattern (with a planted-probe test), and re-ran with two extra requirements:
+
+- **reschedule must create a replacement row** (`POST` with `rescheduled_from_id`) so the move stays in
+  history (APT-003); the first attempt edited `scheduled_at` in place
+- the slice must run `npm run check:encoding` and rewrite anything it flags
+
+Result: **70 frontend tests**, build clean, encoding clean (new detector active), reschedule verified as a
+POST carrying `rescheduled_from_id`.
+
 ---
 
 ## 8. How to verify all of this yourself
