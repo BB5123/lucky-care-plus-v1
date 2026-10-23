@@ -111,8 +111,10 @@ Notes:
   assertions in CI are real — not bypassed by the service container's superuser.
 - The mobile job was red on the first local rehearsal (`package:mobile/main.dart` vs package `lucky_care`);
   the import was corrected before this run, and the analyzer is now clean.
-- **Branch protection is not configured.** Until `main` requires the `CI` checks before merge, item 10
-  stays open: the pipeline exists and passes, but it is not yet *enforcing*.
+- ~~**Branch protection is not configured.**~~ **Superseded on 2026-10-23:** the ruleset `Allow AI Push`
+  now requires a pull request and the three status checks on `main`, so the pipeline is not only green
+  but *enforcing*. The runs above predate that change; run #7 (the `phase-1-complete` PR) is the first
+  enforced run and it was green on all three jobs before the merge.
 
 ## 5. Files that provide this evidence
 
