@@ -484,7 +484,13 @@ final class DashboardAssembler
             }
 
             $members[] = [
+                // `person_id` identifies the human; `profile_id` is what the
+                // dashboard filter (`?profile_id=`) and every health endpoint
+                // accept. A client needs both: one to key the list, one to
+                // drill into a person. Without `profile_id` the family switcher
+                // has no valid filter value to send.
                 'person_id' => (string) $profile->person_id,
+                'profile_id' => (string) $profile->id,
                 'display_name' => (string) ($profile->person?->display_name ?? ''),
                 'ring' => $rings[$profileId]['ring'],
                 'status' => $rings[$profileId]['status'],
@@ -659,7 +665,7 @@ final class DashboardAssembler
             return [
                 'visible' => true,
                 'id' => null,
-                'person_id' => null,
+                'profile_id' => null,
                 'title' => null,
                 'scheduled_at' => null,
                 'status' => null,
@@ -669,7 +675,11 @@ final class DashboardAssembler
         return [
             'visible' => true,
             'id' => (string) $next->id,
-            'person_id' => (string) $next->profile_id,
+            // An appointment belongs to a health profile, so the key is
+            // `profile_id`. It previously read `person_id` while holding a
+            // profile id, which made the payload self-inconsistent and gave a
+            // client no way to correlate it with `family.members[]`.
+            'profile_id' => (string) $next->profile_id,
             'title' => (string) $next->title,
             'scheduled_at' => $next->scheduled_at?->toIso8601String(),
             'status' => (string) $next->status,

@@ -1,0 +1,33 @@
+@if (loading()) {
+  <section class="flex flex-col gap-2" aria-busy="true">
+    <p class="sr-only" role="status">กำลังโหลดการแจ้งเตือนสำคัญ</p>
+    @for (placeholder of skeletons; track placeholder) {
+      <div class="h-12 w-full animate-pulse rounded-md bg-surface-muted"></div>
+    }
+  </section>
+} @else if (error(); as message) {
+  <div class="alert alert-error" role="alert">
+    <p>{{ message }}</p>
+    <button class="btn btn-secondary mt-3" type="button" (click)="retry.emit()">ลองอีกครั้ง</button>
+  </div>
+} @else if (zone(); as z) {
+  @if (z.visible && z.items.length > 0) {
+    <section
+      class="flex flex-col gap-2"
+      role="status"
+      aria-live="polite"
+      aria-label="การแจ้งเตือนสำคัญ"
+    >
+      @for (alert of z.items; track $index) {
+        <div
+          class="alert flex flex-col gap-1"
+          [class.alert-error]="alert.level === 'critical'"
+          [class.alert-warning]="alert.level === 'warning'"
+          [class.alert-info]="alert.level !== 'critical' && alert.level !== 'warning'"
+        >
+          <p class="font-medium">{{ alertText(alert) }}</p>
+        </div>
+      }
+    </section>
+  }
+}

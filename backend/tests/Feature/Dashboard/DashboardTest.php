@@ -292,7 +292,11 @@ class DashboardTest extends TestCase
         $this->getJson($path)
             ->assertOk()
             ->assertJsonPath('data.family.members.0.status', 'green')
-            ->assertJsonPath('data.family.members.0.reason', 'stable');
+            ->assertJsonPath('data.family.members.0.reason', 'stable')
+            // A member must be drill-downable: the filter accepts `profile_id`,
+            // so the payload has to expose it next to the person id.
+            ->assertJsonPath('data.family.members.0.profile_id', $this->ownerProfile->id)
+            ->assertJsonPath('data.family.members.0.person_id', $this->ownerPerson->id);
 
         $this->task($this->ownerProfile, [
             'title' => 'Pending today',

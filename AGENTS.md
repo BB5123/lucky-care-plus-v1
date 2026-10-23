@@ -73,3 +73,7 @@ the member list", but Matrix A marks *Read member list* as `D` for Viewer and Ca
 
 - Code, identifiers, commit messages, and technical docs: **English**.
 - User-facing copy and product docs: **Thai** (the product targets Thai families).
+- **Never write a file containing Thai text through a shell** (`Set-Content`, `Out-File`, redirects,
+  `echo >`). Windows shells re-encode through a legacy code page and silently destroy the text:
+  `กำลังโหลด` became `เน€เธ…` twice in this repository. Use the file editor instead, and treat a
+  U+FFFD replacement character in source as a defect. `npm run check:encoding` (CI) enforces this.

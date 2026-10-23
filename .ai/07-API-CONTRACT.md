@@ -161,17 +161,23 @@ GET /workspaces/{w}/dashboard?profile_id={profile}
 ```json
 {
   "data": {
-    "family": {"members": [{"person_id":"...","ring":"inner","status":"yellow"}]},
+    "family": {"members": [{"person_id":"...","profile_id":"...","ring":"inner","status":"yellow"}]},
     "alerts": [{"level":"critical","person_id":"...","code":"vital_high","task_id":"..."}],
     "tasks_today": {"total": 6, "done": 3, "items": [...]},
     "vitals": [{"type":"bp","values":[...],"status":"high"}],
-    "next_appointment": {...},
+    "next_appointment": {"profile_id":"..."},
     "break_glass_active": false
   },
   "meta": {"generated_at":"...","cache_ttl":30}
 }
 ```
 **ห้าม** ส่งฟิลด์ที่ผู้ใช้ไม่มีสิทธิ์แม้จะ `null` — ใช้การละฟิลด์ + `visible:false`
+
+**`person_id` กับ `profile_id` ต้องมีทั้งคู่** — `person_id` คือตัวบุคคล (ใช้เป็น key ของรายการ)
+ส่วน `profile_id` คือ health profile ที่ **ตัวกรอง `?profile_id=` และ endpoint สุขภาพทุกตัวรับ**
+ถ้าไม่มี `profile_id` client จะ drill-down จาก family switcher ไม่ได้
+(แก้เมื่อ 2026-10-23 ระหว่างทำ FE-2: `family.members[]` ไม่มี `profile_id` และ
+`next_appointment.person_id` เคยใส่ค่า profile id ทำให้ payload ขัดกันเอง)
 
 ### 3.8 Reports & AI
 
