@@ -38,7 +38,7 @@ final class NotificationTemplateCatalog
         ],
         'task.escalated' => [
             'required' => ['escalation_level'],
-            'optional' => [],
+            'optional' => ['due_at'],
         ],
         'appt.reminder' => [
             'required' => ['scheduled_at'],

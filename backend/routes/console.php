@@ -37,3 +37,11 @@ Schedule::command('tasks:materialise')
     ->dailyAt('00:15')
     ->timezone('Asia/Bangkok')
     ->withoutOverlapping();
+
+// P2.2: the escalation ladder looks for overdue delegated/clinical tasks every
+// 15 minutes. The escalator itself is idempotent (`escalation_level >= target`),
+// so a delayed run never double-fires a rung.
+Schedule::command('tasks:escalate')
+    ->everyFifteenMinutes()
+    ->timezone('Asia/Bangkok')
+    ->withoutOverlapping();

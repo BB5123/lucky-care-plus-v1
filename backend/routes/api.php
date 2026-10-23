@@ -8,6 +8,7 @@ use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskTemplateController;
+use App\Modules\CareCrm\Http\Controllers\EscalationPolicyController;
 use App\Modules\CareCrm\Http\Controllers\TaskEvidenceController;
 use App\Modules\Dashboard\Http\Controllers\DashboardController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
@@ -242,6 +243,22 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('authorize.permission:care_task.create');
             Route::post('/{template}/exceptions', [CareTaskTemplateController::class, 'addException'])
                 ->middleware('authorize.permission:care_task.create');
+        });
+
+    // -- Escalation ladder (Phase 2.2) --------------------------------------
+    // Policy management is a workspace setting. The frozen catalog has no
+    // escalation-specific id, so read uses `workspace.read` and writes use
+    // `workspace.update`; running the ladder is a scheduled system job with no
+    // actor and therefore no permission check.
+    Route::prefix('/workspaces/{workspace}/escalation-policies')
+        ->middleware(['auth:sanctum', 'throttle:60,1,escalation-policies', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [EscalationPolicyController::class, 'index'])
+                ->middleware('authorize.permission:workspace.read');
+            Route::put('/', [EscalationPolicyController::class, 'replace'])
+                ->middleware('authorize.permission:workspace.update');
+            Route::post('/defaults', [EscalationPolicyController::class, 'defaults'])
+                ->middleware('authorize.permission:workspace.update');
         });
 
     // -- Dashboard (Phase 1.5, ADR-010) -------------------------------------

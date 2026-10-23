@@ -56,3 +56,41 @@ materialisation and leaves existing tasks untouched.
 
 `php artisan tasks:materialise {--days=14} {--dry-run}` runs daily at 00:15
 Asia/Bangkok via `routes/console.php`.
+
+## Escalation ladder (P2.2)
+
+An overdue `delegated` or `clinical` task climbs a per-workspace ladder. The
+ladder is a workspace setting (`escalation_policies`), never hardcoded per task
+(ES-001). A workspace with no active policy escalates nothing (fail-safe).
+
+**Rules implemented**
+
+- Target level = the highest active policy whose `after_minutes` has elapsed
+  since `due_at`; the task jumps straight there in one event, it does not fire
+  every rung. `task.escalation_level >= target` is a no-op (idempotent).
+- Only non-terminal `delegated` / `clinical` tasks with a `due_at` in the past
+  are candidates. `routine` tasks and tasks without `due_at` never escalate.
+- A `blocked` task whose `review_at` is still in the future is skipped: someone
+  is already working on it.
+- Each climb writes one `task_events` row (`event = escalated`, metadata
+  `{from, to}`) and the matching business audit row (`care_task.escalate`).
+- `reassign_to_admin` releases the previous primary and creates a new primary
+  for the first active `workspace_admin`, through
+  `CareTaskTransitionService::reassignBySystem()` so the responsibility history
+  and audit trail are real (CT-007). The new assignment id is recorded in the
+  same escalation event metadata.
+- `task.escalated` is dispatched with `{escalation_level, due_at}` only —
+  no title, no person name, no health value (ES-002).
+- `php artisan tasks:escalate {--dry-run} {--limit=200}` runs every 15 minutes
+  (`withoutOverlapping()`); `--dry-run` reports candidates and writes nothing.
+
+**Permission decision**
+
+The frozen catalog (`docs/baseline-v1.0.0/PERMISSION_CATALOG.md`) has no
+escalation-specific permission id, and this change does not invent one. Policy
+management is a workspace setting: `GET` uses `workspace.read`, `PUT` and
+`POST /defaults` use `workspace.update`. Running the ladder is a scheduled
+system job with no acting user and therefore no permission decision; it is
+gated by the scheduler and its own workspace context, not by a role. If a
+dedicated id is ever approved, it belongs in `config/authorization.php` and the
+baseline first — not in this module.

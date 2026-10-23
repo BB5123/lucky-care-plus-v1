@@ -90,6 +90,87 @@ final class CareTaskTransitionService
     }
 
     /**
+     * System reassignment used by the escalation ladder (P2.2).
+     *
+     * A scheduled job has no acting user and no health-data grant, so it must
+     * not impersonate a caregiver to pass the interactive `assign` checks.
+     * It still goes through this service — and therefore through the same
+     * `task_events` + `audit_events` writer — so the responsibility history
+     * (CT-007) and the audit trail remain real. The previous primary is
+     * released, never deleted, and the new primary row is written with
+     * `assigned_by = null` to mark it as system-originated.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    public function reassignBySystem(
+        Workspace $workspace,
+        string $taskId,
+        int $targetUserId,
+        int $expectedVersion,
+        array $metadata = [],
+    ): CareTask {
+        return DB::transaction(function () use (
+            $workspace,
+            $taskId,
+            $targetUserId,
+            $expectedVersion,
+            $metadata,
+        ): CareTask {
+            $task = CareTask::query()
+                ->where('tenant_id', $workspace->tenant_id)
+                ->where('workspace_id', $workspace->id)
+                ->whereKey($taskId)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $task instanceof CareTask) {
+                throw new CareTaskNotFoundException;
+            }
+
+            $task->load(['profile.person', 'assignments.user']);
+
+            if ($task->version !== $expectedVersion) {
+                throw new VersionConflictException;
+            }
+
+            // An active member only; a removed member must never regain work.
+            $this->assertAssigneeIsMember($workspace, $targetUserId);
+
+            $from = $task->status;
+
+            $task->assignments()
+                ->whereNull('released_at')
+                ->where('role', TaskAssignment::ROLE_PRIMARY)
+                ->update(['released_at' => now()]);
+
+            TaskAssignment::query()->create([
+                'tenant_id' => $task->tenant_id,
+                'workspace_id' => $task->workspace_id,
+                'task_id' => $task->id,
+                'user_id' => $targetUserId,
+                'role' => TaskAssignment::ROLE_PRIMARY,
+                'can_complete' => false,
+                'assigned_by' => null,
+            ]);
+
+            // A task that had not been picked up becomes `assigned`; a task
+            // already accepted/in progress keeps its workflow state because
+            // escalation does not change `status` (ES-003).
+            if ($task->status === CareTask::STATUS_OPEN) {
+                $task->status = CareTask::STATUS_ASSIGNED;
+            }
+
+            $this->commit($task, null, $from, 'assigned', 'care_task.assign', null, [
+                'assignee_id' => $targetUserId,
+                'role' => TaskAssignment::ROLE_PRIMARY,
+                'system' => true,
+            ] + $metadata);
+
+            return $task->fresh(['profile.person', 'assignments.user']);
+        });
+    }
+
+    /**
      * @param  array<string, mixed>  $input
      */
     private function assign(Workspace $workspace, CareTask $task, User $actor, array $input): void
@@ -410,7 +491,7 @@ final class CareTaskTransitionService
      */
     private function commit(
         CareTask $task,
-        User $actor,
+        ?User $actor,
         string $fromStatus,
         string $event,
         string $auditAction,

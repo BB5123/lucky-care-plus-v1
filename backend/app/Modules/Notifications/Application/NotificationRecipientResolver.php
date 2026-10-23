@@ -32,6 +32,39 @@ final class NotificationRecipientResolver
     }
 
     /**
+     * Active members of a workspace holding any of the given roles.
+     *
+     * Used by the escalation ladder to turn a policy's role list into concrete
+     * recipients. The result is ordered and de-duplicated by user id; a role
+     * with no active member simply contributes nobody (no "all members"
+     * fallback — that would turn a missing admin into a data leak).
+     *
+     * @param  list<string>  $roles
+     * @return list<int>
+     */
+    public function activeMembersWithRoles(
+        array $roles,
+        string $tenantId,
+        string $workspaceId,
+    ): array {
+        if ($roles === []) {
+            return [];
+        }
+
+        return WorkspaceMembership::query()
+            ->where('tenant_id', $tenantId)
+            ->where('workspace_id', $workspaceId)
+            ->where('status', 'active')
+            ->whereIn('role', array_values(array_unique($roles)))
+            ->orderBy('id')
+            ->pluck('user_id')
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * The user linked to the person behind a health profile.
      */
     public function profileOwnerUserId(
