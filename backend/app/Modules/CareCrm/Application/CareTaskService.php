@@ -9,6 +9,7 @@ use App\Modules\Authz\Decision;
 use App\Modules\Authz\ResourceRef;
 use App\Modules\CareCrm\Domain\CareTaskForbiddenException;
 use App\Modules\CareCrm\Domain\CareTaskNotFoundException;
+use App\Modules\CareCrm\Events\CareTaskAssigned;
 use App\Modules\CareCrm\Models\CareTask;
 use App\Modules\CareCrm\Models\TaskAssignment;
 use App\Modules\CareCrm\Models\TaskEvidence;
@@ -255,7 +256,25 @@ final class CareTaskService
                     ['tier' => $tier, 'type' => $task->type, 'version' => 1],
                 );
 
-                return [$task->refresh(), true];
+                $task = $task->refresh();
+
+                if ($assigneeId !== null) {
+                    // Same transaction as the assignment: the queued job is
+                    // written to the same database, so a rollback discards it
+                    // together with the row it describes (CRM-017).
+                    event(new CareTaskAssigned(
+                        taskId: $task->id,
+                        tenantId: $task->tenant_id,
+                        workspaceId: $task->workspace_id,
+                        profileId: $task->profile_id,
+                        assigneeUserId: $assigneeId,
+                        actorId: $actor->id,
+                        tier: $task->tier,
+                        dueAt: $task->due_at?->toImmutable(),
+                    ));
+                }
+
+                return [$task, true];
             });
         } catch (QueryException $exception) {
             // A concurrent request with the same idempotency key won the race.

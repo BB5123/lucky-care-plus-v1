@@ -18,3 +18,15 @@ Schedule::command('retention:inactivity')
     ->dailyAt('04:00')
     ->timezone('UTC')
     ->withoutOverlapping();
+
+// P1.6b: reminder side of the notification slice. Both commands are
+// idempotent through the delivery ledger, not through the queue.
+Schedule::command('notifications:send-due')
+    ->hourly()
+    ->timezone('Asia/Bangkok')
+    ->withoutOverlapping();
+
+Schedule::command('notifications:send-appointment-reminders')
+    ->dailyAt('09:00')
+    ->timezone('Asia/Bangkok')
+    ->withoutOverlapping();
