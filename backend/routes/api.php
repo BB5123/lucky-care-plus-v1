@@ -17,6 +17,7 @@ use App\Modules\HealthRecord\Http\Controllers\MedicationPlanController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationRecordController;
 use App\Modules\Notifications\Http\Controllers\NotificationDeliveryController;
 use App\Modules\Notifications\Http\Controllers\NotificationPreferenceController;
+use App\Modules\Timeline\Http\Controllers\TimelineController;
 use App\Modules\Workspace\Http\Controllers\InvitationController;
 use App\Modules\Workspace\Http\Controllers\MembershipController;
 use App\Modules\Workspace\Http\Controllers\WorkspaceController;
@@ -231,6 +232,18 @@ Route::prefix('v1')->group(function (): void {
             'auth:sanctum',
             'throttle:60,1,dashboard',
             'workspace.context',
+        ]);
+
+    // -- Timeline (Phase 1.7) ------------------------------------------------
+    // `timeline.read` only opens the surface. The controller re-checks the
+    // owning scope of every entry and redacts anything the actor may not read
+    // (F-06, CRM-013/014).
+    Route::get('/workspaces/{workspace}/profiles/{profile}/timeline', TimelineController::class)
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,timeline',
+            'workspace.context',
+            'authorize.permission:timeline.read',
         ]);
 
     // Protection is declared on the route: authentication, server-side

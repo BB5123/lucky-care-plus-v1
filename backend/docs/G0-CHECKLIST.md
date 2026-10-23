@@ -1,13 +1,13 @@
 # G0 Evidence — Phase 0 (Foundation) exit gate
 
-**Status: ⬜ G0 has NOT passed.** 8 of the 10 Authorization Readiness items are
-proven, **1 is deferred to G4 by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น)**,
-and **1 remains open**: branch protection on `main`. Per `.ai/12-ROADMAP.md`, Phase 1 must not start
-until G0 is green.
+**Status: ✅ G0 PASSED (2026-10-23).** 9 of the 10 Authorization Readiness items are proven; the
+remaining item (AI/export) is **deferred to G4 by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น)**,
+which is a deferral, not a pass. Branch protection on `main` is now active with the three CI checks
+required, so the ADR-019 override ended.
 
 - Repository: `lucky-care-plus-v1`
-- Baseline commit: `466d6e4` (Phase 0.1–0.5) plus this task's uncommitted guard tests and CI workflow.
-- Evidence collected: 2026-10-23, locally, on Windows.
+- Baseline commit: `466d6e4` (Phase 0.1–0.5) plus the guard tests and CI workflow of this task.
+- Evidence collected: 2026-10-23, locally, on Windows, and on GitHub Actions.
 - Toolchain: PHP 8.4.15 · Laravel 13.38.0 · PostgreSQL 16 (Docker, host port 5433) · Pint 1.32.1.
 - Test database role: `luckycare_app` — verified `usesuper = false`, `usebypassrls = false`
   (`php artisan tinker --execute="dump(DB::selectOne('select current_user as role, usesuper, usebypassrls from pg_user where usename = current_user'));"`).
@@ -54,7 +54,7 @@ baseline §7 checklist is complete. `.ai/12-ROADMAP.md` adds two Phase 0 exit cr
 |---|---|---|---|
 | G0-a | Authorization Unit + Feature tests pass 100% | `php artisan test` → **69 passed / 823 assertions**. Authorization-focused suites: `AuthorizerTest` 11/488, `GrantAndConsentTest` 9/21, `PermissionCatalogTest` 2/24, `WorkspaceContextMiddlewareTest` 4/16 → 26 tests, 0 failures. | ✅ |
 | G0-b | `TEN-*` passes | `php artisan test --filter=TenantIsolationTest` → **5 passed / 35 assertions** (`TEN-T01..T05`). RLS is `ENABLE` + `FORCE` in `database/migrations/2026_10_22_150700_enable_row_level_security.php`; tests run as non-superuser `luckycare_app`. | ✅ |
-| G0-c | Baseline §7 readiness checklist complete (10 items) | Section 2 below: **8 ✅ / 1 ⏭ (item 8 → G4, ADR-018) / 1 ⬜ (item 10, branch protection)**. See §3 for the single remaining action. | ⬜ |
+| G0-c | Baseline §7 readiness checklist complete (10 items) | Section 2 below: **9 ✅ / 1 ⏭ (item 8 → G4, ADR-018)**. No item is open; the deferral is recorded as a deferral, not as a pass. | ✅ |
 | G0-d | (Roadmap) No endpoint without a permission annotation | `php artisan test --filter=RoutePermissionCoverageTest` → **4 passed / 34 assertions**. All 14 `api/v1` route entries are either permission-guarded (4) or explicitly allowlisted with a written reason (10); every declared permission ID exists in the 93-ID catalog. | ✅ |
 | G0-e | (Roadmap) PHI leak scan passes | `php artisan test --filter=PhiLeakTest` → **3 passed / 6 assertions**. Scans every `app/**/*.php` `Log::*()` call for PHI/credential tokens; empty allowlist; scanner has a planted-leak self-test. Scope: log calls only. | ✅ |
 
@@ -74,22 +74,25 @@ Legend: ✅ = proven by a test/command listed in the row · ⏭ = deferred to a 
 | 7 | IDOR tests for APIs that accept a resource ID | The only enumerable resource ID exposed today is the workspace UUID. `WS-T02`, `MEM-T02`, `ISO-T02`, and `AUTH-003` prove non-members get 404 with no existence leak. Invitation links use an unguessable bearer token, not an ID. Profile-scoped routes do not exist yet, so a profile-ID cross-workspace IDOR test is deferred to the Phase 1 endpoints. | ✅ |
 | 8 | AI Context and Export authorization tests before enabling those features | ⏭ **Deferred to G4 by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น).** No AI gateway, provider or export endpoint exists in Phase 0, so there is nothing to authorize yet and no current exposure. Consent gating at the decision layer is already proven (CONSENT-T03/T04). `.ai/10-TESTING.md` G4 now **requires** `AI-*` and `EXPORT-*` before AI is enabled. | ⏭ |
 | 9 | Audit policy for health-data access and permission changes | `SecurityAuditLogger` (hash chain, append-only, PHI-key rejection) with AUDIT-T01/T02/T03; every allow/deny decision writes exactly one row (AUDIT-T03); login denial is audited (`LoginTest`); retention purge batches are audited (RET-T06). Policy: `.ai/09-SECURITY-PRIVACY.md` (N-02) and `.ai/06-DATA-MODEL.md` §5. Note: grant/consent mutation endpoints do not exist yet; their mutation audit must land with those endpoints. | ✅ |
-| 10 | CI enforces authorization tests and they must pass before merge | `.github/workflows/ci.yml` runs on push-to-main and PR: Pint + full `php artisan test` against PostgreSQL 16 with the **non-superuser** role, plus frontend build and `flutter analyze`. **Verified on GitHub: run #1 (`4cee485`) — all three jobs green** (`Backend` 38 s incl. role bootstrap, `Frontend` 21 s, `Mobile` 83 s). **Still missing:** branch protection / required status check is a repository setting that cannot be configured from this working tree. | ⬜ |
+| 10 | CI enforces authorization tests and they must pass before merge | `.github/workflows/ci.yml` runs on push-to-main and on `pull_request`: Pint + full `php artisan test` against PostgreSQL 16 with the **non-superuser** role, plus the frontend build and `flutter analyze`. Green on every push since run #1 (`4cee485` → `6bbfa9c`). **Enforcement is now active:** the repository ruleset `Allow AI Push` on `main` requires a pull request and the three status checks — `Backend (PHP 8.4, PostgreSQL 16)`, `Frontend (Angular 22)`, `Mobile (Flutter stable)` — and still forbids force-push. Verified against the GitHub ruleset API on 2026-10-23. | ✅ |
 
-## 3. What is left before G0 can be marked passed
+## 3. What was left — now closed (2026-10-23)
 
-**One action remains — and it is a repository setting, not code:**
+The last open item was a repository setting, not code, and it is now done:
 
-1. **Configure branch protection on `main`** so the `CI` checks are required before merge
-   (Settings → Branches → add rule → require status checks: `Backend (PHP 8.4, PostgreSQL 16)`,
-   `Frontend (Angular 22)`, `Mobile (Flutter stable)`).
+1. ~~**Configure branch protection on `main`**~~ ✅ **Done.** The ruleset `Allow AI Push` requires a pull
+   request plus the three status checks (`Backend (PHP 8.4, PostgreSQL 16)`, `Frontend (Angular 22)`,
+   `Mobile (Flutter stable)`) and forbids force-push. A direct push to `main` is now rejected
+   (`push declined due to repository rule violations`), which is the proof that enforcement is live.
+   With enforcement live, the **ADR-019 time-boxed override ends** — its expiry (2026-11-06) is no
+   longer needed.
 
-Everything else is closed:
+Closed items:
 - ~~Item 2 — Matrix conformance~~ ✅ `MatrixConformanceTest` (47 rows / 590 assertions).
 - ~~Item 8 — AI/export~~ ⏭ deferred to **G4** by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น); `.ai/10-TESTING.md` G4 now requires `AI-*` and `EXPORT-*`.
-- ~~Item 10 — CI exists and is green~~ ✅ run #1; enforcement still pending the point above.
+- ~~Item 10 — CI enforcement~~ ✅ required checks active on `main`.
 
-Until branch protection is enabled, `.ai/12-ROADMAP.md` still forbids starting Phase 1.
+**G0 verdict: ✅ PASSED** — 9 items proven, 1 explicitly deferred to its own gate. Phase 1 may proceed.
 
 ## 4. CI status notes (verified on GitHub)
 

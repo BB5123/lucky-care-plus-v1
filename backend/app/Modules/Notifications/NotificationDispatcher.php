@@ -97,8 +97,9 @@ final class NotificationDispatcher
         array $options = [],
     ): array {
         $required = $this->templates->requiredParams($templateKey);
+        $allowed = $this->templates->allowedParams($templateKey);
 
-        $this->assertPayloadIsSafe($params, $required);
+        $this->assertPayloadIsSafe($params, $required, $allowed);
 
         $tenantId = $this->stringOption($options, 'tenant_id') ?? TenantContext::tenantId();
         $workspaceId = $this->stringOption($options, 'workspace_id') ?? TenantContext::workspaceId();
@@ -302,8 +303,9 @@ final class NotificationDispatcher
     /**
      * @param  array<string, mixed>  $params
      * @param  list<string>  $required
+     * @param  list<string>  $allowed
      */
-    private function assertPayloadIsSafe(array $params, array $required): void
+    private function assertPayloadIsSafe(array $params, array $required, array $allowed): void
     {
         // Reject PHI-shaped keys even if a template were misconfigured to
         // declare one. This must run before the allowed-key check so a caller
@@ -311,7 +313,7 @@ final class NotificationDispatcher
         $this->assertNoPhiKeys($params);
 
         foreach ($params as $key => $value) {
-            if (! is_string($key) || ! in_array($key, $required, true)) {
+            if (! is_string($key) || ! in_array($key, $allowed, true)) {
                 throw new NotificationPayloadException(
                     'Notification params may only contain declared translation placeholders (N-02).'
                 );

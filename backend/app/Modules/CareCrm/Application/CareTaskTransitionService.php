@@ -8,6 +8,7 @@ use App\Modules\CareCrm\Domain\CareTaskNotFoundException;
 use App\Modules\CareCrm\Domain\CareTaskStateMachine;
 use App\Modules\CareCrm\Domain\DomainRuleException;
 use App\Modules\CareCrm\Domain\VersionConflictException;
+use App\Modules\CareCrm\Events\CareTaskAssigned;
 use App\Modules\CareCrm\Models\CareTask;
 use App\Modules\CareCrm\Models\TaskAssignment;
 use App\Modules\Workspace\Models\Workspace;
@@ -141,6 +142,19 @@ final class CareTaskTransitionService
                 'assignee_id' => $targetId,
                 'role' => $role,
             ]);
+
+            // Reassignment is a new primary assignment after the previous one
+            // was released; both paths notify the new assignee only.
+            event(new CareTaskAssigned(
+                taskId: $task->id,
+                tenantId: $task->tenant_id,
+                workspaceId: $task->workspace_id,
+                profileId: $task->profile_id,
+                assigneeUserId: $targetId,
+                actorId: $actor->id,
+                tier: $task->tier,
+                dueAt: $task->due_at?->toImmutable(),
+            ));
 
             return;
         }

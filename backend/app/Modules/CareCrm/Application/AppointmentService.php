@@ -7,6 +7,7 @@ use App\Modules\Audit\Services\BusinessAuditLogger;
 use App\Modules\CareCrm\Domain\AppointmentNotFoundException;
 use App\Modules\CareCrm\Domain\AppointmentStateMachine;
 use App\Modules\CareCrm\Domain\VersionConflictException;
+use App\Modules\CareCrm\Events\AppointmentScheduled;
 use App\Modules\CareCrm\Models\Appointment;
 use App\Modules\CareCrm\Models\CareTask;
 use App\Modules\HealthRecord\Models\HealthProfile;
@@ -174,7 +175,19 @@ final class AppointmentService
                 'document_count' => count($appointment->prepared_documents ?? []),
             ]);
 
-            return $appointment->fresh(['profile.person', 'followUpTask']);
+            $appointment = $appointment->fresh(['profile.person', 'followUpTask']);
+
+            // Ids + timestamp only; `purpose`/`location` stay encrypted and
+            // never enter the event or the queued payload (APT-001, N-02).
+            event(new AppointmentScheduled(
+                appointmentId: $appointment->id,
+                tenantId: $appointment->tenant_id,
+                workspaceId: $appointment->workspace_id,
+                profileId: $appointment->profile_id,
+                scheduledAt: $appointment->scheduled_at->toImmutable(),
+            ));
+
+            return $appointment;
         });
     }
 

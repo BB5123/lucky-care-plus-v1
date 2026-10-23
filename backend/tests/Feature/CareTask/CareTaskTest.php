@@ -413,7 +413,12 @@ class CareTaskTest extends CareTaskTestCase
         Sanctum::actingAs($this->owner);
 
         $events = DB::table('task_events')->count();
-        $audits = DB::table('audit_events')->count();
+        // P1.6b: a dispatched notification writes its own `notification.dispatch`
+        // audit row. This test covers the transition's *domain* audit row, so
+        // the notification fan-out is counted separately.
+        $audits = DB::table('audit_events')
+            ->where('action', '!=', 'notification.dispatch')
+            ->count();
 
         $task = $this->createTaskViaApi();
         $this->assertHistoryIncremented($events, $audits, 'create');
@@ -469,7 +474,12 @@ class CareTaskTest extends CareTaskTestCase
         $this->assertSame(7, TaskEvent::query()->where('task_id', $task['id'])->count());
         $this->assertSame(
             7,
-            DB::table('audit_events')->where('target_type', 'care_task')->where('target_id', $task['id'])->count(),
+            DB::table('audit_events')
+                ->where('target_type', 'care_task')
+                ->where('target_id', $task['id'])
+                ->where('action', '!=', 'notification.dispatch')
+                ->count(),
+            'Each transition writes one domain audit; the notification fan-out is a separate audit row.',
         );
     }
 
@@ -517,7 +527,9 @@ class CareTaskTest extends CareTaskTestCase
         );
         $this->assertSame(
             $auditsBefore + 1,
-            DB::table('audit_events')->count(),
+            DB::table('audit_events')
+                ->where('action', '!=', 'notification.dispatch')
+                ->count(),
             "{$step} must write exactly one business audit event",
         );
     }
