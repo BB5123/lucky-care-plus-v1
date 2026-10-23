@@ -41,10 +41,7 @@ export const routes: Routes = [
         path: 'health',
         title: 'คลังสุขภาพ | LuckyCare+',
         data: { title: 'คลังสุขภาพ' },
-        loadComponent: () =>
-          import('./features/placeholder/under-construction.page').then(
-            (m) => m.UnderConstructionPage,
-          ),
+        loadComponent: () => import('./features/health/health.page').then((m) => m.HealthPage),
       },
       {
         path: 'tasks',

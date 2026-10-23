@@ -18,6 +18,9 @@ export interface ProblemDetails {
   errors?: Record<string, string[]>;
 }
 
+/** A single server-authored sentence per field name (e.g. `value`, `code`). */
+export type FieldErrors = Readonly<Record<string, string>>;
+
 const GENERIC_MESSAGE = 'เกิดข้อผิดพลาดบางอย่าง กรุณาลองใหม่อีกครั้ง';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -75,4 +78,53 @@ export function toUserMessage(error: unknown): string {
   }
 
   return readProblemMessage(error) ?? GENERIC_MESSAGE;
+}
+
+/**
+ * Returns the HTTP status of a thrown `HttpErrorResponse`, or `null` when the
+ * value is not an HTTP failure. Components use it for 412 (version conflict)
+ * and 422 (validation) handling.
+ */
+export function httpStatus(error: unknown): number | null {
+  return error instanceof HttpErrorResponse ? error.status : null;
+}
+
+/**
+ * Narrows the `errors{}` map of a RFC 9457 problem payload.
+ *
+ * Each field keeps only its first safe sentence; framework internals and
+ * non-string entries are discarded. The result is bound to the matching form
+ * control so a 422 is never reduced to a generic toast.
+ */
+export function readFieldErrors(error: unknown): FieldErrors {
+  if (!(error instanceof HttpErrorResponse)) {
+    return {};
+  }
+
+  const payload = error.error;
+
+  if (!isRecord(payload) || payload instanceof Error) {
+    return {};
+  }
+
+  const rawErrors = payload['errors'];
+
+  if (!isRecord(rawErrors)) {
+    return {};
+  }
+
+  const fieldErrors: Record<string, string> = {};
+
+  for (const [field, value] of Object.entries(rawErrors)) {
+    const first = Array.isArray(value)
+      ? value.find((entry): entry is string => typeof entry === 'string')
+      : value;
+    const safe = readSafeString(first);
+
+    if (safe !== null) {
+      fieldErrors[field] = safe;
+    }
+  }
+
+  return fieldErrors;
 }
