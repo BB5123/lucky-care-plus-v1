@@ -18,6 +18,48 @@ php artisan knowledge:bench --limit=10   # deeper ranking for inspection
 php artisan test tests/Feature/AiGateway/KnowledgeBenchTest.php
 ```
 
+## 0. Measured with the machine's own Ollama and bge-m3 (2026-10-25, later the same day)
+
+The owner asked whether a local embedding model - there is a native Ollama install on this machine - should
+back the RAG. It was measured instead of argued about.
+
+**Setup:** Ollama 0.40.7 on Windows (native, not a container), `bge-m3` pulled (1.2 GB, 1024 dimensions,
+multilingual), the committed corpus (15 documents, 181 chunks) and the same 28 questions.
+
+```bash
+ollama serve && ollama pull bge-m3
+python backend/scripts/rag-vector-probe.py
+```
+
+| Retriever | hit@3 | Misses |
+|---|---|---|
+| **Lexical, as shipped** (`knowledge:bench`) | **0.964** | Q-08 |
+| Vector, best chunk per document, cosine over bge-m3 | 0.929 | Q-07, Q-08 |
+| Hybrid (reciprocal rank fusion of the two) | 0.929 | Q-07, Q-08 |
+
+**Conclusion: the local embedding model does not beat what we have, and does not fix the one thing we
+miss.** Both retrievers fail Q-08 ("after wading through flood water: high fever, severe calf pain, red
+eyes"), which is the diagnostic question for leptospirosis. The vectors do rank it sensibly - cosine 0.517
+against the leptospirosis page versus 0.38 against HFMD and 0.36 against TB - but "sensible" is not
+"top three", and the tuned lexical retriever already wins the other 27.
+
+**A detail worth keeping:** the probe's own lexical baseline scores **0/28**, because a raw FTS5 `MATCH`
+on a whole Thai sentence matches nothing at all. The app's 0.964 therefore does not come from SQLite; it
+comes from the Thai normaliser (spacing, zero-width characters) and the alias map added in KB-2. That is
+where the retrieval quality lives, and it is cheap to extend - a new alias is one line.
+
+**What would change the verdict, in order of cost:**
+
+1. **Re-rank, do not replace.** Embed only the lexical top-20 and re-order them. No index to build or back
+   up, one HTTP call per question, and the same benchmark measures whether it helps. This is the next thing
+   to try if recall ever becomes a complaint.
+2. Re-measure when the corpus passes ~500 chunks or when real (de-identified) user questions show lexical
+   misses. Both are already written as switch triggers below.
+3. A full vector store only after 1 and 2 both fail.
+
+Until then the 1.2 GB model and a second runtime buy nothing measurable, so neither is part of the
+application.
+
 ## 1. Current state
 
 `knowledge:bench` runs every question through the same `KnowledgeRetriever` the API uses, in-process,
