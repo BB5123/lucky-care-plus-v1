@@ -4,7 +4,7 @@
 > It is written in English (like the rest of the repo) so any agent session can read it.
 > Update it in the same PR as the work it describes — never let it drift.
 
-**Last verified:** 2026-10-25 00:20 (Asia/Bangkok) on `main` @ `ed964fe`
+**Last verified:** 2026-10-25 01:33 (Asia/Bangkok) on `feat/kb3-benchmark` (from `main` @ `03d0506`)
 
 ---
 
@@ -33,10 +33,11 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` → `docs/baseline-v1.0.0/*
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **328 passed / 3,409 assertions** |
+| backend `php artisan test` | **337 passed / 3,524 assertions** |
 | web `npm test` | **111 passed / 40 files** |
 | mobile `flutter test` | **59 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
+| `php artisan knowledge:bench` | **28 questions · hit@1 0.929 · hit@3 0.964 · MRR 0.946** (7 docs / 76 chunks) |
 
 **Repo shape:** 15 backend modules · 51 migrations · 88 API routes · 22 web feature folders ·
 8 mobile feature folders · **36 merged PRs** · no open PRs.
@@ -47,8 +48,9 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` → `docs/baseline-v1.0.0/*
 
 ```bash
 cd backend
-php artisan test                 # 328
+php artisan test                 # 337
 php artisan ai:evaluate          # offline gate; --live uses the provider
+php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
 ./vendor/bin/pint --test
 
 cd ../frontend
@@ -94,8 +96,14 @@ Workflow used throughout: branch → verify → commit → `gh pr create` → `g
 ## 6. Known gaps (honest list)
 
 1. **AI UI is web-only**; mobile has no AI summary / knowledge-ask screens yet.
-2. **Knowledge base is lexical (SQLite FTS5)**, not vector search — the provider has no embeddings
-   endpoint. `KnowledgeRetriever` is the seam for a future Qdrant/pgvector retriever.
+2. **Knowledge retrieval is lexical (SQLite FTS5), not vector search.** Measured 2026-10-25 by
+   `php artisan knowledge:bench` on 28 Thai questions against 7 documents / 76 chunks: **hit@1 0.929,
+   hit@3 0.964, MRR 0.946**. The one outright miss is a symptom-only leptospirosis question (Q-08);
+   the two PM2.5 articles are not separated by intent (Q-21 returns the symptom article before the
+   heart article). Decision, costs and the switch trigger live in
+   [`backend/docs/RAG-VECTOR-OPTIONS.md`](backend/docs/RAG-VECTOR-OPTIONS.md): keep lexical until a
+   real-traffic sample falls below hit@3 0.90 (or the corpus passes 500 chunks with no recall gain).
+   `KnowledgeRetriever` remains the seam for a Qdrant/hybrid retriever.
 3. **No load test** on the dashboard aggregate or the timeline endpoint.
 4. **No scheduled database backup**; the restore drill exists and runs weekly, but nothing produces
    the nightly dump.
@@ -115,6 +123,7 @@ Workflow used throughout: branch → verify → commit → `gh pr create` → `g
 | G0 gate evidence | `backend/docs/G0-CHECKLIST.md` |
 | G4 live evaluation | `backend/docs/G4-LIVE-EVALUATION.md` |
 | Knowledge base | `backend/docs/KNOWLEDGE-BASE.md` |
+| RAG retrieval decision (lexical vs vector) | `backend/docs/RAG-VECTOR-OPTIONS.md` |
 | Backup/restore drill | `backend/docs/QUALITY-SWEEP-2026-10-24.md` + `.github/workflows/restore-drill.yml` |
 | First overnight run | `MORNING-REPORT.md` |
 

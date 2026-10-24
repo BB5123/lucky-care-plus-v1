@@ -24,6 +24,8 @@ return [
 
     'sources_path' => env('KNOWLEDGE_SOURCES_PATH', database_path('knowledge/sources')),
 
+    'benchmark_path' => env('KNOWLEDGE_BENCHMARK_PATH', database_path('knowledge/benchmark/queries.json')),
+
     'top_k' => (int) env('KNOWLEDGE_TOP_K', 5),
 
     /*

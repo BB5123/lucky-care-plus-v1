@@ -94,6 +94,16 @@ and (with `--build`) publishes the change; a source marked `reviewed` without a 
 Current aliases: `ฉี่หนู` → `เลปโตสไปโรซิส`/`leptospirosis`, `มือเท้าปาก` → `HFM`/`Hand Foot and Mouth`,
 `ฝุ่น` → `PM2.5`/`PM 2.5`, `ไข้เลือดออก` → `เด็งกี่`/`dengue`.
 
+## Benchmark (TASK KB-3)
+
+`php artisan knowledge:bench` runs `database/knowledge/benchmark/queries.json` (28 Thai questions)
+through the same retriever, in-process, against the built SQLite file. It reports hit@1, hit@3 and
+MRR, exits non-zero below 0.75 / 0.95 / 0.80, and supports `--json` and `--limit=N`. Measured
+2026-10-25: **hit@1 0.929, hit@3 0.964, MRR 0.946** (7 documents / 76 chunks); the one top-3 miss is
+a symptom-only leptospirosis question. The measured case for keeping lexical retrieval, and the
+trigger for adding a vector retriever, are in [`RAG-VECTOR-OPTIONS.md`](RAG-VECTOR-OPTIONS.md).
+`KnowledgeBenchTest` makes the floors a CI gate and fails on a stale expected source id.
+
 ## API
 
 `POST /api/v1/workspaces/{workspace}/profiles/{profile}/ai/knowledge-answers`
@@ -174,8 +184,9 @@ held by anyone today. That is a separate change-control item; until then the CLI
 
 ## Limitations
 
-- Lexical retrieval cannot answer a question with no keyword overlap; adding embeddings (Qdrant or
-  pgvector) is the next step once an embedding provider exists.
+- Lexical retrieval cannot answer a question with no keyword overlap (Q-08 in the benchmark is the
+  measured example). The decision and the trigger for a vector/hybrid retriever are in
+  [`RAG-VECTOR-OPTIONS.md`](RAG-VECTOR-OPTIONS.md); it is not built yet.
 - Thai segmentation is heuristic: titles/headings plus a prefix/suffix fallback. Questions that use
   a synonym not present in the corpus rely on the explicit alias table; anything outside it will not
   retrieve the document.
