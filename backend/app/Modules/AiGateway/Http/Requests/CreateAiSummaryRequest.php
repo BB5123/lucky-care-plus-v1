@@ -31,6 +31,10 @@ final class CreateAiSummaryRequest extends FormRequest
         return [
             'period_from' => ['nullable', 'date_format:Y-m-d'],
             'period_to' => ['nullable', 'date_format:Y-m-d'],
+            // The user's own question/request. It is read by the deterministic
+            // intake classifier only and is never sent to a provider, so it
+            // cannot become a prompt. Length is capped to keep abuse cheap.
+            'question' => ['nullable', 'string', 'max:500'],
         ];
     }
 

@@ -26,8 +26,8 @@ final class ContextGateway
     public function __construct(
         private readonly PolicyAndConsentVerifier $policy,
         private readonly ScopedDataFetcher $fetcher,
-        private readonly PiiScrubber $scrubber,
-        private readonly GuardrailPrompting $guardrails,
+        private readonly IntakeClassifier $intake,
+        private readonly GuardrailPipeline $pipeline,
         private readonly OutputValidator $validator,
         private readonly AiQuotaService $quota,
         private readonly AiRequestRecorder $recorder,
@@ -71,6 +71,24 @@ final class ContextGateway
             return GatewayResult::refused((string) $decision->reasonCode, $decision->httpStatus);
         }
 
+        // [1b] Intake classifier. A request for a diagnosis, a dose change or
+        // an emergency is refused before context is fetched and before quota
+        // is charged: no data leaves and no provider is reachable (F-06/F-09).
+        $intake = $this->intake->classify($request->requestText);
+
+        if ($intake->shouldRefuse()) {
+            $this->recorder->record(
+                request: $request,
+                status: AiRequest::STATUS_REFUSED,
+                errorCode: $intake->action,
+                recordRefs: [],
+                contextHash: $emptyContextHash,
+                latencyMs: $this->latency($started),
+            );
+
+            return GatewayResult::refused($intake->action, 422);
+        }
+
         // Quota is checked after authorization (a denied caller learns nothing)
         // and before any data is fetched.
         $reservation = $this->quota->reserve($request->workspace, $request->actor);
@@ -105,16 +123,12 @@ final class ContextGateway
             // [2] Scoped data fetch.
             $fetched = $this->fetcher->fetch($request);
 
-            // [3] PII scrubbing and pseudonymization.
-            $scrubbed = $this->scrubber->scrub($fetched->sections, $fetched->personNames);
+            // [3]–[5] Scrubbing, guardrails + injection guard, provider call and
+            // output validation all run inside the shared guardrail pipeline.
+            $outcome = $this->pipeline->process($fetched, $request, $this->provider);
 
-            // [4] Clinical guardrails and untrusted-block envelope.
-            $envelope = $this->guardrails->build($scrubbed, $request);
-            $contextHash = $envelope->hash();
-
-            // [5] Provider call, then validation.
-            $response = $this->provider->complete($envelope);
-            $summary = $this->validator->validate($response);
+            $contextHash = $outcome->envelope->hash();
+            $response = $outcome->response;
 
             $latencyMs = $this->latency($started);
             $usage = $this->quota->observe(
@@ -125,16 +139,19 @@ final class ContextGateway
                 null,
             );
 
+            // A neutralised injection still produces a summary, but the event is
+            // recorded so an operator can audit it (record which, per G4).
             $this->validator->recordSuccess(
                 $request,
                 $response,
                 $fetched->recordRefs,
                 $contextHash,
                 $latencyMs,
+                $outcome->injection->detected() ? 'injection_neutralized' : null,
             );
 
             return GatewayResult::success(
-                $summary,
+                $outcome->output->content,
                 (string) config('ai.disclaimer'),
                 $fetched->recordRefs,
                 $usage,

@@ -16,7 +16,7 @@ use App\Modules\Workspace\Models\Workspace;
 use Carbon\CarbonInterface;
 
 /**
- * Step 2 โ€” Scoped Data Fetcher (`.ai/08-AI-GATEWAY.md` section 2).
+ * Step 2 — Scoped Data Fetcher (`.ai/08-AI-GATEWAY.md` section 2).
  *
  * A section is fetched only when the actor may read its own scope for this
  * profile; `ai.report.create` does not imply `vitals`, `medications`,
@@ -40,6 +40,15 @@ final class ScopedDataFetcher
         'appointments' => 'appointment.read',
         'tasks' => 'care_task.read',
     ];
+
+    /**
+     * Sections that can never enter an AI context, whatever the route asked
+     * for (ADR-014). `lab_report` is the document category, not a section, but
+     * it is listed so a future fetch cannot quietly add it.
+     *
+     * @var list<string>
+     */
+    private const FORBIDDEN_SECTIONS = ['mental_health', 'lab_results', 'lab_report'];
 
     /** Task statuses that still need coordination. */
     private const OPEN_TASK_STATUSES = [
@@ -138,11 +147,55 @@ final class ScopedDataFetcher
 
         usort($refs, static fn (array $a, array $b): int => [$a['type'], $a['id']] <=> [$b['type'], $b['id']]);
 
+        // Defence in depth: the section vocabulary is a closed allow-list. If a
+        // future fetch path adds a key, an unknown or forbidden section is
+        // dropped here — before scrubbing, before the envelope, before the
+        // provider — and never becomes part of the AI context (ADR-014).
+        $sections = self::admitSections($sections);
+
         return new FetchedContext(
             $sections,
             array_values($refs),
             array_values(array_unique($personNames)),
         );
+    }
+
+    /**
+     * Keep only sections the gateway is allowed to send to a provider.
+     *
+     * This is intentionally a pure function so the scope evaluation can
+     * exercise the exact allow-list the fetcher applies.
+     *
+     * @param  array<string, mixed>  $sections
+     * @return array<string, mixed>
+     */
+    public static function admitSections(array $sections): array
+    {
+        $admitted = [];
+
+        foreach ($sections as $key => $value) {
+            $name = (string) $key;
+
+            if (in_array($name, self::FORBIDDEN_SECTIONS, true)) {
+                continue;
+            }
+
+            if (! array_key_exists($name, self::SECTION_PERMISSIONS)) {
+                continue;
+            }
+
+            $admitted[$name] = $value;
+        }
+
+        return $admitted;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function forbiddenSections(): array
+    {
+        return self::FORBIDDEN_SECTIONS;
     }
 
     /**
