@@ -45,8 +45,8 @@ export class AppShell {
     { path: '/health', label: 'คลังสุขภาพ' },
     { path: '/tasks', label: 'งานดูแล' },
     { path: '/timeline', label: 'ไทม์ไลน์' },
-    { path: '/appointments', label: 'นัดหมาย' },
     { path: '/family', label: 'ครอบครัวและสิทธิ์' },
+    { path: '/appointments', label: 'นัดหมาย' },
   ];
 
   protected readonly initials = computed(() => {

@@ -1,0 +1,269 @@
+<section class="mx-auto w-full max-w-2xl">
+  <header class="mb-4">
+    <h1 class="text-2xl">ครอบครัวและสิทธิ์</h1>
+    <p class="mt-1 text-sm text-ink-muted">
+      ดูสมาชิกในครอบครัว บทบาทของแต่ละคน และเชิญสมาชิกใหม่เข้าครอบครัว
+    </p>
+  </header>
+
+  @if (pageLoading()) {
+    <div class="flex flex-col gap-3" aria-busy="true">
+      <p class="sr-only" role="status">กำลังโหลดข้อมูลครอบครัว</p>
+      <div class="h-12 animate-pulse rounded-lg bg-surface-muted"></div>
+      <div class="h-32 animate-pulse rounded-lg bg-surface-muted"></div>
+    </div>
+  } @else if (pageError(); as message) {
+    <div class="alert alert-error" role="alert" data-testid="family-page-error">
+      <p>{{ message }}</p>
+      <button class="btn btn-secondary mt-3" type="button" (click)="retry()">ลองอีกครั้ง</button>
+    </div>
+  } @else if (!hasWorkspace()) {
+    <div class="card" data-testid="family-no-workspace">
+      <h2 class="text-xl">ยังไม่มีครอบครัว</h2>
+      <p class="mt-2 text-sm text-ink-muted">
+        คุณยังไม่ได้รับคำเชิญให้เข้าร่วมครอบครัว กรุณารอการเชิญจากสมาชิกในครอบครัว
+      </p>
+    </div>
+  } @else if (forbidden()) {
+    <div class="card" role="status" data-testid="family-forbidden">
+      <h2 class="text-xl">คุณไม่มีสิทธิ์ดูรายชื่อสมาชิกในครอบครัวนี้</h2>
+      <p class="mt-2 text-sm text-ink-muted">
+        การดูรายชื่อสมาชิกเป็นสิทธิ์ของผู้ดูแลครอบครัว หากต้องการดูรายชื่อ
+        กรุณาติดต่อเจ้าของครอบครัวหรือผู้ดูแลครอบครัวเพื่อขอสิทธิ์
+      </p>
+    </div>
+  } @else if (loading()) {
+    <div class="flex flex-col gap-3" aria-busy="true">
+      <p class="sr-only" role="status">กำลังโหลดรายชื่อสมาชิก</p>
+      <div class="h-20 animate-pulse rounded-lg bg-surface-muted"></div>
+      <div class="h-20 animate-pulse rounded-lg bg-surface-muted"></div>
+      <div class="h-20 animate-pulse rounded-lg bg-surface-muted"></div>
+    </div>
+  } @else if (error(); as message) {
+    <div class="alert alert-error" role="alert" data-testid="family-error">
+      <p>{{ message }}</p>
+      <button class="btn btn-secondary mt-3" type="button" (click)="retry()">ลองอีกครั้ง</button>
+    </div>
+  } @else {
+    <section class="card" aria-labelledby="family-members-heading">
+      <header class="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="family-members-heading" class="text-xl">สมาชิกในครอบครัว</h2>
+        <p class="text-sm text-ink-muted">{{ members().length }} คน</p>
+      </header>
+
+      @if (members().length === 0) {
+        <div
+          class="mt-4 rounded-md border border-line bg-surface-muted p-4"
+          data-testid="family-empty"
+        >
+          <p class="text-sm font-medium text-ink">ยังไม่มีสมาชิกในครอบครัวนี้</p>
+          <p class="mt-1 text-sm text-ink-muted">เชิญสมาชิกคนแรกจากแบบฟอร์มด้านล่าง</p>
+        </div>
+      } @else {
+        <ul class="mt-2 divide-y divide-line" data-testid="family-members">
+          @for (member of members(); track member.user_id) {
+            <li
+              class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"
+              data-testid="family-member"
+              [attr.data-role]="member.role"
+              [attr.data-status]="member.status"
+            >
+              <div class="min-w-0">
+                <p class="truncate font-medium text-ink">{{ member.name ?? 'ไม่ระบุชื่อ' }}</p>
+                @if (isCurrentUser(member)) {
+                  <p class="mt-1 text-xs text-ink-muted" data-testid="family-member-self">คุณ</p>
+                }
+              </div>
+
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="badge" data-testid="family-member-role">
+                  {{ roleLabel(member.role) }}
+                </span>
+                <span
+                  class="badge"
+                  data-testid="family-member-status"
+                  [class.text-success]="member.status === 'active'"
+                  [class.text-warning]="member.status === 'suspended'"
+                  [class.text-info]="member.status === 'invited' || member.status === 'pending'"
+                  [class.text-ink-muted]="
+                    member.status !== 'active' &&
+                    member.status !== 'suspended' &&
+                    member.status !== 'invited' &&
+                    member.status !== 'pending'
+                  "
+                >
+                  {{ statusLabel(member.status) }}
+                </span>
+              </div>
+            </li>
+          }
+        </ul>
+
+        @if (isSoleMember()) {
+          <div
+            class="mt-4 rounded-md border border-line bg-surface-muted p-4"
+            data-testid="family-empty"
+          >
+            <p class="text-sm font-medium text-ink">ครอบครัวนี้มีเพียงคุณ</p>
+            <p class="mt-1 text-sm text-ink-muted">
+              เชิญสมาชิกคนอื่นเพื่อเริ่มดูแลร่วมกันจากแบบฟอร์มด้านล่าง
+            </p>
+          </div>
+        }
+      }
+    </section>
+
+    <details class="card mt-4" data-testid="family-role-legend">
+      <summary class="flex min-h-12 cursor-pointer items-center font-medium text-ink">
+        สิทธิ์ของแต่ละบทบาท
+      </summary>
+      <dl class="mt-2 flex flex-col gap-3 text-sm">
+        @for (role of roleDefinitions; track role.role) {
+          <div>
+            <dt class="font-medium text-ink">{{ role.label }}</dt>
+            <dd class="mt-1 text-ink-muted">{{ role.description }}</dd>
+          </div>
+        }
+      </dl>
+    </details>
+
+    @if (inviteResult(); as invite) {
+      <section class="card mt-4" role="status" data-testid="family-invite-success">
+        <h2 class="text-xl">สร้างลิงก์เชิญแล้ว</h2>
+        <p class="mt-1 text-sm text-ink-muted">
+          สำหรับ {{ invite.email }} ในบทบาท {{ roleLabel(invite.role) }}
+        </p>
+
+        <div class="alert alert-warning mt-3" data-testid="family-invite-once-warning">
+          <p class="font-medium">ลิงก์นี้จะแสดงเพียงครั้งเดียว</p>
+          <p class="mt-1">
+            กรุณาคัดลอกและส่งให้ผู้รับก่อนออกจากหน้านี้
+            หากออกจากหน้าแล้วจะไม่สามารถดูลิงก์เดิมได้อีก
+          </p>
+        </div>
+
+        <label class="field-label mt-4 block" for="family-invite-link">ลิงก์เชิญ</label>
+        <div class="mt-2 flex flex-col gap-2 sm:flex-row">
+          <input
+            id="family-invite-link"
+            class="field-input"
+            type="text"
+            readonly
+            [value]="invite.link"
+            data-testid="family-invite-link"
+          />
+          <button
+            class="btn btn-secondary shrink-0"
+            type="button"
+            data-testid="family-invite-copy"
+            (click)="copyInviteLink()"
+          >
+            คัดลอกลิงก์
+          </button>
+        </div>
+
+        @if (copyMessage(); as message) {
+          <p
+            class="mt-2 text-sm text-ink-muted"
+            role="status"
+            data-testid="family-invite-copy-status"
+          >
+            {{ message }}
+          </p>
+        }
+      </section>
+    }
+
+    <form
+      class="card mt-4"
+      data-testid="family-invite-form"
+      [formGroup]="inviteForm"
+      (ngSubmit)="submitInvite()"
+      novalidate
+    >
+      <header class="mb-4">
+        <h2 class="text-xl">เชิญสมาชิกใหม่</h2>
+        <p class="mt-1 text-sm text-ink-muted">
+          สร้างลิงก์เชิญสำหรับผู้รับ ลิงก์จะแสดงเพียงครั้งเดียวหลังสร้างสำเร็จ
+        </p>
+      </header>
+
+      @if (inviteError(); as message) {
+        <div class="alert alert-error mb-4" role="alert" data-testid="family-invite-error">
+          {{ message }}
+        </div>
+      }
+
+      <div class="field">
+        <label class="field-label" for="family-invite-email">อีเมลของผู้รับ</label>
+        <input
+          id="family-invite-email"
+          class="field-input"
+          type="email"
+          inputmode="email"
+          autocomplete="email"
+          formControlName="email"
+          data-testid="family-invite-email"
+          [attr.aria-invalid]="inviteFieldError('email') === null ? null : 'true'"
+          [attr.aria-describedby]="
+            inviteFieldError('email') === null ? null : 'family-invite-email-error'
+          "
+        />
+        @if (inviteFieldError('email'); as error) {
+          <p
+            id="family-invite-email-error"
+            class="field-error"
+            data-testid="family-invite-email-error"
+          >
+            {{ error }}
+          </p>
+        }
+      </div>
+
+      <div class="field">
+        <label class="field-label" for="family-invite-role">บทบาทของผู้รับ</label>
+        <select
+          id="family-invite-role"
+          class="field-input"
+          formControlName="role"
+          data-testid="family-invite-role"
+          [attr.aria-invalid]="inviteFieldError('role') === null ? null : 'true'"
+          [attr.aria-describedby]="
+            inviteFieldError('role') === null ? null : 'family-invite-role-error'
+          "
+        >
+          @for (role of invitableRoles; track role.role) {
+            <option [value]="role.role">{{ role.label }}</option>
+          }
+        </select>
+        <p class="field-hint">
+          เลือกได้เฉพาะบทบาทที่ระบบเปิดให้เชิญ
+          สิทธิ์เข้าถึงข้อมูลสุขภาพยังต้องได้รับอนุมัติแยกต่างหาก
+        </p>
+        @if (inviteFieldError('role'); as error) {
+          <p
+            id="family-invite-role-error"
+            class="field-error"
+            data-testid="family-invite-role-error"
+          >
+            {{ error }}
+          </p>
+        }
+      </div>
+
+      <button
+        class="btn btn-primary"
+        type="submit"
+        data-testid="family-invite-submit"
+        [disabled]="inviting()"
+      >
+        @if (inviting()) {
+          <span class="spinner" aria-hidden="true"></span>
+          <span>กำลังสร้างลิงก์เชิญ...</span>
+        } @else {
+          <span>สร้างลิงก์เชิญ</span>
+        }
+      </button>
+    </form>
+  }
+</section>
