@@ -1,6 +1,10 @@
 # AGENTS.md — Lucky Care Plus (LuckyCare+)
 
 > **Read this first.** This file is the entry point for any coding agent working in this repository.
+>
+> **Then read [`PROJECT-STATE.md`](PROJECT-STATE.md) second.** It records where the work actually is
+> (phase status, verified test counts, open decisions, known gaps). Any new session should start from
+> those two files instead of asking the human to re-explain the project.
 
 ## 1. What this project is
 
@@ -12,7 +16,7 @@ Repository layout:
 | Path | Contents |
 |---|---|
 | `.ai/` | **Blueprint — the single source of truth for design.** Read before writing code. |
-| `docs/` | Source summaries + frozen authorization baseline (`docs/baseline-v1.0.0/`, content = v1.2.0) |
+| `docs/` | Source summaries + frozen authorization baseline (`docs/baseline-v1.0.0/`, content = v1.3.0) |
 | `backend/` | Laravel 13 API (PHP 8.4) |
 | `frontend/` | Angular 22 + Tailwind 4 web app |
 | `mobile/` | Flutter app (`lucky_care`) |
