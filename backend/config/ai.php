@@ -56,6 +56,9 @@ return [
         'ocr' => [
             'model' => env('AI_MODEL_VISION') ?: env('AI_MODEL_2') ?: env('AI_MODEL') ?: env('AI_MODEL_1'),
         ],
+        'knowledge' => [
+            'model' => env('AI_MODEL_KNOWLEDGE') ?: env('AI_MODEL') ?: env('AI_MODEL_1'),
+        ],
     ],
 
     /*

@@ -1,1 +1,6 @@
+# Local/test SQLite databases must never be committed.
 *.sqlite*
+
+# Exception: the read-only health knowledge corpus is a portable, reviewed
+# artifact so a fresh installation can restore it without crawling the web.
+!knowledge/health_kb.sqlite

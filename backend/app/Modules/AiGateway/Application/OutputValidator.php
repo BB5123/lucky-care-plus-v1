@@ -30,8 +30,9 @@ final class OutputValidator
 
     /**
      * @param  array<string, mixed>  $context  the scrubbed structure that was sent to the provider
+     * @param  ?string  $disclaimer  purpose-specific mandatory text; null uses the summary disclaimer
      */
-    public function validate(LlmResponse $response, array $context = []): ValidatedOutput
+    public function validate(LlmResponse $response, array $context = [], ?string $disclaimer = null): ValidatedOutput
     {
         $content = trim($response->content);
 
@@ -39,7 +40,9 @@ final class OutputValidator
             throw InvalidOutputException::because('empty_output');
         }
 
-        $disclaimer = $this->forComparison((string) config('ai.disclaimer'));
+        $disclaimer = $this->forComparison(
+            $disclaimer === null ? (string) config('ai.disclaimer') : $disclaimer,
+        );
 
         // Models often emphasise the disclaimer with Markdown (`**คำเตือน:**`).
         // That is formatting, not a different sentence, so the comparison
