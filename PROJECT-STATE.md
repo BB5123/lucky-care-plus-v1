@@ -105,8 +105,12 @@ Workflow used throughout: branch → verify → commit → `gh pr create` → `g
    real-traffic sample falls below hit@3 0.90 (or the corpus passes 500 chunks with no recall gain).
    `KnowledgeRetriever` remains the seam for a Qdrant/hybrid retriever.
 3. **No load test** on the dashboard aggregate or the timeline endpoint.
-4. **No scheduled database backup**; the restore drill exists and runs weekly, but nothing produces
-   the nightly dump.
+4. **Backups are produced nightly in CI, not in production.** `.github/workflows/backup.yml` +
+   `backend/scripts/backup-dump.sh` dump the seeded database with `pg_dump -Fc`, verify the archive's
+   table of contents (`workspaces`, `health_profiles`, `care_tasks`) and its sha256, upload it as a
+   7-day build artifact, then restore *that artifact* into a scratch database and re-run the three RLS
+   probes. A GitHub artifact is a safety net, not a compliance backup: no encrypted off-site storage,
+   no key management, no RPO/RTO (D3/Q-12) — those belong to the deployment target.
 5. **Documents are unscanned** (fail closed only if `scan_required` is turned on).
 6. **Retention has never deleted anything** (`dry_run = true`).
 7. **Mobile** has no appointments create/edit, no family invite, no history pagination — read-mostly.
@@ -124,7 +128,7 @@ Workflow used throughout: branch → verify → commit → `gh pr create` → `g
 | G4 live evaluation | `backend/docs/G4-LIVE-EVALUATION.md` |
 | Knowledge base | `backend/docs/KNOWLEDGE-BASE.md` |
 | RAG retrieval decision (lexical vs vector) | `backend/docs/RAG-VECTOR-OPTIONS.md` |
-| Backup/restore drill | `backend/docs/QUALITY-SWEEP-2026-10-24.md` + `.github/workflows/restore-drill.yml` |
+| Backup and restore | `backend/docs/QUALITY-SWEEP-2026-10-24.md` · `.github/workflows/backup.yml` (nightly producer) · `.github/workflows/restore-drill.yml` (weekly drill) |
 | First overnight run | `MORNING-REPORT.md` |
 
 ---
