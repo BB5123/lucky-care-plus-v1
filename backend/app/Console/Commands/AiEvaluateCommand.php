@@ -25,6 +25,8 @@ final class AiEvaluateCommand extends Command
     protected $signature = 'ai:evaluate
         {--live : Send the model-behaviour suites to the configured provider (real network calls)}
         {--max-calls=50 : Hard cap on provider calls in --live mode}
+        {--base-url= : Point --live at another OpenAI-compatible endpoint (e.g. a tunnel to a local model)}
+        {--model= : Override the model name used by --live}
         {--json : Print the result as JSON instead of a table}';
 
     protected $description = 'Run the AI gateway evaluation suites (offline by default; --live uses the provider)';
@@ -40,6 +42,14 @@ final class AiEvaluateCommand extends Command
             // This command is the explicit operator action that opens it for
             // its own process; nothing is persisted.
             config(['ai.enabled' => true]);
+
+            try {
+                $this->applyEndpointOverride();
+            } catch (RuntimeException $exception) {
+                $this->error($exception->getMessage());
+
+                return self::FAILURE;
+            }
 
             $liveRunner = $this->laravel->make(LiveEvaluationRunner::class);
 
@@ -162,5 +172,40 @@ final class AiEvaluateCommand extends Command
             : 'Scope: gateway guards with synthetic fixtures. No live provider is configured; AI remains disabled.');
 
         return $ok ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
+     * Point `--live` at another OpenAI-compatible endpoint without editing .env.
+     *
+     * This exists so a locally hosted model (for example a Pathumma GGUF behind a
+     * tunnel, see `docs/LOCAL-AI-PATHUMMA.md`) can be scored with the same suites
+     * as the production provider, which is what makes the numbers comparable.
+     *
+     * The override changes config in memory only; the adapter still refuses when
+     * `ai.enabled` is false, and only this command sets it (for its own process).
+     */
+    private function applyEndpointOverride(): void
+    {
+        $baseUrl = trim((string) $this->option('base-url'));
+        $model = trim((string) $this->option('model'));
+
+        if ($baseUrl === '' && $model === '') {
+            return;
+        }
+
+        if ($baseUrl !== '') {
+            if (! str_starts_with($baseUrl, 'https://') && ! str_starts_with($baseUrl, 'http://')) {
+                throw new RuntimeException('--base-url must be an http(s) URL.');
+            }
+
+            config([
+                'ai.provider' => 'openai_compatible',
+                'ai.openai_compatible.base_url' => rtrim($baseUrl, '/'),
+            ]);
+        }
+
+        if ($model !== '') {
+            config(['ai.openai_compatible.model' => $model]);
+        }
     }
 }
