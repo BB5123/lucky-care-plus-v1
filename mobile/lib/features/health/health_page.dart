@@ -12,8 +12,8 @@ import 'widgets/medication_view.dart';
 import 'widgets/record_measurement_sheet.dart';
 
 /// The sections inside the health tab. Measurements stay the default so the
-/// existing reading loop is unchanged; AI is an explicit third section so the
-/// summary/knowledge calls only run when the user opens it.
+/// existing reading loop is unchanged; the AI assistant is an explicit third
+/// section so the summary/knowledge calls only run when the user opens it.
 enum HealthSection { measurements, medication, ai }
 
 /// `/health` — readings and medication for the current profile.
@@ -60,6 +60,10 @@ class _HealthPageState extends ConsumerState<HealthPage> {
             ),
             child: SegmentedButton<HealthSection>(
               key: const Key('health-section-segments'),
+              showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
               segments: const <ButtonSegment<HealthSection>>[
                 ButtonSegment<HealthSection>(
                   value: HealthSection.measurements,
@@ -74,7 +78,10 @@ class _HealthPageState extends ConsumerState<HealthPage> {
                 ),
                 ButtonSegment<HealthSection>(
                   value: HealthSection.ai,
-                  label: Text('AI', key: Key('health-section-ai')),
+                  label: Text(
+                    'ผู้ช่วย AI',
+                    key: Key('health-section-ai'),
+                  ),
                 ),
               ],
               selected: <HealthSection>{_section},
