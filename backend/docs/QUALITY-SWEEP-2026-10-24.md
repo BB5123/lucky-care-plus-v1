@@ -116,8 +116,16 @@ the tests expect.
    automating it: the workflow had not set `DB_USERNAME`/`DB_PASSWORD` as real environment variables (so
    Laravel read `.env.example` and authentication failed), and the script was committed without the
    executable bit.
-4. **Load behaviour is unmeasured.** No load test has been run against the dashboard aggregate or the
-   timeline endpoint.
+4. ~~**Load behaviour is unmeasured.**~~ **Satisfied by a repeatable harness on 2026-10-25.**
+   `php artisan perf:smoke` seeds a marked synthetic workspace (500 measurements over 24 months,
+   120 care tasks, 60 medication records, 12 appointments), drives the real HTTP kernel for the
+   dashboard aggregate, the timeline and the care-task list, and reports p50/p95/p99 plus queries per
+   request. The measured Xdebug-off baseline on this machine is dashboard p95 156 ms / 36 queries,
+   timeline p95 137 ms / 48 queries, care-tasks p95 150 ms / 40 queries (10 iterations, 800/800/300 ms
+   budgets). See [`PERFORMANCE.md`](PERFORMANCE.md). **Honest note:** this is a single-process,
+   no-concurrency harness against a local database. A real concurrent load test with multiple clients,
+   network and the deployed stack is still a pre-launch task; these numbers must not be quoted as
+   capacity evidence.
 5. ~~**Backups are not scheduled.**~~ **Satisfied for CI on 2026-10-25.** `backend/scripts/backup-dump.sh`
    plus `.github/workflows/backup.yml` (nightly at 19:00 UTC = 02:00 Asia/Bangkok, plus manual dispatch)
    dump the seeded database with `pg_dump -Fc`, read the archive back with `pg_restore --list` and fail
