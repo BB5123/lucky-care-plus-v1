@@ -25,9 +25,7 @@ class ApiClient {
       ..responseType = ResponseType.json
       ..headers = <String, dynamic>{'Accept': 'application/json'};
 
-    _dio.interceptors.add(
-      InterceptorsWrapper(onRequest: _attachBearerToken),
-    );
+    _dio.interceptors.add(InterceptorsWrapper(onRequest: _attachBearerToken));
   }
 
   final Dio _dio;
@@ -55,23 +53,41 @@ class ApiClient {
   Future<Map<String, dynamic>> get(
     String path, {
     Map<String, dynamic>? query,
+    Map<String, String>? headers,
   }) {
     return _send(
-      () => _dio.get<dynamic>(path, queryParameters: query),
+      () => _dio.get<dynamic>(
+        path,
+        queryParameters: query,
+        options: _options(headers),
+      ),
     );
   }
 
-  Future<Map<String, dynamic>> post(String path, {Object? data}) {
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+  }) {
     return _send(
-      () => _dio.post<dynamic>(path, data: data),
+      () => _dio.post<dynamic>(path, data: data, options: _options(headers)),
     );
   }
 
   /// For endpoints whose success body is empty (204, e.g. logout).
-  Future<void> postVoid(String path, {Object? data}) async {
+  Future<void> postVoid(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+  }) async {
     await _send(
-      () => _dio.post<dynamic>(path, data: data),
+      () => _dio.post<dynamic>(path, data: data, options: _options(headers)),
     );
+  }
+
+  /// `null` when no per-request headers are needed, so Dio keeps its defaults.
+  Options? _options(Map<String, String>? headers) {
+    return headers == null ? null : Options(headers: headers);
   }
 
   Future<Map<String, dynamic>> _send(
