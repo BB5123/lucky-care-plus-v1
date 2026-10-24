@@ -18,7 +18,7 @@
 | Database | PostgreSQL **only** (RLS and composite FKs are part of the spec; SQLite is not an acceptable test DB) |
 | Cache/queue | Redis / database queue |
 | Architecture | Modular monolith — `app/Modules/<Context>/{Domain,Application,Infrastructure,Http,Policies}` |
-| Permission IDs | `docs/baseline-v1.0.0/PERMISSION_CATALOG.md` (v1.1.0, 93 IDs) — never invent one |
+| Permission IDs | `docs/baseline-v1.0.0/PERMISSION_CATALOG.md` (v1.2.0, 99 IDs) — never invent one |
 
 ## Commands
 
@@ -54,6 +54,6 @@ php artisan route:list --path=api
 4. **Fail-closed auditing** — when the authorization stack itself throws, the request returns
    `503 authorization_unavailable` and writes **no** audit row (no side effect). Every completed
    allow/deny decision writes exactly one `security_audit_logs` row.
-5. **Permission drift guard** — `config/authorization.php` holds the 93 permission IDs.
+5. **Permission drift guard** — `config/authorization.php` holds the 99 permission IDs.
    `PermissionCatalogTest` parses `docs/baseline-v1.0.0/PERMISSION_CATALOG.md` and fails if the two diverge.
    When the baseline changes, update the config in the same commit.

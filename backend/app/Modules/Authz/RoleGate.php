@@ -93,6 +93,17 @@ final class RoleGate
             return false;
         }
 
+        // CR-003 / baseline v1.2.0: routine definitions and escalation policy
+        // are their own authority, not an implication of task-read or
+        // workspace-settings authority (ABD-017).
+        if (str_starts_with($permission, 'care_task.template.')) {
+            return $this->taskTemplateAllows($role, $permission);
+        }
+
+        if (str_starts_with($permission, 'escalation_policy.')) {
+            return $this->escalationPolicyAllows($role, $permission);
+        }
+
         return match ($role) {
             'profile_owner' => $this->ownerAllows($permission, $action),
             'legal_guardian' => $this->guardianAllows($permission, $action),
@@ -297,6 +308,40 @@ final class RoleGate
 
         return str_starts_with($permission, 'platform.')
             || str_starts_with($permission, 'workspace.');
+    }
+
+    /**
+     * Matrix C (v1.2.0): reading a routine is broad within the family, while
+     * defining one is `C` for a caregiver because it changes what other people
+     * are expected to do. Deactivation is admin/owner authority.
+     */
+    private function taskTemplateAllows(string $role, string $permission): bool
+    {
+        $action = substr($permission, strlen('care_task.template.'));
+
+        return match ($role) {
+            'profile_owner', 'legal_guardian', 'workspace_admin' => in_array(
+                $action,
+                ['read', 'create', 'update', 'deactivate'],
+                true,
+            ),
+            'caregiver' => in_array($action, ['read', 'create', 'update'], true),
+            default => false,
+        };
+    }
+
+    /**
+     * Matrix C (v1.2.0): reading the escalation ladder is available to the
+     * family and a caregiver who follows it; editing it is owner/admin only
+     * because it governs accountability rather than daily work.
+     */
+    private function escalationPolicyAllows(string $role, string $permission): bool
+    {
+        return match ($role) {
+            'profile_owner', 'workspace_admin' => true,
+            'legal_guardian', 'caregiver' => $permission === 'escalation_policy.read',
+            default => false,
+        };
     }
 
     private function isNotificationPermission(string $permission): bool

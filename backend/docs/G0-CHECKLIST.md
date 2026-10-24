@@ -55,7 +55,7 @@ baseline §7 checklist is complete. `.ai/12-ROADMAP.md` adds two Phase 0 exit cr
 | G0-a | Authorization Unit + Feature tests pass 100% | `php artisan test` → **69 passed / 823 assertions**. Authorization-focused suites: `AuthorizerTest` 11/488, `GrantAndConsentTest` 9/21, `PermissionCatalogTest` 2/24, `WorkspaceContextMiddlewareTest` 4/16 → 26 tests, 0 failures. | ✅ |
 | G0-b | `TEN-*` passes | `php artisan test --filter=TenantIsolationTest` → **5 passed / 35 assertions** (`TEN-T01..T05`). RLS is `ENABLE` + `FORCE` in `database/migrations/2026_10_22_150700_enable_row_level_security.php`; tests run as non-superuser `luckycare_app`. | ✅ |
 | G0-c | Baseline §7 readiness checklist complete (10 items) | Section 2 below: **9 ✅ / 1 ⏭ (item 8 → G4, ADR-018)**. No item is open; the deferral is recorded as a deferral, not as a pass. | ✅ |
-| G0-d | (Roadmap) No endpoint without a permission annotation | `php artisan test --filter=RoutePermissionCoverageTest` → **4 passed / 34 assertions**. All 14 `api/v1` route entries are either permission-guarded (4) or explicitly allowlisted with a written reason (10); every declared permission ID exists in the 93-ID catalog. | ✅ |
+| G0-d | (Roadmap) No endpoint without a permission annotation | `php artisan test --filter=RoutePermissionCoverageTest` → **4 passed / 34 assertions**. All 14 `api/v1` route entries are either permission-guarded (4) or explicitly allowlisted with a written reason (10); every declared permission ID exists in the 99-ID catalog. | ✅ |
 | G0-e | (Roadmap) PHI leak scan passes | `php artisan test --filter=PhiLeakTest` → **3 passed / 6 assertions**. Scans every `app/**/*.php` `Log::*()` call for PHI/credential tokens; empty allowlist; scanner has a planted-leak self-test. Scope: log calls only. | ✅ |
 
 ## 2. Authorization Readiness Checklist (10 items) — `docs/SUMMARY.md` §7
@@ -65,7 +65,7 @@ Legend: ✅ = proven by a test/command listed in the row · ⏭ = deferred to a 
 
 | # | Item | Evidence (command/file) | Status |
 |---|---|---|---|
-| 1 | Permission Catalog with explicit Action and Resource | `backend/config/authorization.php` (93 IDs, normative v1.1.0). `PermissionCatalogTest` parses `docs/baseline-v1.0.0/PERMISSION_CATALOG.md` and fails on drift: **CATALOG-T01/T02, 2 passed / 24 assertions**. | ✅ |
+| 1 | Permission Catalog with explicit Action and Resource | `backend/config/authorization.php` (99 IDs, normative v1.2.0). `PermissionCatalogTest` parses `docs/baseline-v1.0.0/PERMISSION_CATALOG.md` and fails on drift: **CATALOG-T01/T02, 2 passed / 24 assertions**. | ✅ |
 | 2 | Permission Matrix covers every primary role and every health-data type | **`MatrixConformanceTest`** parses `docs/baseline-v1.0.0/DATA_ACCESS_MATRIX.md` Matrices A–E (47 rows), maps every row to permission IDs, and asserts each of the 8 roles against `RoleGate`: **1 test / 590 assertions**, with a floor that fails the build if the parser finds too few cells. It found and fixed six real disagreements, including **caregiver could create person/health profiles** (Matrix B says `D`). Break-glass stays denied per ADR-002 via a named `MVP_DISABLED_PERMISSIONS` list; guardian `C` cells pass the gate while authority verification remains Phase 2. | ✅ |
 | 3 | Workspace Isolation and Profile Isolation rules | RLS `ENABLE`/`FORCE` migration + `TEN-T01..T05` (5/35); `WorkspaceContextMiddlewareTest ISO-T01..T04` (4/16: cross-workspace rows hidden, context cleared after request); `AUTH-003` non-member → 404 without existence leak; `AUTH-004` same-workspace member without a grant on another person's profile → 403. Connection is non-superuser. | ✅ |
 | 4 | Grant, Consent, and revocation checks | `GrantAndConsentTest` (9/21): GRANT-T01 active / T02 expired / T03 revoked, CONSENT-T01 withdraw once / T02 no other mutation; `AuthorizerTest` GRANT-T04/T05 (scope+action containment) and CONSENT-T03/T04 (AI purpose). | ✅ |
@@ -123,7 +123,7 @@ Notes:
 | `backend/tests/Feature/Authorization/RoutePermissionCoverageTest.php` | AP-001..004 route/permission coverage guard |
 | `backend/tests/Unit/PhiLeakTest.php` | SEC-PHI-001..003 log-call PHI guard + scanner self-test |
 | `.github/workflows/ci.yml` | backend / frontend / mobile CI jobs |
-| `backend/config/authorization.php` | 93-ID permission catalog |
+| `backend/config/authorization.php` | 99-ID permission catalog |
 | `backend/app/Modules/Authz/Authorizer.php` | single decision point + permission→scope/action map |
 | `backend/database/migrations/2026_10_22_150700_enable_row_level_security.php` | `ENABLE`/`FORCE` RLS policies |
 | `backend/tests/Feature/Tenancy/TenantIsolationTest.php` | `TEN-T01..T05` |

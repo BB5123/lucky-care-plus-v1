@@ -13,10 +13,9 @@ use Illuminate\Support\Collection;
 /**
  * Workspace escalation ladder (P2.2).
  *
- * Route middleware proves `workspace.read` for GET and `workspace.update` for
- * both mutations. This is a workspace setting, not a health-record operation,
- * so it consumes no new permission id (the frozen catalog has no
- * escalation-specific id).
+ * Route middleware proves `escalation_policy.read` for GET and
+ * `escalation_policy.update` for both mutations (CR-003 / baseline v1.2.0).
+ * Escalation behaviour is its own authority, not a workspace-settings action.
  */
 final class EscalationPolicyController extends CareCrmController
 {

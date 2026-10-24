@@ -17,7 +17,7 @@ use Tests\TestCase;
  *  1. explicitly allowlisted as public or self-service (with a written
  *     reason, so widening the allowlist is visible in review), or
  *  2. guarded by `EnsureAuthorized` with a permission ID that exists in
- *     `config/authorization.permissions` (the frozen 93-ID catalog).
+ *     `config/authorization.permissions` (the frozen 99-ID catalog).
  *
  * A new endpoint that forgets its authorization middleware therefore fails
  * CI, and so does a route declared with a permission ID that is not in the
@@ -236,6 +236,46 @@ class RoutePermissionCoverageTest extends TestCase
             .implode("\n- ", $unclassified));
         $this->assertSame([], $doubleClassified, 'AP-003: these api/v1 routes are both allowlisted and permission-guarded; '
             ."remove the allowlist entry so the guard is not bypassed:\n- ".implode("\n- ", $doubleClassified));
+    }
+
+    /**
+     * TPL-T05 (CR-003): every template and escalation route declares its new
+     * permission ID. The general AP-001..004 sweep would also catch a missing
+     * guard, but this focused assertion makes sure none of the routes regressed
+     * to the borrowed `care_task.*` / `workspace.*` IDs.
+     */
+    public function test_tpl_t05_template_and_escalation_routes_declare_the_cr_003_permissions(): void
+    {
+        $expected = [
+            'GET api/v1/workspaces/{workspace}/profiles/{profile}/task-templates' => 'care_task.template.read',
+            'POST api/v1/workspaces/{workspace}/profiles/{profile}/task-templates' => 'care_task.template.create',
+            'GET api/v1/workspaces/{workspace}/profiles/{profile}/task-templates/{template}' => 'care_task.template.read',
+            'PATCH api/v1/workspaces/{workspace}/profiles/{profile}/task-templates/{template}' => 'care_task.template.update',
+            'POST api/v1/workspaces/{workspace}/profiles/{profile}/task-templates/{template}/deactivate' => 'care_task.template.deactivate',
+            'POST api/v1/workspaces/{workspace}/profiles/{profile}/task-templates/{template}/exceptions' => 'care_task.template.update',
+            'GET api/v1/workspaces/{workspace}/escalation-policies' => 'escalation_policy.read',
+            'PUT api/v1/workspaces/{workspace}/escalation-policies' => 'escalation_policy.update',
+            'POST api/v1/workspaces/{workspace}/escalation-policies/defaults' => 'escalation_policy.update',
+        ];
+
+        $routes = [];
+
+        foreach ($this->apiRoutes() as $entry) {
+            $routes[$entry['key']] = $entry['route'];
+        }
+
+        foreach ($expected as $key => $permission) {
+            $this->assertArrayHasKey($key, $routes, "TPL-T05: route {$key} is missing");
+            $this->assertTrue(
+                $this->hasAuthorizingMiddleware($routes[$key]),
+                "TPL-T05: {$key} has no EnsureAuthorized middleware",
+            );
+            $this->assertSame(
+                [$permission],
+                $this->declaredPermissions($routes[$key]),
+                "TPL-T05: {$key} must declare only {$permission}",
+            );
+        }
     }
 
     public function test_ap_004_allowlist_entries_are_live_and_keep_authentication(): void

@@ -2,16 +2,16 @@
 
 **Product:** Family Health CRM\
 **Document ID:** AUTH-DOC-002\
-**Version:** 1.1.0\
-**Status:** Frozen for implementation (v1.1.0 — amended by `CR-001`)\
+**Version:** 1.2.0\
+**Status:** Frozen for implementation (v1.2.0 — amended by `CR-003`)\
 **Depends on:** `PERMISSION_CATALOG.md`
 
 ## Baseline status and binding decisions
 
 - **Baseline ID:** `AUTH-BASELINE-001`
-- **Baseline version:** `1.1.0`
+- **Baseline version:** `1.2.0`
 - **Effective date:** `2026-10-18`
-- **Amended:** `2026-10-22` by `CR-001` — added Matrix E (self-service preferences and self-audit) and two scope types. No existing matrix row was removed or weakened.
+- **Amended:** `2026-10-22` by `CR-001` — added Matrix E (self-service preferences and self-audit) and two scope types. `2026-10-24` by `CR-003` — added six Matrix C rows for task templates and escalation policy, using the existing `tasks` scope. No existing matrix row was removed or weakened.
 - **Status:** **FROZEN FOR IMPLEMENTATION**
 - **Change policy:** Do not silently alter a permission, role mapping, scope rule, denial behavior, or required test. Propose a versioned change, document its security impact, update all three documents, and add/adjust tests in the same change.
 - **Approval boundary:** This is an engineering baseline for implementation, not legal certification or production-readiness approval. Product, security, and qualified legal review remain required for the open decisions explicitly listed in these documents.
@@ -35,6 +35,8 @@
 15. **Every protected permission must be traceable.** Before a permission is enabled in a release, it must map to a matrix rule, endpoint/job entry point, positive test where applicable, negative test, and required side effects/audit behavior.
 
 > **v1.1.0 addition (`CR-001`):** decision 16 (`ABD-016`) is recorded in `AUTHORIZATION_BASELINE.md`. It states that notification preferences and self-audit visibility are **not** authorization or consent state. Decisions 1–15 above are unchanged.
+>
+> **v1.2.0 addition (`CR-003`):** decision 17 (`ABD-017`) is recorded in `AUTHORIZATION_BASELINE.md`. Routine definitions and escalation policy are **not** implied by task-read authority. Decisions 1–16 above are unchanged.
 
 ### Authorization decision precedence
 
@@ -207,6 +209,12 @@ duties.
   Verify task                      A/C          C               C\*         C\*        D
   Reopen/cancel task               A/C          C               C\*         C\*        D
   Read task evidence                 A          C               C\*       C\*\*        C
+  Read task templates                A          C                 A           A        D
+  Create task template               A          C                 A           C        D
+  Update task template               A          C                 A           C        D
+  Deactivate task template           A          C                 A           D        D
+  Read escalation policy             A          C                 A           A        D
+  Update escalation policy           A          D                 A           D        D
 
 -   `C*`: only if workspace policy explicitly delegates the action and
     the actor is authorized for the target profile/task.
@@ -218,6 +226,10 @@ duties.
     high-risk tasks.
 -   Medication reminders and completion records represent reported
     activity; they do not prove actual ingestion.
+-   `v1.2.0` (`CR-003`): the task-template and escalation-policy rows cover
+    the five Matrix C role columns. `healthcare_professional`,
+    `platform_support`, and `platform_admin` are `D` (deny by default) on all
+    six actions and therefore have no separate column in this matrix.
 
 ## 7. Matrix D --- consent, delegation, AI, and export
 

@@ -253,41 +253,41 @@ Route::prefix('v1')->group(function (): void {
         });
 
     // -- Recurring care-task templates (Phase 2.1) --------------------------
-    // The frozen catalog has no `care_task.template.*` permission yet
-    // (see backend/docs/CR-003-proposal-template-permissions.md). Until the
-    // change request is approved, the adjacent care-task permissions gate the
-    // surface: read for listing, create for every schedule mutation.
+    // CR-003 / baseline v1.2.0: the schedule is its own resource. Reading a
+    // routine does not consume `care_task.read`, and defining or deactivating
+    // one does not consume `care_task.create` (ABD-017). Exceptions mutate an
+    // existing schedule, so they use the update permission.
     Route::prefix('/workspaces/{workspace}/profiles/{profile}/task-templates')
         ->middleware(['auth:sanctum', 'throttle:60,1,task-templates', 'workspace.context'])
         ->group(function (): void {
             Route::get('/', [CareTaskTemplateController::class, 'index'])
-                ->middleware('authorize.permission:care_task.read');
+                ->middleware('authorize.permission:care_task.template.read');
             Route::post('/', [CareTaskTemplateController::class, 'store'])
-                ->middleware('authorize.permission:care_task.create');
+                ->middleware('authorize.permission:care_task.template.create');
             Route::get('/{template}', [CareTaskTemplateController::class, 'show'])
-                ->middleware('authorize.permission:care_task.read');
+                ->middleware('authorize.permission:care_task.template.read');
             Route::patch('/{template}', [CareTaskTemplateController::class, 'update'])
-                ->middleware('authorize.permission:care_task.create');
+                ->middleware('authorize.permission:care_task.template.update');
             Route::post('/{template}/deactivate', [CareTaskTemplateController::class, 'deactivate'])
-                ->middleware('authorize.permission:care_task.create');
+                ->middleware('authorize.permission:care_task.template.deactivate');
             Route::post('/{template}/exceptions', [CareTaskTemplateController::class, 'addException'])
-                ->middleware('authorize.permission:care_task.create');
+                ->middleware('authorize.permission:care_task.template.update');
         });
 
     // -- Escalation ladder (Phase 2.2) --------------------------------------
-    // Policy management is a workspace setting. The frozen catalog has no
-    // escalation-specific id, so read uses `workspace.read` and writes use
-    // `workspace.update`; running the ladder is a scheduled system job with no
-    // actor and therefore no permission check.
+    // CR-003 / baseline v1.2.0: escalation policy is its own authority.
+    // Reading the ladder is `escalation_policy.read`; replacing it or
+    // materialising the defaults is `escalation_policy.update`. Running the
+    // ladder is a scheduled system job with no actor and no permission check.
     Route::prefix('/workspaces/{workspace}/escalation-policies')
         ->middleware(['auth:sanctum', 'throttle:60,1,escalation-policies', 'workspace.context'])
         ->group(function (): void {
             Route::get('/', [EscalationPolicyController::class, 'index'])
-                ->middleware('authorize.permission:workspace.read');
+                ->middleware('authorize.permission:escalation_policy.read');
             Route::put('/', [EscalationPolicyController::class, 'replace'])
-                ->middleware('authorize.permission:workspace.update');
+                ->middleware('authorize.permission:escalation_policy.update');
             Route::post('/defaults', [EscalationPolicyController::class, 'defaults'])
-                ->middleware('authorize.permission:workspace.update');
+                ->middleware('authorize.permission:escalation_policy.update');
         });
 
     // -- Dashboard (Phase 1.5, ADR-010) -------------------------------------

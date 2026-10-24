@@ -7,9 +7,10 @@ return [
     | Permission catalog
     |--------------------------------------------------------------------------
     |
-    | The 93 permission IDs frozen by
-    | docs/baseline-v1.0.0/PERMISSION_CATALOG.md (v1.1.0, including the four
-    | CR-001 additions). This list is normative: never invent an ID here.
+    | The 99 permission IDs frozen by
+    | docs/baseline-v1.0.0/PERMISSION_CATALOG.md (v1.2.0, including the four
+    | CR-001 additions and the six CR-003 additions). This list is normative:
+    | never invent an ID here.
     | The list is sorted so drift is easy to spot in review.
     |
     */
@@ -53,6 +54,10 @@ return [
         'care_task.read',
         'care_task.reopen',
         'care_task.start',
+        'care_task.template.create',
+        'care_task.template.deactivate',
+        'care_task.template.read',
+        'care_task.template.update',
         'care_task.verify',
         'consent.read',
         'consent.record',
@@ -60,6 +65,8 @@ return [
         'data_export.cancel',
         'data_export.download',
         'data_export.request',
+        'escalation_policy.read',
+        'escalation_policy.update',
         'health_condition.correct',
         'health_condition.create',
         'health_condition.read',

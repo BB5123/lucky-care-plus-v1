@@ -18,8 +18,8 @@ use Illuminate\Http\Request;
 /**
  * Recurring care-task templates (P2.1).
  *
- * Route middleware has already proved `care_task.read` / `care_task.create`
- * for this profile. The controller resolves trusted route context, reads
+ * Route middleware has already proved the required `care_task.template.*`
+ * permission for this profile. The controller resolves trusted route context, reads
  * `If-Match` for every mutation, and delegates all scheduling rules to
  * {@see CareTaskTemplateService}.
  */
