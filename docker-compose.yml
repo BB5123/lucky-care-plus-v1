@@ -45,7 +45,30 @@ services:
     volumes:
       - miniodata:/data
 
+  # Malware scanning is opt-in. The default `docker compose up -d` does not
+  # pull ClamAV; start it with:
+  #   docker compose --profile scan up -d clamav
+  # First boot downloads the signature database (several minutes). The image
+  # serves clamd on TCP 3310 and exposes its unix socket at /tmp/clamd.sock
+  # inside the container; the backend adapter uses the unix socket. See
+  # backend/docs/MALWARE-SCANNING.md for sharing it with the backend.
+  clamav:
+    profiles: ["scan"]
+    image: clamav/clamav:stable
+    container_name: luckycare-clamav
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamavdata:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 600s
+
 volumes:
   pgdata:
   redisdata:
   miniodata:
+  clamavdata:

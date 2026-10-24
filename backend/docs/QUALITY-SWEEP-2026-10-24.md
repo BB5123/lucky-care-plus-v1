@@ -105,8 +105,13 @@ the tests expect.
 
 ## 5. What is still open after this sweep
 
-1. **Documents are stored unscanned.** `DOCUMENTS_SCAN_REQUIRED` is false by default; the upload fails closed
-   (503) if it is set without a scanner. Wire ClamAV before production.
+1. **Documents are unscanned by default, but the scanner is now wired and fail-closed.**
+   `DOCUMENTS_SCAN_REQUIRED` remains false, so accepted uploads still record `scan_status = skipped` and
+   log a warning. The new ClamAV unix-socket adapter, the `MalwareScanner` contract and the fail-closed
+   verdict handling are in place (422 `document_infected` for infected bytes, 503 `scan_unavailable` for
+   scanner errors, clean only after a clean verdict); see `backend/docs/MALWARE-SCANNING.md`. It stays
+   disabled until the owner decides to turn it on and a deployment runs clamd with a socket the backend
+   can see (D4 in `PROJECT-STATE.md`).
 2. **Retention still runs dry.** `retention.dry_run` is true (ADR-016); the numbers need legal sign-off
    (Q-12) before it deletes anything.
 3. ~~**No automated restore test.**~~ **Closed the same day.** `backend/scripts/restore-drill.sh` plus

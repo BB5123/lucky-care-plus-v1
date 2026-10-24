@@ -8,7 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 02:56 (Asia/Bangkok) on `main`
+**Last verified:** 2026-10-25 03:18 (Asia/Bangkok) - backend suite re-run; web/mobile counts are from the
+previous verification
 
 ---
 
@@ -33,11 +34,11 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 15-document knowledge base with a measured benchmark, web + mobile AI surfaces |
 | **4 - Scale/compliance** | not started | |
 
-**Verified test counts (2026-10-25 02:15):**
+**Verified test counts (2026-10-25 03:18):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **347 passed / 3,663 assertions** |
+| backend `php artisan test` | **353 passed / 3,709 assertions** |
 | web `npm test` | **111 passed / 40 files** |
 | mobile `flutter test` | **74 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
@@ -52,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 347
+php artisan test                 # 353
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -96,7 +97,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | D1 | **Provider + DPA (AIG-010)**: which vendor, and written confirmation the data is not used for training | G4 sign-off, `AI_ENABLED=true` |
 | D2 | **API keys rotated** after they appeared in a chat transcript | security hygiene, not a blocker |
 | D3 | Retention numbers + privacy notice (Q-12) - `retention.dry_run` is still true | turning retention on |
-| D4 | ClamAV before production - uploads are unscanned unless `scan_required` is on | production readiness |
+| D4 | ClamAV before production - the scanner is **wired and fail-closed** (ClamAV unix-socket adapter + fake in tests), but still disabled by default (`DOCUMENTS_SCAN_REQUIRED=false`) until the owner decides to turn it on and a deployment runs clamd | production readiness |
 | D5 | Pricing / plan entitlements (Q-2) | billing, quota tiers |
 
 ---
@@ -119,7 +120,9 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 4. **Backups**: the nightly producer (`.github/workflows/backup.yml`) and the weekly restore drill exist and
    both run in CI, but a 7-day workflow artifact is a safety net, not a production backup - encrypted
    off-site storage, RPO/RTO and key management stay with the deployment target.
-5. **Documents are unscanned** (ClamAV absent; the pipeline fails closed only when `scan_required` is on).
+5. **Documents are unscanned by default.** The ClamAV adapter is wired and fail-closed
+   (`backend/docs/MALWARE-SCANNING.md`), but `DOCUMENTS_SCAN_REQUIRED` is false and no deployment runs
+   clamd yet; turning it on needs a shared unix socket plus the owner decision in D4.
 6. **Retention has never deleted anything** (`dry_run = true`).
 7. **Mobile** has no appointments create/edit, no family invite, no history pagination - read-mostly.
 8. **AI summary and knowledge answers exist on web and mobile, but OCR upload is web-only.**
