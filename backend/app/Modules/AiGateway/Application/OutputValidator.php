@@ -39,9 +39,13 @@ final class OutputValidator
             throw InvalidOutputException::because('empty_output');
         }
 
-        $disclaimer = trim((string) config('ai.disclaimer'));
+        $disclaimer = $this->forComparison((string) config('ai.disclaimer'));
 
-        if ($disclaimer === '' || ! str_contains($content, $disclaimer)) {
+        // Models often emphasise the disclaimer with Markdown (`**คำเตือน:**`).
+        // That is formatting, not a different sentence, so the comparison
+        // strips emphasis markers and collapses whitespace. A paraphrased or
+        // shortened disclaimer still fails: every word must be present.
+        if ($disclaimer === '' || ! str_contains($this->forComparison($content), $disclaimer)) {
             throw InvalidOutputException::because('missing_disclaimer');
         }
 
@@ -54,6 +58,19 @@ final class OutputValidator
         $this->grounding->assertGrounded($content, $context);
 
         return $this->safety->ensureAdvice($content, $context);
+    }
+
+    /**
+     * Strip Markdown emphasis and collapse whitespace before comparing the
+     * mandatory disclaimer. The returned content is never rewritten; only the
+     * comparison is normalised.
+     */
+    private function forComparison(string $text): string
+    {
+        $stripped = preg_replace('/[*_`#>]+/u', '', $text);
+        $collapsed = preg_replace('/\s+/u', ' ', is_string($stripped) ? $stripped : $text);
+
+        return trim(is_string($collapsed) ? $collapsed : $text);
     }
 
     /**

@@ -42,7 +42,18 @@ final class GuardrailPipeline
         // [5] Provider call, then output validation (disclaimer, PII,
         // grounding and safety advice).
         $response = $provider->complete($injection->envelope);
-        $output = $this->validator->validate($response, $scrubbed->sections);
+
+        // The requested period is authorised context: it is sent to the model
+        // in `structured_context`, so a summary that names it must not be
+        // rejected as ungrounded. Values outside both the sections and this
+        // period are still a hallucination.
+        $groundingContext = $scrubbed->sections;
+        $groundingContext['_period'] = [
+            'from' => $request->periodFrom->toDateString(),
+            'to' => $request->periodTo->toDateString(),
+        ];
+
+        $output = $this->validator->validate($response, $groundingContext);
 
         return new GuardrailOutcome(
             $scrubbed,

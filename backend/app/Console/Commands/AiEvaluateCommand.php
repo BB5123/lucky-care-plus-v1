@@ -3,27 +3,72 @@
 namespace App\Console\Commands;
 
 use App\Modules\AiGateway\Application\Evaluation\EvaluationRunner;
+use App\Modules\AiGateway\Application\Evaluation\LiveEvaluationRunner;
 use Illuminate\Console\Command;
+use RuntimeException;
 
 /**
- * Runs the six evaluation suites of `.ai/08-AI-GATEWAY.md` section 6 against
- * the deterministic in-process provider.
+ * Runs the six evaluation suites of `.ai/08-AI-GATEWAY.md` section 6.
  *
- * The command never enables AI and never opens a network connection: it
- * exercises the gateway's own guard components with synthetic fixtures. A
- * suite below its threshold makes the command exit non-zero, so CI can gate
- * on it.
+ * Offline (default) the command exercises the gateway's guard components with
+ * synthetic fixtures and a deterministic in-process provider: no network, AI
+ * stays disabled, and CI can gate on it.
+ *
+ * `--live` adds the three model-behaviour suites (injection, grounding, safety)
+ * against the configured provider. It deliberately forces `ai.enabled` for this
+ * process only, refuses when no provider is configured, and caps the number of
+ * provider calls. The leakage, scope and refusal suites stay offline because
+ * they are decided before a provider is reached.
  */
 final class AiEvaluateCommand extends Command
 {
     protected $signature = 'ai:evaluate
+        {--live : Send the model-behaviour suites to the configured provider (real network calls)}
+        {--max-calls=50 : Hard cap on provider calls in --live mode}
         {--json : Print the result as JSON instead of a table}';
 
-    protected $description = 'Run the AI gateway evaluation suites (offline, no network, AI stays disabled)';
+    protected $description = 'Run the AI gateway evaluation suites (offline by default; --live uses the provider)';
 
     public function handle(EvaluationRunner $runner): int
     {
-        $results = $runner->runAll();
+        $live = (bool) $this->option('live');
+        $results = [];
+        $liveRunner = null;
+
+        if ($live) {
+            // The adapter and the router both refuse while the gate is closed.
+            // This command is the explicit operator action that opens it for
+            // its own process; nothing is persisted.
+            config(['ai.enabled' => true]);
+
+            $liveRunner = $this->laravel->make(LiveEvaluationRunner::class);
+
+            try {
+                $liveRunner->preflight();
+            } catch (RuntimeException $exception) {
+                $this->error($exception->getMessage());
+
+                return self::FAILURE;
+            }
+
+            foreach (['leakage', 'scope', 'refusal'] as $suite) {
+                $results[] = $runner->run($suite) + ['mode' => 'offline'];
+            }
+
+            try {
+                foreach ($liveRunner->run((int) $this->option('max-calls')) as $result) {
+                    $results[] = $result;
+                }
+            } catch (RuntimeException $exception) {
+                $this->error($exception->getMessage());
+
+                return self::FAILURE;
+            }
+        } else {
+            foreach ($runner->runAll() as $result) {
+                $results[] = $result + ['mode' => 'offline'];
+            }
+        }
 
         $ok = true;
 
@@ -35,8 +80,13 @@ final class AiEvaluateCommand extends Command
             $payload = json_encode(
                 [
                     'ai_enabled' => (bool) config('ai.enabled', false),
-                    'provider' => 'evaluation-provider (in-process)',
+                    'mode' => $live ? 'live' : 'offline',
+                    'provider' => $live
+                        ? $liveRunner?->providerName()
+                        : 'evaluation-provider (in-process)',
+                    'model' => $live ? $liveRunner?->model() : null,
                     'ok' => $ok,
+                    'usage' => $live ? $liveRunner?->usage() : null,
                     'results' => $results,
                 ],
                 JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
@@ -47,16 +97,25 @@ final class AiEvaluateCommand extends Command
             return $ok ? self::SUCCESS : self::FAILURE;
         }
 
-        $this->line(sprintf(
-            'AI evaluation — AI_ENABLED=%s; deterministic in-process provider; no network calls.',
-            (bool) config('ai.enabled', false) ? 'true' : 'false',
-        ));
+        if ($live) {
+            $this->line(sprintf(
+                'AI evaluation — live provider=%s model=%s; AI_ENABLED forced true for this process only.',
+                $liveRunner?->providerName() ?? 'unknown',
+                $liveRunner?->model() ?? 'unknown',
+            ));
+        } else {
+            $this->line(sprintf(
+                'AI evaluation — AI_ENABLED=%s; deterministic in-process provider; no network calls.',
+                (bool) config('ai.enabled', false) ? 'true' : 'false',
+            ));
+        }
 
         $rows = [];
 
         foreach ($results as $result) {
             $rows[] = [
                 $result['suite'],
+                $result['mode'] ?? 'offline',
                 $result['total'],
                 $result['passed'],
                 number_format($result['rate'] * 100, 1).'%',
@@ -65,27 +124,42 @@ final class AiEvaluateCommand extends Command
             ];
         }
 
-        $this->table(['Suite', 'Total', 'Passed', 'Rate', 'Threshold', 'Result'], $rows);
+        $this->table(['Suite', 'Mode', 'Total', 'Passed', 'Rate', 'Threshold', 'Result'], $rows);
 
         foreach ($results as $result) {
-            if ($result['ok'] || $result['failures'] === []) {
+            if ($result['failures'] === []) {
                 continue;
             }
 
-            $this->warn($result['suite'].' failures:');
+            $this->warn($result['suite'].' failures ('.$result['passed'].'/'.$result['total'].'):');
 
             foreach ($result['failures'] as $failure) {
                 $this->line('  - '.$failure);
             }
         }
 
+        if ($live && $liveRunner !== null) {
+            $usage = $liveRunner->usage();
+
+            $this->line(sprintf(
+                'Provider calls: %d (input %d / output %d tokens, avg %d ms, retries %d).',
+                $usage['calls'],
+                $usage['input_tokens'],
+                $usage['output_tokens'],
+                $usage['avg_latency_ms'],
+                $usage['retries'],
+            ));
+        }
+
         if ($ok) {
-            $this->info('All six suites meet their threshold.');
+            $this->info('All suites meet their threshold.');
         } else {
             $this->error('At least one suite is below its threshold.');
         }
 
-        $this->line('Scope: gateway guards with synthetic fixtures. No live provider is configured; AI remains disabled.');
+        $this->line($live
+            ? 'Scope: injection, grounding and safety hit the real provider; leakage, scope and refusal are decided before any call.'
+            : 'Scope: gateway guards with synthetic fixtures. No live provider is configured; AI remains disabled.');
 
         return $ok ? self::SUCCESS : self::FAILURE;
     }
