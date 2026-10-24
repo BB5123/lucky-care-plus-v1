@@ -13,8 +13,11 @@ use Carbon\CarbonInterface;
  * (N-01 / AIG-009).
  *
  * `requestText` is the user's own request (e.g. "ยาลดความดันควรเพิ่มไหม").
- * It is used only by the intake classifier and is never placed in the
- * provider envelope.
+ * For the summary/draft purposes it is used only by the intake classifier and
+ * is never placed in the provider envelope. The knowledge purpose is the
+ * exception: the question is the query, so it is placed in an
+ * `<untrusted_record>` block (never the system prompt) and passes the
+ * injection guard before the provider sees it.
  */
 final class GatewayRequest
 {

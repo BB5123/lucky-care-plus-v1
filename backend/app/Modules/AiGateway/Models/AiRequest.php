@@ -32,6 +32,8 @@ class AiRequest extends Model
 
     public const PURPOSE_OCR = 'ocr';
 
+    public const PURPOSE_KNOWLEDGE = 'knowledge';
+
     protected $table = 'ai_requests';
 
     protected $keyType = 'string';

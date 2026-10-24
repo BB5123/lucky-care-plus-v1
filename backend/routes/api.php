@@ -6,6 +6,7 @@ use App\Modules\Accounts\Http\Controllers\OtpController;
 use App\Modules\Accounts\Http\Controllers\PinController;
 use App\Modules\AiGateway\Http\Controllers\AiExtractionController;
 use App\Modules\AiGateway\Http\Controllers\AiSummaryController;
+use App\Modules\AiGateway\Knowledge\Http\Controllers\KnowledgeAnswerController;
 use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskController;
@@ -313,6 +314,20 @@ Route::prefix('v1')->group(function (): void {
             'throttle:60,1,ai-extractions',
             'workspace.context',
             'authorize.permission:ai.health_context.use',
+        ]);
+
+    // -- Health knowledge answers (TASK G4-KB) ------------------------------
+    // Public health information, not patient data: the corpus is a read-only
+    // SQLite store and no health row is read. The route still reuses the
+    // frozen `ai.report.create` permission and the `ai_processing` consent
+    // gate, and the gateway refuses diagnosis/prescribing questions before any
+    // provider call.
+    Route::post('/workspaces/{workspace}/profiles/{profile}/ai/knowledge-answers', KnowledgeAnswerController::class)
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,ai-knowledge',
+            'workspace.context',
+            'authorize.permission:ai.report.create',
         ]);
 
     // -- Doctor Brief snapshots (Phase 2.3) ---------------------------------
