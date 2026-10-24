@@ -1,0 +1,72 @@
+<section class="card mb-4" aria-labelledby="doctor-brief-title" data-testid="doctor-brief">
+  <h2 id="doctor-brief-title" class="text-lg">สรุปสำหรับแพทย์</h2>
+  <p class="mt-1 text-sm text-ink-muted">
+    รวมข้อมูลสุขภาพช่วง 30 วันล่าสุดเป็นสรุปเดียว แล้วส่งลิงก์ให้แพทย์เปิดดูได้ —
+    การสร้างสรุปกับการแชร์เป็นคนละสิทธิ์
+  </p>
+
+  <button
+    class="btn btn-secondary mt-3"
+    type="button"
+    [disabled]="creating()"
+    (click)="create()"
+    data-testid="doctor-brief-create"
+  >
+    {{ creating() ? 'กำลังสร้าง...' : 'สร้างสรุป' }}
+  </button>
+
+  @if (error(); as message) {
+    <div class="alert alert-error mt-3" role="alert">{{ message }}</div>
+  }
+
+  @if (report(); as result) {
+    <div class="mt-3 border-t border-line pt-3" data-testid="doctor-brief-preview">
+      <p class="text-sm">
+        ช่วง {{ result.periodFrom }} – {{ result.periodTo }}
+        @if (result.payload?.profile?.name) {
+          · {{ result.payload?.profile?.name }}
+        }
+      </p>
+
+      @if (result.payload; as payload) {
+        <ul class="mt-2 space-y-1 text-xs text-ink-muted">
+          <li>โรคประจำตัว {{ payload.conditions.length }} รายการ</li>
+          <li>แพ้ยา {{ payload.allergies.length }} รายการ</li>
+          <li>ยา {{ payload.medications.length }} รายการ</li>
+          <li>ค่าที่วัด {{ payload.vitals.length }} ชนิด</li>
+          <li>นัดหมาย {{ payload.appointments.length }} รายการ</li>
+          <li>งานที่ยังเปิดอยู่ {{ payload.careTasksOpen ?? 0 }} งาน</li>
+        </ul>
+      }
+
+      <button
+        class="btn btn-secondary mt-3"
+        type="button"
+        [disabled]="sharing()"
+        (click)="createShare()"
+        data-testid="doctor-brief-share"
+      >
+        {{ sharing() ? 'กำลังสร้างลิงก์...' : 'แชร์ให้แพทย์ 30 นาที' }}
+      </button>
+
+      @if (shareError(); as message) {
+        <div class="alert alert-error mt-3" role="alert">{{ message }}</div>
+      }
+
+      @if (share(); as link) {
+        <div class="mt-3 rounded-lg border border-line bg-surface-muted p-3" data-testid="doctor-brief-link">
+          <p class="text-xs text-ink-muted">ลิงก์สำหรับแพทย์ · หมดอายุ {{ link.expiresAt }}</p>
+          <a
+            class="mt-1 block break-all text-xs text-info underline"
+            [href]="link.url"
+            target="_blank"
+            rel="noopener noreferrer"
+          >{{ link.url }}</a>
+          <button class="btn btn-secondary mt-2" type="button" (click)="copy()">
+            {{ copied() ? 'คัดลอกแล้ว' : 'คัดลอกลิงก์' }}
+          </button>
+        </div>
+      }
+    </div>
+  }
+</section>
