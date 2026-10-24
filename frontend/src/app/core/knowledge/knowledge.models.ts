@@ -70,7 +70,8 @@ function readSources(value: unknown): readonly KnowledgeSource[] | null {
     }
 
     const publishedAt = typeof item['published_at'] === 'string' ? item['published_at'] : null;
-    const reviewStatus = typeof item['review_status'] === 'string' ? item['review_status'] : 'unreviewed';
+    const reviewStatus =
+      typeof item['review_status'] === 'string' ? item['review_status'] : 'unreviewed';
 
     sources.push({
       label,

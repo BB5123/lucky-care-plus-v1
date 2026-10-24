@@ -13,7 +13,11 @@ import { AiSummary } from '../../../core/ai/ai-summary.models';
 import { AiSummaryService } from '../../../core/ai/ai-summary.service';
 
 function problemCode(error: unknown): string | null {
-  if (!(error instanceof HttpErrorResponse) || typeof error.error !== 'object' || error.error === null) {
+  if (
+    !(error instanceof HttpErrorResponse) ||
+    typeof error.error !== 'object' ||
+    error.error === null
+  ) {
     return null;
   }
 

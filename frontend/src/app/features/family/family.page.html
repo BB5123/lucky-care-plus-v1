@@ -25,6 +25,10 @@
       </p>
     </div>
   } @else if (forbidden()) {
+    @if (exportProfileId(); as profileId) {
+      <app-data-export-card [profileId]="profileId" />
+    }
+
     <div class="card" role="status" data-testid="family-forbidden">
       <h2 class="text-xl">คุณไม่มีสิทธิ์ดูรายชื่อสมาชิกในครอบครัวนี้</h2>
       <p class="mt-2 text-sm text-ink-muted">
@@ -45,6 +49,10 @@
       <button class="btn btn-secondary mt-3" type="button" (click)="retry()">ลองอีกครั้ง</button>
     </div>
   } @else {
+    @if (exportProfileId(); as profileId) {
+      <app-data-export-card [profileId]="profileId" />
+    }
+
     <section class="card" aria-labelledby="family-members-heading">
       <header class="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="family-members-heading" class="text-xl">สมาชิกในครอบครัว</h2>
