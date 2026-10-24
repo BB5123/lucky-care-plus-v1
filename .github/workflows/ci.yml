@@ -132,8 +132,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check source encoding (Thai text)
-        run: npm run check:encoding
+      - name: Check source encoding (Thai text and mojibake)
+        run: |
+          npm run check:mojibake
+          npm run check:encoding
 
       - name: Run unit tests
         run: npm test

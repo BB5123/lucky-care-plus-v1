@@ -7,6 +7,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "node scripts/test.mjs",
+    "check:mojibake": "node scripts/check-mojibake.mjs",
     "check:encoding": "node scripts/check-encoding.mjs"
   },
   "private": true,

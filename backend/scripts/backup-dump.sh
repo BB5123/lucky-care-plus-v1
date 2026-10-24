@@ -61,7 +61,7 @@ esac
 # as bare identifiers first. psql does NOT expand `:'var'` inside `-c` (verified
 # against PostgreSQL 16 in this repository: it sends the colon to the server and
 # fails with `syntax error at or near ":"`), so a `-v` variable is not an option
-# here โ€” validation plus single quotes is the safe form.
+# here - validation plus single quotes is the safe form.
 require_identifier() {
   case "$1" in
     "") fail "empty identifier" ;;
