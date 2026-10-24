@@ -1,0 +1,117 @@
+<main class="mx-auto w-full max-w-2xl p-4">
+  <header class="mb-4 border-b border-line pb-3">
+    <h1 class="text-2xl">สรุปสำหรับแพทย์</h1>
+    <p class="mt-1 text-sm text-ink-muted">
+      เอกสารนี้สร้างจากข้อมูลที่เจ้าของข้อมูลบันทึกไว้ และแชร์ด้วยลิงก์ชั่วคราว
+    </p>
+  </header>
+
+  @if (loading()) {
+    <p class="text-sm text-ink-muted" role="status">กำลังเปิดสรุปสำหรับแพทย์...</p>
+  } @else if (error(); as message) {
+    <div class="alert alert-error" role="alert">
+      <p>{{ message }}</p>
+      <p class="mt-2 text-xs">หากเป็นผู้ป่วย กรุณาติดต่อเจ้าของข้อมูลเพื่อขอลิงก์ใหม่</p>
+    </div>
+  } @else if (payload(); as brief) {
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <p class="text-sm text-ink-muted">
+        @if (brief.periodFrom && brief.periodTo) {
+          ช่วงข้อมูล {{ brief.periodFrom }} – {{ brief.periodTo }}
+        }
+        @if (brief.generatedAt) {
+          · สร้างเมื่อ {{ brief.generatedAt }}
+        }
+      </p>
+      <button class="btn btn-secondary" type="button" (click)="print()">พิมพ์</button>
+    </div>
+
+    @if (brief.profile; as profile) {
+      <section class="mt-4 card">
+        <h2 class="text-lg">ข้อมูลพื้นฐาน</h2>
+        <p class="mt-1 text-sm">
+          {{ profile.name || 'ไม่ระบุชื่อ' }}
+          @if (profile.birthYear) {
+            · เกิดปี {{ profile.birthYear }}
+          }
+        </p>
+      </section>
+    }
+
+    @if (brief.conditions.length > 0) {
+      <section class="mt-3 card">
+        <h2 class="text-lg">โรคประจำตัว</h2>
+        <ul class="mt-1 list-disc pl-5 text-sm">
+          @for (condition of brief.conditions; track condition.name) {
+            <li>
+              {{ condition.name }}
+              @if (condition.diagnosedYear) {
+                (วินิจฉัยปี {{ condition.diagnosedYear }})
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (brief.allergies.length > 0) {
+      <section class="mt-3 card">
+        <h2 class="text-lg">การแพ้ยา</h2>
+        <ul class="mt-1 list-disc pl-5 text-sm">
+          @for (allergy of brief.allergies; track allergy.substance) {
+            <li>{{ allergy.substance }} — {{ allergy.severity }}</li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (brief.medications.length > 0) {
+      <section class="mt-3 card">
+        <h2 class="text-lg">ยาที่ใช้อยู่</h2>
+        <ul class="mt-1 list-disc pl-5 text-sm">
+          @for (medication of brief.medications; track medication.name) {
+            <li>
+              {{ medication.name }}
+              @if (medication.schedule.length > 0) {
+                — {{ medication.schedule.join(', ') }}
+              }
+            </li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (brief.vitals.length > 0) {
+      <section class="mt-3 card">
+        <h2 class="text-lg">ค่าที่วัด</h2>
+        <ul class="mt-1 list-disc pl-5 text-sm">
+          @for (vital of brief.vitals; track vital.type) {
+            <li>{{ vital.type }} — {{ vital.count }} ครั้ง</li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (brief.appointments.length > 0) {
+      <section class="mt-3 card">
+        <h2 class="text-lg">การนัดหมาย</h2>
+        <ul class="mt-1 list-disc pl-5 text-sm">
+          @for (appointment of brief.appointments; track $index) {
+            <li>{{ appointment.status }}</li>
+          }
+        </ul>
+      </section>
+    }
+
+    @if (brief.careTasksOpen !== null) {
+      <section class="mt-3 card">
+        <h2 class="text-lg">งานที่ยังเปิดอยู่</h2>
+        <p class="mt-1 text-sm">{{ brief.careTasksOpen }} งาน</p>
+      </section>
+    }
+
+    <p class="mt-4 text-xs text-ink-muted">
+      เอกสารนี้ไม่ใช่การวินิจฉัย และลิงก์จะหมดอายุตามเวลาที่กำหนด
+    </p>
+  }
+</main>

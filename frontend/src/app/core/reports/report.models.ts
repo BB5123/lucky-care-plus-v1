@@ -11,6 +11,9 @@ export interface HealthReportProfile {
 }
 
 export interface HealthReportPayload {
+  readonly generatedAt: string | null;
+  readonly periodFrom: string | null;
+  readonly periodTo: string | null;
   readonly sections: readonly string[];
   readonly profile: HealthReportProfile | null;
   readonly conditions: ReadonlyArray<{ readonly name: string; readonly diagnosedYear: number | null }>;
@@ -52,8 +55,8 @@ function readArray(value: unknown): readonly Record<string, unknown>[] {
   return Array.isArray(value) ? value.filter(isRecord) : [];
 }
 
-function parsePayload(value: unknown): HealthReportPayload | null {
-  if (!isRecord(value)) {
+function parseBriefPayload(value: unknown): HealthReportPayload | null {
+  if (!isRecord(value) || !Array.isArray(value['sections'])) {
     return null;
   }
 
@@ -69,6 +72,9 @@ function parsePayload(value: unknown): HealthReportPayload | null {
     : [];
 
   return {
+    generatedAt: readString(value['generated_at']),
+    periodFrom: readString(value['period_from']),
+    periodTo: readString(value['period_to']),
     sections,
     profile,
     conditions: readArray(value['conditions']).map((item) => ({
@@ -113,9 +119,11 @@ export function parseHealthReport(value: unknown): HealthReport | null {
     periodFrom: readString(value['period_from']),
     periodTo: readString(value['period_to']),
     createdAt: readString(value['created_at']),
-    payload: parsePayload(value['payload']),
+    payload: parseBriefPayload(value['payload']),
   };
 }
+
+export { parseBriefPayload };
 
 export function parseReportShare(value: unknown): ReportShare | null {
   if (!isRecord(value)) {
