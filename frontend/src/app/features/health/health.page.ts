@@ -18,6 +18,7 @@ import { WorkspaceService } from '../../core/workspace/workspace.service';
 import { AllergyList } from './allergies/allergy-list';
 import { AiSummaryPanel } from './ai-summary/ai-summary-panel';
 import { ConditionList } from './conditions/condition-list';
+import { DoctorBrief } from './doctor-brief/doctor-brief';
 import { KnowledgeAsk } from './knowledge-ask/knowledge-ask';
 import { MeasurementList } from './measurements/measurement-list';
 import { MedicationPlanList } from '../medication/medication-plan-list';
@@ -38,6 +39,7 @@ interface HealthTabDefinition {
     MedicationPlanList,
     AiSummaryPanel,
     KnowledgeAsk,
+    DoctorBrief,
   ],
   templateUrl: './health.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
