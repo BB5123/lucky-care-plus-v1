@@ -187,6 +187,8 @@ export interface EvidenceWriteBody {
   readonly value?: number;
   readonly unit?: string;
   readonly note?: string;
+  /** Required for `type=photo`; the server re-scopes it to the task profile. */
+  readonly document_id?: string;
 }
 
 export interface EvidenceMetricOption {

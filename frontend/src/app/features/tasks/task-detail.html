@@ -407,6 +407,7 @@
 
           <app-evidence-form
             [taskId]="detail.id"
+            [profileId]="detail.profile_id"
             [version]="detail.version"
             (saved)="onEvidenceSaved()"
             (reloadRequested)="reload()"
