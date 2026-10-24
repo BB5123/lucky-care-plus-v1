@@ -134,6 +134,9 @@ return [
         'appointments',
         'documents',
         'tasks',
+        // CR-004 / baseline v1.3.0: evidence reads have their own scope so a
+        // `tasks:read` grant cannot read photos, values or notes by itself.
+        'task_evidence',
         'timeline',
         'ai_context',
         'mental_health',

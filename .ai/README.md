@@ -71,13 +71,14 @@
 | — | [`TRACEABILITY.md`](TRACEABILITY.md) | แหล่งที่มา, ดัชนี Rule ID, open questions, baseline delta | ✅ |
 | — | [`changes/CR-001`](changes/CR-001-permission-delta-v1.1.md) | Change Record: permission delta v1.1 (Wave 1 อนุมัติแล้ว 4 ID) | ✅ |
 | — | [`changes/CR-003`](changes/CR-003-permission-delta-v1.2.md) | Change Record: permission delta v1.2 (task templates + escalation, 6 ID) | ✅ |
+| — | [`changes/CR-004`](changes/CR-004-task-evidence-scope-v1.3.md) | Change Record: evidence-read scope `task_evidence` (baseline v1.3.0) | ✅ |
 
 ---
 
 ## 4. ภาคผนวก Normative (อ้างอิง ไม่คัดลอก)
 
 เอกสารใน `docs/baseline-v1.0.0/` **เป็นส่วนหนึ่งของ Blueprint นี้** ในฐานะภาคผนวกที่มีผลบังคับ
-**เวอร์ชันปัจจุบัน: `v1.2.0`** (amend โดย [CR-001](changes/CR-001-permission-delta-v1.1.md), 2026-10-22 และ [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24) — ชื่อโฟลเดอร์คงเดิมเพื่อไม่ให้ลิงก์เสีย:
+**เวอร์ชันปัจจุบัน: `v1.3.0`** (amend โดย [CR-001](changes/CR-001-permission-delta-v1.1.md), 2026-10-22, [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24 และ [CR-004](changes/CR-004-task-evidence-scope-v1.3.md), 2026-10-24) — ชื่อโฟลเดอร์คงเดิมเพื่อไม่ให้ลิงก์เสีย:
 
 | ไฟล์ | สถานะใน Blueprint | ใช้เมื่อ |
 |---|---|---|

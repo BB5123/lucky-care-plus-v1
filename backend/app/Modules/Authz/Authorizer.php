@@ -80,7 +80,8 @@ final class Authorizer
         'care_task.complete' => ['scope' => 'tasks', 'action' => 'update'],
         'care_task.create' => ['scope' => 'tasks', 'action' => 'create'],
         'care_task.evidence.create' => ['scope' => 'tasks', 'action' => 'create'],
-        'care_task.evidence.read' => ['scope' => 'tasks', 'action' => 'read'],
+        // CR-004: reading evidence is not implied by task-read authority.
+        'care_task.evidence.read' => ['scope' => 'task_evidence', 'action' => 'read'],
         'care_task.read' => ['scope' => 'tasks', 'action' => 'read'],
         'care_task.reopen' => ['scope' => 'tasks', 'action' => 'update'],
         'care_task.start' => ['scope' => 'tasks', 'action' => 'update'],

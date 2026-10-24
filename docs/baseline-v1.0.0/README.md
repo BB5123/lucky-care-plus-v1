@@ -1,23 +1,24 @@
 # Family Health CRM — Authorization Foundation
 
 **Baseline:** `AUTH-BASELINE-001`  
-**Version:** `1.2.0`  
+**Version:** `1.3.0`  
 **Status:** Frozen for implementation  
 **Effective date:** 2026-10-18  
-**Amended:** 2026-10-22 (`CR-001`), 2026-10-24 (`CR-003`)
+**Amended:** 2026-10-22 (`CR-001`), 2026-10-24 (`CR-003`, `CR-004`)
 
-> **Directory note:** this set lives in `docs/baseline-v1.0.0/` for path stability. Its content is **v1.2.0**; the directory name is historical and is not renamed to avoid breaking references.
+> **Directory note:** this set lives in `docs/baseline-v1.0.0/` for path stability. Its content is **v1.3.0**; the directory name is historical and is not renamed to avoid breaking references.
 
 ## Documents
 
 1. `PERMISSION_CATALOG.md` — canonical action/permission identifiers.
 2. `DATA_ACCESS_MATRIX.md` — role, action, resource, and scope policy templates.
 3. `AUTHORIZATION_TEST_PLAN.md` — minimum automated test scenarios and release gates.
-4. `AUTHORIZATION_BASELINE.md` — frozen decision log (`ABD-001`…`ABD-016`) and change history.
+4. `AUTHORIZATION_BASELINE.md` — frozen decision log (`ABD-001`…`ABD-018`) and change history.
 
 Change records:
 - v1.1.0: [`../../.ai/changes/CR-001-permission-delta-v1.1.md`](../../.ai/changes/CR-001-permission-delta-v1.1.md)
 - v1.2.0: [`../../.ai/changes/CR-003-permission-delta-v1.2.md`](../../.ai/changes/CR-003-permission-delta-v1.2.md)
+- v1.3.0: [`../../.ai/changes/CR-004-task-evidence-scope-v1.3.md`](../../.ai/changes/CR-004-task-evidence-scope-v1.3.md)
 
 ## Frozen v1.0.0 decisions
 
@@ -54,6 +55,18 @@ Additive only — **no existing permission, role, matrix row, or test was remove
 - **Routes moved off borrowed IDs:** templates no longer use `care_task.read` / `care_task.create`;
   escalation no longer uses `workspace.read` / `workspace.update`
 
+## v1.3.0 amendment (2026-10-24)
+
+Narrowing only — **no existing permission, role, matrix row, or test was removed, renamed, or weakened.**
+
+- **+1 resource scope:** `task_evidence` — evidence reads (photos, measured values, notes) now need
+  `task_evidence:read` instead of being covered by `tasks:read`
+- **Re-mapped:** `care_task.evidence.read` → `task_evidence:read`. `care_task.evidence.create` stays on
+  `tasks:create` because attaching proof is part of doing the task
+- **+ `ABD-018`** — evidence reads are not implied by task-read authority or task assignment
+- **No permission count change:** 99 IDs, 8 roles and all Matrix cells unchanged; existing grants must add
+  `task_evidence:read` before they can read evidence (fail closed)
+
 ## Version history
 
 | Version | Date | Summary | Change record |
@@ -61,6 +74,7 @@ Additive only — **no existing permission, role, matrix row, or test was remove
 | `1.0.0` | 2026-10-18 | Initial frozen baseline (`ABD-001`...`ABD-015`, 89 permissions) | — |
 | `1.1.0` | 2026-10-22 | +4 notification/self-audit permissions, Matrix E, `ABD-016` (89 → 93) | `CR-001` |
 | `1.2.0` | 2026-10-24 | +6 task-template/escalation permissions, six Matrix C rows, `ABD-017` (93 → 99) | `CR-003` |
+| `1.3.0` | 2026-10-24 | +`task_evidence` scope, evidence-read re-map, `ABD-018` (99 permissions unchanged) | `CR-004` |
 
 ## Change control
 
