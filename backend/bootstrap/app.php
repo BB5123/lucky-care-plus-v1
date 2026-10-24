@@ -44,6 +44,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 'validation',
                 'Validation failed',
                 'ข้อมูลที่ส่งมาไม่ถูกต้อง',
+                errors: $e->errors(),
             );
         });
 

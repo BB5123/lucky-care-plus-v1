@@ -1,0 +1,137 @@
+<form
+  class="card mb-4"
+  data-testid="measurement-form"
+  [formGroup]="form"
+  (ngSubmit)="submit()"
+  novalidate
+>
+  <header class="mb-4">
+    <h2 class="text-xl">เพิ่มค่าที่วัด</h2>
+    <p class="mt-1 text-sm text-ink-muted">
+      กรอกค่าที่วัดได้จริง ระบบจะบันทึกพร้อมชื่อผู้บันทึกและเวลาให้อัตโนมัติ
+    </p>
+  </header>
+
+  @if (formError(); as message) {
+    <div class="alert alert-error mb-4" role="alert" data-testid="measurement-form-error">
+      {{ message }}
+    </div>
+  }
+
+  <div class="field">
+    <label class="field-label" for="measurement-type">ประเภทค่าที่วัด</label>
+    <select
+      id="measurement-type"
+      class="field-input"
+      formControlName="type"
+      (change)="onTypeChange($event)"
+    >
+      @for (option of typeOptions; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+      }
+    </select>
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="measurement-value">{{ primaryLabel() }}</label>
+    <input
+      id="measurement-value"
+      class="field-input tabular-nums"
+      type="number"
+      inputmode="decimal"
+      step="any"
+      formControlName="value"
+      [attr.aria-invalid]="errorFor('value') === null ? null : 'true'"
+      [attr.aria-describedby]="
+        errorFor('value') === null
+          ? 'measurement-value-hint'
+          : 'measurement-value-hint measurement-value-error'
+      "
+    />
+    <p id="measurement-value-hint" class="field-hint">{{ primaryHint() }}</p>
+    @if (errorFor('value'); as error) {
+      <p id="measurement-value-error" class="field-error" data-field-error="value">{{ error }}</p>
+    }
+  </div>
+
+  @if (selectedType() === 'blood_pressure') {
+    <div class="field">
+      <label class="field-label" for="measurement-secondary">ค่าล่าง (diastolic)</label>
+      <input
+        id="measurement-secondary"
+        class="field-input tabular-nums"
+        type="number"
+        inputmode="decimal"
+        step="any"
+        formControlName="secondary_value"
+        [attr.aria-invalid]="errorFor('secondary_value') === null ? null : 'true'"
+        [attr.aria-describedby]="
+          errorFor('secondary_value') === null
+            ? 'measurement-secondary-hint'
+            : 'measurement-secondary-hint measurement-secondary-error'
+        "
+      />
+      <p id="measurement-secondary-hint" class="field-hint">{{ secondaryHint() }}</p>
+      @if (errorFor('secondary_value'); as error) {
+        <p id="measurement-secondary-error" class="field-error" data-field-error="secondary_value">
+          {{ error }}
+        </p>
+      }
+    </div>
+  }
+
+  @if (selectedType() === 'blood_glucose') {
+    <div class="field">
+      <label class="field-label" for="measurement-context">ช่วงเวลาที่วัด</label>
+      <select
+        id="measurement-context"
+        class="field-input"
+        formControlName="context"
+        [attr.aria-invalid]="errorFor('context') === null ? null : 'true'"
+        [attr.aria-describedby]="
+          errorFor('context') === null
+            ? 'measurement-context-hint'
+            : 'measurement-context-hint measurement-context-error'
+        "
+      >
+        <option value="">เลือกช่วงเวลา</option>
+        @for (option of contextOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+      <p id="measurement-context-hint" class="field-hint">จําเป็นสําหรับการแปลผลน้ําตาลในเลือด</p>
+      @if (errorFor('context'); as error) {
+        <p id="measurement-context-error" class="field-error" data-field-error="context">
+          {{ error }}
+        </p>
+      }
+    </div>
+  }
+
+  <div class="field">
+    <label class="field-label" for="measurement-note">บันทึกเพิ่มเติม (ไม่บังคับ)</label>
+    <textarea
+      id="measurement-note"
+      class="field-input min-h-24"
+      rows="3"
+      formControlName="note"
+      [attr.aria-invalid]="errorFor('note') === null ? null : 'true'"
+      [attr.aria-describedby]="errorFor('note') === null ? null : 'measurement-note-error'"
+    ></textarea>
+    @if (errorFor('note'); as error) {
+      <p id="measurement-note-error" class="field-error" data-field-error="note">{{ error }}</p>
+    }
+  </div>
+
+  <div class="flex flex-wrap gap-2">
+    <button class="btn btn-primary" type="submit" [disabled]="submitting()">
+      @if (submitting()) {
+        <span class="spinner" aria-hidden="true"></span>
+        <span>กําลังบันทึก...</span>
+      } @else {
+        <span>บันทึกค่าที่วัด</span>
+      }
+    </button>
+    <button class="btn btn-secondary" type="button" (click)="cancelled.emit()">ยกเลิก</button>
+  </div>
+</form>

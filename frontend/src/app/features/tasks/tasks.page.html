@@ -1,0 +1,23 @@
+<section class="mx-auto w-full max-w-2xl">
+  @if (pageLoading()) {
+    <div class="flex flex-col gap-3" aria-busy="true">
+      <p class="sr-only" role="status">กําลังโหลดงานดูแล</p>
+      <div class="h-12 animate-pulse rounded-lg bg-surface-muted"></div>
+      <div class="h-32 animate-pulse rounded-lg bg-surface-muted"></div>
+    </div>
+  } @else if (pageError(); as message) {
+    <div class="alert alert-error" role="alert">
+      <p>{{ message }}</p>
+      <button class="btn btn-secondary mt-3" type="button" (click)="retry()">ลองอีกครั้ง</button>
+    </div>
+  } @else if (!hasWorkspace()) {
+    <div class="card" data-testid="tasks-no-workspace">
+      <h1 class="text-xl">ยังไม่มีครอบครัว</h1>
+      <p class="mt-2 text-sm text-ink-muted">
+        คุณยังไม่ได้รับคําเชิญให้เข้าร่วมครอบครัว กรุณารอการเชิญจากสมาชิกในครอบครัว
+      </p>
+    </div>
+  } @else if (workspaceId(); as id) {
+    <app-task-list [workspaceId]="id" />
+  }
+</section>

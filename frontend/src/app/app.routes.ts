@@ -41,18 +41,34 @@ export const routes: Routes = [
         path: 'health',
         title: 'คลังสุขภาพ | LuckyCare+',
         data: { title: 'คลังสุขภาพ' },
-        loadComponent: () =>
-          import('./features/placeholder/under-construction.page').then(
-            (m) => m.UnderConstructionPage,
-          ),
+        loadComponent: () => import('./features/health/health.page').then((m) => m.HealthPage),
       },
       {
         path: 'tasks',
         title: 'งานดูแล | LuckyCare+',
         data: { title: 'งานดูแล' },
+        loadComponent: () => import('./features/tasks/tasks.page').then((m) => m.TasksPage),
+      },
+      {
+        path: 'tasks/:taskId',
+        title: 'รายละเอียดงาน | LuckyCare+',
+        data: { title: 'รายละเอียดงาน' },
+        loadComponent: () => import('./features/tasks/task-detail').then((m) => m.TaskDetail),
+      },
+      {
+        path: 'timeline',
+        title: 'ไทม์ไลน์ | LuckyCare+',
+        data: { title: 'ไทม์ไลน์' },
         loadComponent: () =>
-          import('./features/placeholder/under-construction.page').then(
-            (m) => m.UnderConstructionPage,
+          import('./features/timeline/timeline.page').then((m) => m.TimelinePage),
+      },
+      {
+        path: 'notifications',
+        title: 'การแจ้งเตือน | LuckyCare+',
+        data: { title: 'การแจ้งเตือน' },
+        loadComponent: () =>
+          import('./features/notifications/notification-centre.page').then(
+            (m) => m.NotificationCentrePage,
           ),
       },
       {
@@ -60,8 +76,15 @@ export const routes: Routes = [
         title: 'นัดหมาย | LuckyCare+',
         data: { title: 'นัดหมาย' },
         loadComponent: () =>
-          import('./features/placeholder/under-construction.page').then(
-            (m) => m.UnderConstructionPage,
+          import('./features/appointments/appointments.page').then((m) => m.AppointmentsPage),
+      },
+      {
+        path: 'appointments/:appointmentId',
+        title: 'รายละเอียดนัดหมาย | LuckyCare+',
+        data: { title: 'รายละเอียดนัดหมาย' },
+        loadComponent: () =>
+          import('./features/appointments/appointment-detail.page').then(
+            (m) => m.AppointmentDetailPage,
           ),
       },
       {

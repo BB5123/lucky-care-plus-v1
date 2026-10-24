@@ -1,0 +1,122 @@
+<form
+  class="card mb-4"
+  data-testid="record-form"
+  [formGroup]="form"
+  (ngSubmit)="submit()"
+  novalidate
+>
+  <header class="mb-4">
+    <h2 class="text-xl">บันทึกการรับยา</h2>
+    <p class="mt-1 text-sm text-ink-muted">ยืนยันมื้อที่รับแล้ว หรือระบุเหตุผลเมื่อข้ามมื้อนี้</p>
+  </header>
+
+  @if (plans().length === 0) {
+    <div class="alert alert-info mb-4" role="status" data-testid="record-no-plans">
+      ยังไม่มีแผนยาที่ใช้งานอยู่ กรุณาเพิ่มแผนยาก่อนบันทึกการรับยา
+    </div>
+  }
+
+  @if (formError(); as message) {
+    <div class="alert alert-error mb-4" role="alert" data-testid="record-error">
+      {{ message }}
+    </div>
+  }
+
+  <div class="field">
+    <label class="field-label" for="record-plan">แผนยา</label>
+    <select
+      id="record-plan"
+      class="field-input"
+      formControlName="plan_id"
+      data-testid="record-plan"
+    >
+      <option value="">เลือกแผนยา</option>
+      @for (plan of plans(); track plan.id) {
+        <option [value]="plan.id">
+          {{ plan.name }}{{ plan.dosage ? ' · ' + plan.dosage : '' }}
+        </option>
+      }
+    </select>
+    @if (errorFor('plan_id'); as error) {
+      <p class="field-error" data-field-error="plan_id">{{ error }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="record-status">สถานะ</label>
+    <select
+      id="record-status"
+      class="field-input"
+      formControlName="status"
+      data-testid="record-status"
+    >
+      @for (option of statusOptions; track option.value) {
+        <option [value]="option.value">{{ option.label }}</option>
+      }
+    </select>
+    @if (errorFor('status'); as error) {
+      <p class="field-error" data-field-error="status">{{ error }}</p>
+    }
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="record-note">
+      บันทึก
+      @if (isSkipped()) {
+        <span class="text-danger">(จําเป็นเมื่อข้ามมื้อ)</span>
+      } @else {
+        <span class="text-ink-muted">(ไม่บังคับ)</span>
+      }
+    </label>
+    <textarea
+      id="record-note"
+      class="field-input min-h-24"
+      rows="3"
+      formControlName="note"
+      data-testid="record-note"
+      [attr.aria-invalid]="errorFor('note') === null ? null : 'true'"
+    ></textarea>
+    @if (errorFor('note'); as error) {
+      <p class="field-error" data-field-error="note">{{ error }}</p>
+    }
+    @if (isSkipped()) {
+      <p class="field-hint">เช่น รู้สึกคลื่นไส้หลังอาหารเช้า</p>
+    }
+  </div>
+
+  <div class="field">
+    <label class="field-label" for="record-scheduled-for">มื้อที่กําหนด (ไม่บังคับ)</label>
+    <input
+      id="record-scheduled-for"
+      class="field-input tabular-nums"
+      type="datetime-local"
+      formControlName="scheduled_for"
+      data-testid="record-scheduled-for"
+    />
+    <p class="field-hint">ปล่อยว่างได้ หากบันทึกตามเวลาที่รับจริง</p>
+    @if (errorFor('scheduled_for'); as error) {
+      <p class="field-error" data-field-error="scheduled_for">{{ error }}</p>
+    }
+  </div>
+
+  <p class="alert alert-info mb-4" role="note" data-testid="record-self-reported">
+    {{ selfReportedNotice }}
+  </p>
+
+  <div class="flex flex-wrap gap-2">
+    <button
+      class="btn btn-primary"
+      type="submit"
+      data-testid="record-submit"
+      [disabled]="submitting() || plans().length === 0"
+    >
+      @if (submitting()) {
+        <span class="spinner" aria-hidden="true"></span>
+        <span>กําลังบันทึก...</span>
+      } @else {
+        <span>บันทึกการรับยา</span>
+      }
+    </button>
+    <button class="btn btn-secondary" type="button" (click)="cancelled.emit()">ยกเลิก</button>
+  </div>
+</form>

@@ -1,0 +1,418 @@
+<section class="mx-auto w-full max-w-2xl">
+  <a
+    class="mb-4 inline-flex min-h-12 items-center gap-1 text-sm text-info"
+    routerLink="/tasks"
+    data-testid="task-back"
+  >
+    <span aria-hidden="true">←</span>
+    <span>กลับไปหน้างานดูแล</span>
+  </a>
+
+  @if (announcement(); as message) {
+    <div class="alert alert-success mb-4" role="status" aria-live="polite">{{ message }}</div>
+  }
+
+  @if (loading() && task() === null) {
+    <div class="flex flex-col gap-3" aria-busy="true">
+      <p class="sr-only" role="status">กําลังโหลดรายละเอียดงาน</p>
+      <div class="h-12 animate-pulse rounded-lg bg-surface-muted"></div>
+      <div class="h-40 animate-pulse rounded-lg bg-surface-muted"></div>
+    </div>
+  } @else if (task() === null) {
+    <div class="alert alert-error" role="alert" data-testid="task-error">
+      <p>
+        @if (errorStatus() === 403 || errorStatus() === 404) {
+          ไม่พบงานนี้ หรือคุณไม่มีสิทธิ์เข้าถึง
+        } @else {
+          {{ error() ?? 'ไม่พบงานนี้' }}
+        }
+      </p>
+      <button class="btn btn-secondary mt-3" type="button" (click)="reload()">ลองอีกครั้ง</button>
+    </div>
+  } @else if (task(); as item) {
+    @if (error(); as message) {
+      <div class="alert alert-error mb-4" role="alert" data-testid="task-error">
+        {{ message }}
+      </div>
+    }
+
+    <article class="card" data-testid="task-detail" [attr.data-task-id]="item.id">
+      <header class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-xs text-ink-muted">{{ typeLabel(item) }}</p>
+          <h1 class="mt-1 text-2xl">{{ item.title }}</h1>
+          @if (item.profile_display_name; as name) {
+            <p class="mt-1 text-sm text-ink-muted">ผู้รับการดูแล: {{ name }}</p>
+          }
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="badge text-info" data-testid="task-detail-status">
+            {{ statusLabel(item) }}
+          </span>
+          @if (full(); as detail) {
+            <span class="badge text-ink-muted" data-testid="task-detail-tier">
+              {{ tierLabel(detail) }}
+            </span>
+          }
+          <span class="badge text-ink-muted" data-testid="task-detail-priority">
+            {{ priorityLabel(item) }}
+          </span>
+        </div>
+      </header>
+
+      @if (full(); as detail) {
+        @if (detail.description; as description) {
+          <p class="mt-4 text-sm text-ink" data-testid="task-description">{{ description }}</p>
+        }
+
+        <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <div>
+            <dt class="text-xs text-ink-muted">กําหนดส่ง</dt>
+            <dd class="tabular-nums">{{ dueLabel(detail) }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-ink-muted">เวลาเริ่มที่วางไว้</dt>
+            <dd class="tabular-nums">{{ dateTimeLabel(detail.scheduled_for) }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-ink-muted">เขตเวลา</dt>
+            <dd>{{ detail.timezone ?? 'ไม่ระบุ' }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-ink-muted">ผลลัพธ์</dt>
+            <dd data-testid="task-detail-outcome">{{ outcomeLabel(detail.outcome) }}</dd>
+          </div>
+          <div>
+            <dt class="text-xs text-ink-muted">การตรวจรับ</dt>
+            <dd data-testid="task-detail-verification">
+              {{ verificationStateLabel(detail.verification) }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs text-ink-muted">หลักฐานที่ต้องแนบ</dt>
+            <dd data-testid="task-detail-policy">{{ policyLabel(detail.evidence_policy) }}</dd>
+          </div>
+          @if (detail.completed_at; as completedAt) {
+            <div>
+              <dt class="text-xs text-ink-muted">ปิดงานเมื่อ</dt>
+              <dd class="tabular-nums">{{ dateTimeLabel(completedAt) }}</dd>
+            </div>
+          }
+          @if (detail.review_at; as reviewAt) {
+            <div>
+              <dt class="text-xs text-ink-muted">ทบทวนอีกครั้ง</dt>
+              <dd class="tabular-nums">{{ dateTimeLabel(reviewAt) }}</dd>
+            </div>
+          }
+        </dl>
+
+        @if (detail.blocked_reason; as reason) {
+          <p class="alert alert-warning mt-4" role="status" data-testid="task-blocked-reason">
+            ติดขัด: {{ reason }}
+          </p>
+        }
+
+        <section class="mt-4" aria-labelledby="task-assignments-heading">
+          <h2 id="task-assignments-heading" class="text-base font-medium text-ink">ผู้รับผิดชอบ</h2>
+          @if (detail.assignments.length === 0) {
+            <p class="mt-1 text-sm text-ink-muted" data-testid="task-no-assignments">
+              ยังไม่มีผู้รับผิดชอบ
+            </p>
+          } @else {
+            <ul class="mt-2 flex flex-col gap-2">
+              @for (assignment of detail.assignments; track assignment.id) {
+                <li
+                  class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line px-3 py-2 text-sm"
+                  data-testid="task-assignment"
+                >
+                  <span>{{ assignmentRoleLabel(assignment) }}</span>
+                  <span class="text-ink-muted">{{ assignmentStateLabel(assignment) }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+      } @else {
+        <div class="mt-4 rounded-md border border-line p-3" data-testid="task-safe-card">
+          <p class="text-sm text-ink">
+            คุณเห็นข้อมูลเท่าที่จําเป็นสําหรับงานนี้
+            รายละเอียดสุขภาพและหลักฐานจะแสดงเฉพาะผู้ที่ได้รับสิทธิ์
+          </p>
+          <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt class="text-xs text-ink-muted">กําหนดส่ง</dt>
+              <dd class="tabular-nums">{{ dueLabel(item) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-ink-muted">สถานะ</dt>
+              <dd>{{ statusLabel(item) }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-ink-muted">ความสําคัญ</dt>
+              <dd>{{ priorityLabel(item) }}</dd>
+            </div>
+            @if (item.profile_display_name; as name) {
+              <div>
+                <dt class="text-xs text-ink-muted">ผู้รับการดูแล</dt>
+                <dd>{{ name }}</dd>
+              </div>
+            }
+          </dl>
+        </div>
+      }
+    </article>
+
+    @if (full(); as detail) {
+      @if (hasActionArea()) {
+        <section
+          class="card mt-4"
+          aria-labelledby="task-actions-heading"
+          data-testid="task-actions"
+        >
+          <header class="mb-3">
+            <h2 id="task-actions-heading" class="text-xl">การดําเนินการ</h2>
+            <p class="mt-1 text-sm text-ink-muted">
+              ระบบจะตรวจสอบสิทธิ์และลําดับขั้นตอนอีกครั้งเมื่อบันทึก
+            </p>
+          </header>
+
+          <div class="flex flex-wrap gap-2">
+            @for (action of actions(); track action) {
+              <button
+                class="btn"
+                type="button"
+                [class.btn-danger]="dangerAction(action)"
+                [class.btn-primary]="!dangerAction(action)"
+                [attr.data-testid]="'task-action-' + action"
+                [disabled]="submitting()"
+                (click)="chooseAction(action)"
+              >
+                {{ actionLabel(action) }}
+              </button>
+            }
+
+            @if (canAssign()) {
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-testid="task-assign-open"
+                [disabled]="submitting()"
+                (click)="openAssign()"
+              >
+                มอบหมายผู้รับผิดชอบ
+              </button>
+            }
+          </div>
+
+          @if (conflict()) {
+            <div class="alert alert-warning mt-4" role="alert" data-testid="task-conflict">
+              <p class="font-medium">ข้อมูลถูกแก้ไขโดยคนอื่น</p>
+              <p class="mt-1">กรุณาโหลดข้อมูลล่าสุดก่อนดําเนินการอีกครั้ง</p>
+              <button
+                class="btn btn-secondary mt-3"
+                type="button"
+                data-testid="task-conflict-reload"
+                (click)="reload()"
+              >
+                โหลดข้อมูลใหม่
+              </button>
+            </div>
+          }
+
+          @if (formError(); as message) {
+            <div class="alert alert-error mt-4" role="alert" data-testid="task-action-error">
+              {{ message }}
+            </div>
+          }
+
+          @if (pendingAction(); as action) {
+            @if (action === 'complete') {
+              <form
+                class="mt-4 rounded-md border border-line p-3"
+                data-testid="task-complete-panel"
+                [formGroup]="completeForm"
+                (ngSubmit)="submitAction()"
+                novalidate
+              >
+                <h3 class="text-base font-medium text-ink">ปิดงาน</h3>
+                <p class="mt-1 text-sm text-ink-muted">
+                  บันทึกผลลัพธ์ของงานนี้ การปิดงานไม่ใช่การยืนยันผลทางคลินิกด้วยตนเอง
+                </p>
+
+                <div class="field mt-3">
+                  <label class="field-label" for="task-outcome">ผลลัพธ์</label>
+                  <select
+                    id="task-outcome"
+                    class="field-input"
+                    formControlName="outcome"
+                    data-testid="task-outcome"
+                  >
+                    @for (outcome of outcomes(); track outcome) {
+                      <option [value]="outcome">{{ outcomeOptionLabel(outcome) }}</option>
+                    }
+                  </select>
+                </div>
+
+                @if (missingEvidence(); as message) {
+                  <p
+                    class="alert alert-warning mt-3"
+                    role="status"
+                    data-testid="task-evidence-required"
+                  >
+                    {{ message }}
+                  </p>
+                }
+
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-testid="task-complete-submit"
+                    [disabled]="submitting() || missingEvidence() !== null"
+                  >
+                    @if (submitting()) {
+                      <span class="spinner" aria-hidden="true"></span>
+                      <span>กําลังบันทึก...</span>
+                    } @else {
+                      <span>ยืนยันปิดงาน</span>
+                    }
+                  </button>
+                  <button class="btn btn-secondary" type="button" (click)="closePanel()">
+                    ยกเลิก
+                  </button>
+                </div>
+              </form>
+            } @else {
+              <form
+                class="mt-4 rounded-md border border-line p-3"
+                data-testid="task-reason-panel"
+                [formGroup]="reasonForm"
+                (ngSubmit)="submitAction()"
+                novalidate
+              >
+                <h3 class="text-base font-medium text-ink">{{ actionLabel(action) }}</h3>
+
+                <div class="field mt-3">
+                  <label class="field-label" for="task-reason">เหตุผล</label>
+                  <textarea
+                    id="task-reason"
+                    class="field-input min-h-24"
+                    rows="3"
+                    formControlName="reason"
+                    data-testid="task-reason-input"
+                    [attr.aria-invalid]="reasonError() === null ? null : 'true'"
+                  ></textarea>
+                  @if (reasonError(); as message) {
+                    <p class="field-error" data-testid="task-reason-error">{{ message }}</p>
+                  }
+                </div>
+
+                @if (action === 'block') {
+                  <div class="field">
+                    <label class="field-label" for="task-review-at">เวลาที่จะกลับมาทบทวน</label>
+                    <input
+                      id="task-review-at"
+                      class="field-input tabular-nums"
+                      type="datetime-local"
+                      formControlName="review_at"
+                      data-testid="task-review-at"
+                      [attr.aria-invalid]="reviewAtError() === null ? null : 'true'"
+                    />
+                    @if (reviewAtError(); as message) {
+                      <p class="field-error" data-testid="task-review-at-error">{{ message }}</p>
+                    }
+                  </div>
+                }
+
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-testid="task-reason-submit"
+                    [disabled]="submitting()"
+                  >
+                    @if (submitting()) {
+                      <span class="spinner" aria-hidden="true"></span>
+                      <span>กําลังบันทึก...</span>
+                    } @else {
+                      <span>ยืนยัน{{ actionLabel(action) }}</span>
+                    }
+                  </button>
+                  <button class="btn btn-secondary" type="button" (click)="closePanel()">
+                    ยกเลิก
+                  </button>
+                </div>
+              </form>
+            }
+          }
+        </section>
+      }
+
+      @if (assignOpen()) {
+        <app-assign-form
+          [task]="detail"
+          (assigned)="onAssigned()"
+          (cancelled)="closeAssign()"
+          (reloadRequested)="reload()"
+        />
+      }
+
+      @if (detail.tier === 'clinical') {
+        <section
+          class="card mt-4"
+          aria-labelledby="task-evidence-heading"
+          data-testid="task-evidence"
+        >
+          <header class="mb-3">
+            <h2 id="task-evidence-heading" class="text-xl">หลักฐาน</h2>
+            <p class="mt-1 text-sm text-ink-muted">
+              {{ policyLabel(detail.evidence_policy) }}
+            </p>
+          </header>
+
+          @if (evidenceError(); as message) {
+            <div class="alert alert-error mb-3" role="alert" data-testid="task-evidence-error">
+              {{ message }}
+            </div>
+          }
+
+          @if (evidenceLoading()) {
+            <p class="flex items-center gap-2 text-sm text-ink-muted" role="status">
+              <span class="spinner" aria-hidden="true"></span>
+              <span>กําลังโหลดหลักฐาน</span>
+            </p>
+          } @else if (evidence().length === 0) {
+            <p class="text-sm text-ink-muted" data-testid="task-evidence-empty">
+              ยังไม่มีหลักฐานที่แนบไว้
+            </p>
+          } @else {
+            <ul class="flex flex-col gap-2">
+              @for (item of evidence(); track item.id) {
+                <li
+                  class="rounded-md border border-line px-3 py-2 text-sm"
+                  data-testid="task-evidence-row"
+                >
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="badge text-ink-muted">{{ evidenceTypeLabel(item.type) }}</span>
+                    <time class="text-xs text-ink-muted tabular-nums">
+                      {{ dateTimeLabel(item.created_at) }}
+                    </time>
+                  </div>
+                  <p class="mt-1 text-ink">{{ evidenceSummary(item) }}</p>
+                </li>
+              }
+            </ul>
+          }
+
+          <app-evidence-form
+            [taskId]="detail.id"
+            [version]="detail.version"
+            (saved)="onEvidenceSaved()"
+            (reloadRequested)="reload()"
+          />
+        </section>
+      }
+    }
+  }
+</section>

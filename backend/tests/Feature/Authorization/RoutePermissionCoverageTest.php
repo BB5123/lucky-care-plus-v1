@@ -50,6 +50,7 @@ class RoutePermissionCoverageTest extends TestCase
         'POST api/v1/auth/pin/setup' => 'Self-service: sets the caller\'s own PIN.',
         'POST api/v1/auth/pin/verify' => 'Self-service: verifies the caller\'s own PIN.',
         'GET api/v1/workspaces/{workspace}/dashboard' => 'ADR-010 aggregate: the controller authorizes every card separately through Authorizer (CRM-023); one route-level permission cannot express per-card visibility.',
+        'GET api/v1/briefs/{token}' => 'Public: the 256-bit report token is the capability (DB-003); a doctor has no account and the response carries no workspace identity.',
     ];
 
     /**
@@ -62,6 +63,7 @@ class RoutePermissionCoverageTest extends TestCase
     private const PUBLIC_ROUTES = [
         'POST api/v1/auth/register',
         'POST api/v1/auth/login',
+        'GET api/v1/briefs/{token}',
     ];
 
     /**

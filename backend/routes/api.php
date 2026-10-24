@@ -7,14 +7,19 @@ use App\Modules\Accounts\Http\Controllers\PinController;
 use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskController;
+use App\Modules\CareCrm\Http\Controllers\CareTaskTemplateController;
+use App\Modules\CareCrm\Http\Controllers\EscalationPolicyController;
 use App\Modules\CareCrm\Http\Controllers\TaskEvidenceController;
 use App\Modules\Dashboard\Http\Controllers\DashboardController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
+use App\Modules\HealthRecord\Http\Controllers\BriefController;
 use App\Modules\HealthRecord\Http\Controllers\ConditionController;
+use App\Modules\HealthRecord\Http\Controllers\HealthReportController;
 use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationAdherenceController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationPlanController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationRecordController;
+use App\Modules\HealthRecord\Http\Controllers\ReportShareController;
 use App\Modules\Notifications\Http\Controllers\NotificationDeliveryController;
 use App\Modules\Notifications\Http\Controllers\NotificationPreferenceController;
 use App\Modules\Timeline\Http\Controllers\TimelineController;
@@ -38,6 +43,13 @@ Route::prefix('v1')->group(function (): void {
 
     Route::post('/auth/login', [AuthController::class, 'login'])
         ->middleware('throttle:6,1,auth-login');
+
+    // -- Public Doctor Brief (Phase 2.3, DB-003) ----------------------------
+    // No auth middleware on purpose: the clinic has no account and the random
+    // 256-bit token is the whole capability. Only the token is in the path; the
+    // clinical payload is the response body (DB-004).
+    Route::get('/briefs/{token}', BriefController::class)
+        ->middleware('throttle:60,1,doctor-brief');
 
     Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept'])
         ->middleware(['auth:sanctum', 'throttle:30,1,invitation-accept']);
@@ -219,6 +231,63 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('authorize.permission:appointment.update');
             Route::patch('/{appointment}/documents', [AppointmentController::class, 'documents'])
                 ->middleware('authorize.permission:appointment.update');
+        });
+
+    // -- Doctor Brief snapshots (Phase 2.3) ---------------------------------
+    // Read, create and export are distinct frozen permissions (F-06). The
+    // section composition is narrower still: each section is separately
+    // authorized inside DoctorBriefBuilder.
+    Route::prefix('/workspaces/{workspace}/profiles/{profile}/health-reports')
+        ->middleware(['auth:sanctum', 'throttle:60,1,health-reports', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [HealthReportController::class, 'index'])
+                ->middleware('authorize.permission:health_report.read');
+            Route::post('/', [HealthReportController::class, 'store'])
+                ->middleware('authorize.permission:health_report.create');
+            Route::get('/{report}', [HealthReportController::class, 'show'])
+                ->middleware('authorize.permission:health_report.read');
+            Route::post('/{report}/share', [ReportShareController::class, 'store'])
+                ->middleware('authorize.permission:health_report.export');
+            Route::delete('/{report}/shares/{share}', [ReportShareController::class, 'destroy'])
+                ->middleware('authorize.permission:health_report.export');
+        });
+
+    // -- Recurring care-task templates (Phase 2.1) --------------------------
+    // The frozen catalog has no `care_task.template.*` permission yet
+    // (see backend/docs/CR-003-proposal-template-permissions.md). Until the
+    // change request is approved, the adjacent care-task permissions gate the
+    // surface: read for listing, create for every schedule mutation.
+    Route::prefix('/workspaces/{workspace}/profiles/{profile}/task-templates')
+        ->middleware(['auth:sanctum', 'throttle:60,1,task-templates', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [CareTaskTemplateController::class, 'index'])
+                ->middleware('authorize.permission:care_task.read');
+            Route::post('/', [CareTaskTemplateController::class, 'store'])
+                ->middleware('authorize.permission:care_task.create');
+            Route::get('/{template}', [CareTaskTemplateController::class, 'show'])
+                ->middleware('authorize.permission:care_task.read');
+            Route::patch('/{template}', [CareTaskTemplateController::class, 'update'])
+                ->middleware('authorize.permission:care_task.create');
+            Route::post('/{template}/deactivate', [CareTaskTemplateController::class, 'deactivate'])
+                ->middleware('authorize.permission:care_task.create');
+            Route::post('/{template}/exceptions', [CareTaskTemplateController::class, 'addException'])
+                ->middleware('authorize.permission:care_task.create');
+        });
+
+    // -- Escalation ladder (Phase 2.2) --------------------------------------
+    // Policy management is a workspace setting. The frozen catalog has no
+    // escalation-specific id, so read uses `workspace.read` and writes use
+    // `workspace.update`; running the ladder is a scheduled system job with no
+    // actor and therefore no permission check.
+    Route::prefix('/workspaces/{workspace}/escalation-policies')
+        ->middleware(['auth:sanctum', 'throttle:60,1,escalation-policies', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [EscalationPolicyController::class, 'index'])
+                ->middleware('authorize.permission:workspace.read');
+            Route::put('/', [EscalationPolicyController::class, 'replace'])
+                ->middleware('authorize.permission:workspace.update');
+            Route::post('/defaults', [EscalationPolicyController::class, 'defaults'])
+                ->middleware('authorize.permission:workspace.update');
         });
 
     // -- Dashboard (Phase 1.5, ADR-010) -------------------------------------

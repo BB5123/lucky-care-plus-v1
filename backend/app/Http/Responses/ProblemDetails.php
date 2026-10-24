@@ -17,6 +17,7 @@ final class ProblemDetails
 {
     /**
      * @param  array<string, mixed>  $headers
+     * @param  array<string, list<string>>  $errors  field => messages, for 422 responses
      */
     public static function make(
         Request $request,
@@ -25,16 +26,26 @@ final class ProblemDetails
         string $title,
         string $detail,
         array $headers = [],
+        array $errors = [],
     ): JsonResponse {
+        $body = [
+            'type' => 'https://api.luckycare.example/problems/'.str_replace('_', '-', $code),
+            'title' => $title,
+            'status' => $status,
+            'code' => $code,
+            'detail' => $detail,
+            'trace_id' => self::traceId($request),
+        ];
+
+        // Per-field messages let a client bind the error to the right control
+        // instead of showing one generic sentence. Validation messages are
+        // client input, never health data, so they are safe to echo.
+        if ($errors !== []) {
+            $body['errors'] = $errors;
+        }
+
         return response()->json(
-            [
-                'type' => 'https://api.luckycare.example/problems/'.str_replace('_', '-', $code),
-                'title' => $title,
-                'status' => $status,
-                'code' => $code,
-                'detail' => $detail,
-                'trace_id' => self::traceId($request),
-            ],
+            $body,
             $status,
             array_merge(['Content-Type' => 'application/problem+json'], $headers),
         );

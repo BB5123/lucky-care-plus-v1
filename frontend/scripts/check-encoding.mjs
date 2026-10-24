@@ -30,6 +30,15 @@ const FORBIDDEN = [
   { char: '\u2020', label: 'U+2020 dagger (CP1252 mojibake)' },
 ];
 
+/**
+ * Thai double-encoding is a second, subtler failure mode: the file stays valid
+ * UTF-8 and contains no replacement character, but every Thai syllable became a
+ * pair like "\u0E40\u0E18" ("เธ"). Real Thai almost never repeats that pair, so
+ * two or more in one line means the text was re-encoded through a legacy
+ * code page. This pattern reached the appointments screens once already.
+ */
+const THAI_MOJIBAKE = /(?:\u0E40\u0E18[\u0E00-\u0E7F]?){2,}/u;
+
 function walk(dir) {
   const found = [];
 
@@ -57,6 +66,12 @@ for (const path of walk(ROOT)) {
       if (line.includes(char)) {
         failures.push(`${relative(process.cwd(), path)}:${index + 1} ${label}`);
       }
+    }
+
+    if (THAI_MOJIBAKE.test(line)) {
+      failures.push(
+        `${relative(process.cwd(), path)}:${index + 1} Thai text was double-encoded (looks like "เธเธ…")`,
+      );
     }
   });
 }

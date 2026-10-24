@@ -1,0 +1,85 @@
+<section class="card mb-4" aria-labelledby="adherence-heading" data-testid="adherence-card">
+  <header class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+    <h3 id="adherence-heading" class="text-xl">ความสม่ําเสมอ 7 วัน</h3>
+    @if (meta(); as info) {
+      <p class="text-xs text-ink-muted tabular-nums">
+        {{ dayLabel(info.from ?? '') }} – {{ dayLabel(info.to ?? '') }}
+      </p>
+    }
+  </header>
+
+  @if (loading()) {
+    <div class="flex flex-col gap-2" aria-busy="true">
+      <p class="sr-only" role="status">กําลังโหลดความสม่ําเสมอ</p>
+      <div class="h-16 animate-pulse rounded-lg bg-surface-muted"></div>
+    </div>
+  } @else if (rows().length === 0) {
+    <p class="text-sm text-ink-muted">ยังไม่มีข้อมูลการรับยาในช่วงนี้</p>
+  } @else {
+    <div class="flex flex-col gap-4">
+      @for (row of rows(); track row.plan_id) {
+        <article class="rounded-md border border-line p-3" [attr.data-plan-id]="row.plan_id">
+          <header class="flex flex-wrap items-baseline justify-between gap-2">
+            <h4 class="text-base font-medium text-ink">{{ row.name }}</h4>
+            <p class="text-sm font-medium text-ink tabular-nums" data-testid="adherence-percent">
+              {{ percentLabel(row.percent) }}
+            </p>
+          </header>
+
+          <dl
+            class="mt-2 grid grid-cols-2 gap-2 text-xs text-ink-muted tabular-nums sm:grid-cols-4"
+          >
+            <div>
+              <dt>ต้องรับ</dt>
+              <dd class="text-base text-ink" data-testid="adherence-expected">
+                {{ countLabel(row.expected) }}
+              </dd>
+            </div>
+            <div>
+              <dt>รับแล้ว</dt>
+              <dd class="text-base text-success" data-testid="adherence-taken">
+                {{ countLabel(row.taken) }}
+              </dd>
+            </div>
+            <div>
+              <dt>ข้าม</dt>
+              <dd class="text-base text-warning" data-testid="adherence-skipped">
+                {{ countLabel(row.skipped) }}
+              </dd>
+            </div>
+            <div>
+              <dt>พลาด</dt>
+              <dd class="text-base text-ink" data-testid="adherence-missed">
+                {{ countLabel(row.missed) }}
+              </dd>
+            </div>
+          </dl>
+
+          <p class="mt-2 text-xs text-ink-muted">
+            ตัวเลขนี้เป็นการรายงานด้วยตนเอง ไม่ใช่หลักฐานทางการแพทย์
+          </p>
+
+          <ul class="mt-3 flex flex-col gap-2" aria-label="รายวัน">
+            @for (day of row.daily; track day.date) {
+              <li class="flex items-center gap-2 text-xs text-ink-muted tabular-nums">
+                <span class="w-24 shrink-0">{{ dayLabel(day.date) }}</span>
+                <span class="h-2 flex-1 overflow-hidden rounded-full bg-surface-muted">
+                  <span
+                    class="block h-2 rounded-full bg-info"
+                    [style.width.%]="barWidth(day.percent)"
+                    [attr.aria-label]="
+                      'รับแล้ว ' + countLabel(day.taken) + ' จาก ' + countLabel(day.expected)
+                    "
+                  ></span>
+                </span>
+                <span class="w-20 shrink-0 text-right">
+                  {{ countLabel(day.taken) }}/{{ countLabel(day.expected) }}
+                </span>
+              </li>
+            }
+          </ul>
+        </article>
+      }
+    </div>
+  }
+</section>
