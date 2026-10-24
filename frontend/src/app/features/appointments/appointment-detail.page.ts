@@ -12,7 +12,7 @@ import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { toUserMessage } from '../../core/api/problem-details';
 import { AppointmentService } from '../../core/appointments/appointment.service';
-import { DashboardService } from '../../core/dashboard/dashboard.service';
+import { ProfilesService } from '../../core/profiles/profiles.service';
 import { WorkspaceService } from '../../core/workspace/workspace.service';
 import { AppointmentDetail } from './appointment-detail';
 
@@ -21,7 +21,8 @@ import { AppointmentDetail } from './appointment-detail';
  *
  * The profile is never guessed from the appointment id: it comes from
  * `?profile_id=` (the list always passes it) or, for a deep link, from the
- * dashboard family payload. The detail component only receives trusted ids.
+ * per-profile authorized profile list. The detail component only receives
+ * trusted ids.
  */
 @Component({
   selector: 'app-appointment-detail-page',
@@ -32,7 +33,7 @@ import { AppointmentDetail } from './appointment-detail';
 export class AppointmentDetailPage {
   private readonly route = inject(ActivatedRoute);
   private readonly workspace = inject(WorkspaceService);
-  private readonly dashboard = inject(DashboardService);
+  private readonly profilesService = inject(ProfilesService);
   private readonly appointments = inject(AppointmentService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -80,7 +81,7 @@ export class AppointmentDetailPage {
       untracked(() => {
         this.selectedProfileId.set(null);
         this.appointments.reset();
-        this.dashboard.invalidate();
+        this.profilesService.reset();
         void this.initialize();
       });
     });
@@ -112,13 +113,8 @@ export class AppointmentDetailPage {
     let profileId = this.requestedProfileId;
 
     if (profileId === null) {
-      await this.dashboard.load(null);
-
-      const payload = this.dashboard.dashboard();
-      profileId =
-        payload === null || !payload.family.visible
-          ? null
-          : (payload.family.members.find((member) => member.profile_id !== '')?.profile_id ?? null);
+      await this.profilesService.load();
+      profileId = this.profilesService.currentProfile()?.id ?? null;
     }
 
     this.selectedProfileId.set(profileId);

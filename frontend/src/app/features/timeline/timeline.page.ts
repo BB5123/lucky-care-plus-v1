@@ -11,8 +11,8 @@ import {
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { toUserMessage } from '../../core/api/problem-details';
-import { DashboardService } from '../../core/dashboard/dashboard.service';
 import { formatThaiDateTime } from '../../core/health-record/health-record.format';
+import { ProfilesService } from '../../core/profiles/profiles.service';
 import { timelineSummaryLabel } from '../../core/timeline/timeline.copy';
 import { TimelineEntry, TimelineFilters } from '../../core/timeline/timeline.models';
 import { TimelineService } from '../../core/timeline/timeline.service';
@@ -34,9 +34,10 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 /**
  * Timeline screen.
  *
- * The profile selector is fed by the dashboard family payload, the same source
- * the health screens use. Every row is rendered from its translation key, and
- * a redacted row is deliberately inert: no link, no id and no metadata.
+ * The profile selector comes from the per-profile authorized list, the same
+ * source the health screens use. Every row is rendered from its translation
+ * key, and a redacted row is deliberately inert: no link, no id and no
+ * metadata.
  */
 @Component({
   selector: 'app-timeline-page',
@@ -47,7 +48,7 @@ const DAY_IN_MS = 24 * 60 * 60 * 1000;
 export class TimelinePage {
   private readonly route = inject(ActivatedRoute);
   private readonly workspace = inject(WorkspaceService);
-  private readonly dashboard = inject(DashboardService);
+  private readonly profilesService = inject(ProfilesService);
   private readonly timeline = inject(TimelineService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -82,15 +83,7 @@ export class TimelinePage {
   protected readonly selectedChipIds = signal<readonly string[]>([]);
   protected readonly rangeDays = signal(30);
 
-  protected readonly family = computed(() => {
-    const payload = this.dashboard.dashboard();
-
-    if (payload === null || !payload.family.visible) {
-      return [];
-    }
-
-    return payload.family.members.filter((member) => member.profile_id !== '');
-  });
+  protected readonly profiles = this.profilesService.profiles;
 
   protected readonly selectedProfileName = computed(() => {
     const profileId = this.selectedProfileId();
@@ -99,7 +92,7 @@ export class TimelinePage {
       return null;
     }
 
-    return this.family().find((member) => member.profile_id === profileId)?.display_name ?? null;
+    return this.profiles().find((profile) => profile.id === profileId)?.display_name ?? null;
   });
 
   private requestedProfileId: string | null = null;
@@ -142,7 +135,7 @@ export class TimelinePage {
       untracked(() => {
         this.selectedProfileId.set(null);
         this.timeline.reset();
-        this.dashboard.invalidate();
+        this.profilesService.reset();
         void this.initialize();
       });
     });
@@ -171,10 +164,9 @@ export class TimelinePage {
       return;
     }
 
-    await this.dashboard.load(null);
+    await this.profilesService.load();
 
-    const members = this.family();
-    const profileId = this.requestedProfileId ?? members[0]?.profile_id ?? null;
+    const profileId = this.requestedProfileId ?? this.profilesService.currentProfile()?.id ?? null;
 
     this.selectedProfileId.set(profileId);
     this.pageLoading.set(false);

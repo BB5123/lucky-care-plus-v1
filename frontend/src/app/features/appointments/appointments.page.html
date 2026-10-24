@@ -27,22 +27,22 @@
       </p>
     </div>
   } @else {
-    @if (family().length > 1) {
+    @if (profiles().length > 1) {
       <section class="mb-4" aria-label="เลือกโปรไฟล์สุขภาพ">
         <div class="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="สมาชิกในครอบครัว">
-          @for (member of family(); track member.person_id) {
+          @for (profile of profiles(); track profile.id) {
             <button
               type="button"
               class="flex min-h-12 shrink-0 items-center gap-2 rounded-full border px-4 text-sm"
-              [attr.data-profile-id]="member.profile_id"
-              [class.border-info]="selectedProfileId() === member.profile_id"
-              [class.bg-surface-muted]="selectedProfileId() === member.profile_id"
-              [class.border-line]="selectedProfileId() !== member.profile_id"
-              [class.bg-white]="selectedProfileId() !== member.profile_id"
-              [attr.aria-pressed]="selectedProfileId() === member.profile_id"
-              (click)="selectProfile(member.profile_id)"
+              [attr.data-profile-id]="profile.id"
+              [class.border-info]="selectedProfileId() === profile.id"
+              [class.bg-surface-muted]="selectedProfileId() === profile.id"
+              [class.border-line]="selectedProfileId() !== profile.id"
+              [class.bg-white]="selectedProfileId() !== profile.id"
+              [attr.aria-pressed]="selectedProfileId() === profile.id"
+              (click)="selectProfile(profile.id)"
             >
-              {{ member.display_name || 'ไม่ระบุชื่อ' }}
+              {{ profile.display_name || 'ไม่ระบุชื่อ' }}
             </button>
           }
         </div>
