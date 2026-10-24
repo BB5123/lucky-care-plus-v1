@@ -124,6 +124,34 @@ Route::prefix('v1')->group(function (): void {
             'authorize.permission:workspace.member.invite',
         ]);
 
+    // TASK INV-1: list and revoke pending invitations.
+    //
+    // Both routes declare `workspace.member.invite`, deliberately not
+    // `workspace.member.read`. Revoking is the inverse of issuing, and the
+    // pending-invitee list contains only addresses the inviter supplied, so
+    // it is part of the invite authority. `.read` is the weaker "view the
+    // member list" permission (Matrix A marks it D for Viewer/Caregiver) and
+    // must not become a back door to invitee addresses. The baseline has no
+    // dedicated revoke-invitation permission; inventing one is forbidden.
+    //
+    // The id is looked up inside the resolved workspace: another workspace's
+    // invitation id is a neutral 404, never 403 (no enumeration).
+    Route::get('/workspaces/{workspace}/invitations', [InvitationController::class, 'index'])
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,workspace-invitations-list',
+            'workspace.context',
+            'authorize.permission:workspace.member.invite',
+        ]);
+
+    Route::delete('/workspaces/{workspace}/invitations/{invitation}', [InvitationController::class, 'destroy'])
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,workspace-invitations-revoke',
+            'workspace.context',
+            'authorize.permission:workspace.member.invite',
+        ]);
+
     // -- Profile picker (foundation for the health/appointment screens) ------
     // A profile id is required by every health endpoint, but the only list the
     // client had was the dashboard family card, gated by `person.read`. This
