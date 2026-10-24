@@ -129,10 +129,32 @@ final class TenantContext
      * active before the call is reinstated, and when there was none the context
      * is cleared (fail closed). The callback's return value is passed through.
      *
+     * `set_config(..., true)` is SET LOCAL, so it only lives for the current
+     * transaction. When the caller has no transaction open (the workspace
+     * resolver, a console command, a queued job that forgot to wrap itself),
+     * one is opened here; otherwise the setting would be gone before the
+     * callback's first query and every RLS policy would deny. An existing
+     * transaction is reused rather than nested into a savepoint, because the
+     * setting is scoped to the outer transaction, not to the savepoint.
+     *
      * As with `set()`, the identifiers MUST be resolved server-side; never pass
      * values that originated from client input.
      */
     public static function run(string $tenantId, string $workspaceId, callable $callback): mixed
+    {
+        if (DB::transactionLevel() > 0) {
+            return self::runWithContext($tenantId, $workspaceId, $callback);
+        }
+
+        return DB::transaction(
+            fn (): mixed => self::runWithContext($tenantId, $workspaceId, $callback),
+        );
+    }
+
+    /**
+     * Set, call, restore — the caller guarantees an open transaction.
+     */
+    private static function runWithContext(string $tenantId, string $workspaceId, callable $callback): mixed
     {
         $previousTenantId = self::current(self::TENANT_KEY);
         $previousWorkspaceId = self::current(self::WORKSPACE_KEY);
