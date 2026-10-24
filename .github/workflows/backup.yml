@@ -1,0 +1,177 @@
+name: Nightly backup
+
+# The restore drill (`.github/workflows/restore-drill.yml`) proves that a dump
+# *can* be restored. This workflow is the other half: it produces the dump.
+#
+# Every run dumps the seeded database, checks that the archive is readable and
+# contains the core tables, writes a sha256 next to it, uploads dump + checksum
+# as a build artifact, then downloads that artifact back and restores it into a
+# scratch database before re-running the three RLS probes. Restoring the
+# *downloaded artifact* rather than a fresh dump is deliberate: it is the only
+# way to prove the thing we kept is the thing that works.
+#
+# This is a safety net, not a compliance backup. Artifacts expire after 7 days,
+# live in GitHub's storage, and say nothing about RPO/RTO. Off-site encrypted
+# storage, key management and retention numbers belong to the deployment target.
+on:
+  workflow_dispatch:
+  schedule:
+    # 19:00 UTC = 02:00 Asia/Bangkok (UTC+7)
+    - cron: "0 19 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel a backup that is still running: a killed dump is a missing
+  # backup, and the next nightly run does not make up for it.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Dump / verify / restore the artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lucky_care_plus
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: lucky_care_plus
+      # Real environment variables, so they win over the copied .env.example.
+      # Without these, Laravel reads DB_PASSWORD from .env.example and
+      # migrate:fresh fails with "password authentication failed".
+      DB_USERNAME: luckycare_app
+      DB_PASSWORD: luckycare_app_ci
+      APP_ENV: testing
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      RETENTION_DRY_RUN: "true"
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      # The RLS probes connect as the application role; admin operations
+      # override these with ADMIN_USER / ADMIN_PASSWORD inside the scripts.
+      PGPASSWORD: luckycare_app_ci
+      ADMIN_USER: postgres
+      ADMIN_PASSWORD: postgres
+      SOURCE_DB: lucky_care_plus
+      ADMIN_DB: postgres
+      APP_ROLE: luckycare_app
+      BACKUP_DIR: ./backups
+      KEEP_DAYS: "7"
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_pgsql, pgsql, redis
+          coverage: none
+
+      - name: Install PostgreSQL client tools
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # Same role as CI: RLS is only enforced for non-superusers, and the
+      # application role must own the schema for a restore to preserve
+      # privileges (see restore-drill.yml and the 2026-10-24 sweep).
+      - name: Create non-superuser runtime role
+        working-directory: .
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 \
+            --host=127.0.0.1 --port=5432 --username=postgres --dbname=lucky_care_plus <<'SQL'
+          CREATE ROLE luckycare_app
+            LOGIN PASSWORD 'luckycare_app_ci'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+          GRANT ALL PRIVILEGES ON DATABASE lucky_care_plus TO luckycare_app;
+          ALTER SCHEMA public OWNER TO luckycare_app;
+          GRANT ALL ON SCHEMA public TO luckycare_app;
+          ALTER DATABASE lucky_care_plus OWNER TO luckycare_app;
+          SQL
+
+      # A dump of an empty schema still restores cleanly, so seed first: this
+      # makes the restored copy carry real rows and real RLS policies.
+      - name: Migrate and seed
+        run: php artisan migrate:fresh --seed --force
+
+      - name: Produce and verify the dump
+        run: bash ./scripts/backup-dump.sh
+
+      - name: Verify the checksum file against the dump
+        run: cd backups && sha256sum -c ./*.sha256
+
+      # `path` is resolved from the workspace root, not from the step's
+      # working-directory, so the `backend/` prefix is required here.
+      - name: Upload the dump as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-dump
+          path: |
+            backend/backups/luckycare-*.dump
+            backend/backups/luckycare-*.dump.sha256
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Download the artifact back
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-dump
+          path: backend/artifact-dump
+
+      - name: Verify the downloaded artifact checksum
+        working-directory: backend/artifact-dump
+        run: sha256sum -c ./*.sha256
+
+      # This is the step that makes the artifact meaningful: the drill is fed
+      # the downloaded archive (DUMP_FILE) instead of taking its own dump, so a
+      # truncated upload or a checksum-only "backup" fails here.
+      - name: Restore the downloaded artifact and re-run the RLS probes
+        run: |
+          set -euo pipefail
+          dump="$(find artifact-dump -maxdepth 1 -type f -name 'luckycare-*.dump' -print -quit)"
+          if [ -z "$dump" ]; then
+            echo "::error::No dump found in the downloaded artifact."
+            exit 1
+          fi
+          echo "Restoring the uploaded artifact: $dump"
+          DUMP_FILE="$dump" bash ./scripts/restore-drill.sh
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "::error::Nightly backup failed: the dump was not produced, not verifiable, or not restorable with RLS intact."
+          echo "Inspect the failing step above. A dump that only passes pg_dump's exit code is not a backup."
