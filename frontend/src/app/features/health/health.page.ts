@@ -18,6 +18,7 @@ import { WorkspaceService } from '../../core/workspace/workspace.service';
 import { AllergyList } from './allergies/allergy-list';
 import { AiSummaryPanel } from './ai-summary/ai-summary-panel';
 import { ConditionList } from './conditions/condition-list';
+import { KnowledgeAsk } from './knowledge-ask/knowledge-ask';
 import { MeasurementList } from './measurements/measurement-list';
 import { MedicationPlanList } from '../medication/medication-plan-list';
 
@@ -30,7 +31,14 @@ interface HealthTabDefinition {
 
 @Component({
   selector: 'app-health-page',
-  imports: [MeasurementList, ConditionList, AllergyList, MedicationPlanList, AiSummaryPanel],
+  imports: [
+    MeasurementList,
+    ConditionList,
+    AllergyList,
+    MedicationPlanList,
+    AiSummaryPanel,
+    KnowledgeAsk,
+  ],
   templateUrl: './health.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
