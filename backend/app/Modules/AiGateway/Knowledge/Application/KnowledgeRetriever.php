@@ -3,6 +3,7 @@
 namespace App\Modules\AiGateway\Knowledge\Application;
 
 use App\Modules\AiGateway\Knowledge\Domain\KnowledgeUnavailableException;
+use App\Modules\AiGateway\Knowledge\Domain\ThaiText;
 use PDO;
 use Throwable;
 
@@ -12,6 +13,13 @@ use Throwable;
  * Retrieval is lexical: SQLite FTS5 with the trigram tokenizer, plus a small
  * keyword vocabulary (titles and section headings) to turn a Thai question
  * without spaces into searchable terms. No embeddings, no network, no writes.
+ *
+ * Both the indexed text and the query pass through `ThaiText::normalise()`, so
+ * "มือ เท้า ปาก" and "มือเท้าปาก" meet. The FTS row carries the document title
+ * in its own column; `bm25()` weights it above the body, so a disease name
+ * that appears only in the title still wins. When — and only when — the
+ * normalised query finds nothing, the configured aliases for a Thai phrase in
+ * the question are tried and the hits are marked `matched_by: alias`.
  *
  * The class is intentionally the only place that knows about SQLite. A
  * Qdrant/pgvector retriever can implement the same `search()` contract later
@@ -45,12 +53,14 @@ final class KnowledgeRetriever
      *     fetched_at: string,
      *     review_status: string,
      *     text: string,
-     *     score: float
+     *     score: float,
+     *     matched_by: string,
+     *     matched_term: ?string
      * }>
      */
     public function search(string $question, ?int $limit = null): array
     {
-        $question = trim($question);
+        $question = ThaiText::normalise($question);
 
         if ($question === '') {
             return [];
@@ -58,6 +68,23 @@ final class KnowledgeRetriever
 
         $limit = max(1, min(20, $limit ?? (int) config('knowledge.top_k', 5)));
         $pdo = $this->connection();
+
+        $results = $this->searchNormalised($pdo, $question, $limit);
+
+        if ($results !== []) {
+            // A query with genuine hits is never widened (no precision loss
+            // for the common case).
+            return $results;
+        }
+
+        return $this->searchAliases($pdo, $question, $limit);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function searchNormalised(PDO $pdo, string $question, int $limit): array
+    {
         $terms = $this->termsFor($pdo, $question);
 
         if ($terms === []) {
@@ -72,11 +99,14 @@ final class KnowledgeRetriever
                 array_slice($long, 0, 5),
             ));
 
+            // bm25 weights follow the FTS column order: title, then body. A hit
+            // in the title (a disease name that the body never repeats) must
+            // outrank an ordinary body hit.
             $statement = $pdo->prepare(<<<'SQL'
                 select c.id, c.document_id, c.text, c.ordinal,
                        d.title, d.publisher, d.url, d.category, d.published_at,
                        d.fetched_at, d.review_status,
-                       bm25(chunks_fts) as score
+                       bm25(chunks_fts, 8.0, 1.0) as score
                 from chunks_fts
                 join chunks c on c.id = chunks_fts.rowid
                 join documents d on d.id = c.document_id
@@ -99,7 +129,7 @@ final class KnowledgeRetriever
                        0.0 as score
                 from chunks c
                 join documents d on d.id = c.document_id
-                where c.text like :needle
+                where c.text like :needle or d.title like :needle
                 order by c.id asc
                 limit :limit
                 SQL);
@@ -112,6 +142,57 @@ final class KnowledgeRetriever
         $rows = $statement->fetchAll(PDO::FETCH_ASSOC);
 
         return $this->deduplicate($rows, $limit);
+    }
+
+    /**
+     * Explicit, config-driven expansion: `knowledge.aliases` maps a Thai phrase
+     * to the spellings that actually occur in the corpus. It runs only after a
+     * direct search returned no rows, so it can add recall but never reduce the
+     * precision of a query that already has hits.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function searchAliases(PDO $pdo, string $question, int $limit): array
+    {
+        $merged = [];
+
+        foreach ((array) config('knowledge.aliases', []) as $phrase => $aliases) {
+            if (! is_string($phrase)) {
+                continue;
+            }
+
+            $phrase = ThaiText::normalise($phrase);
+
+            if ($phrase === '' || mb_stripos($question, $phrase) === false) {
+                continue;
+            }
+
+            foreach ((array) $aliases as $alias) {
+                if (! is_string($alias)) {
+                    continue;
+                }
+
+                $alias = ThaiText::normalise($alias);
+
+                if ($alias === '') {
+                    continue;
+                }
+
+                foreach ($this->searchNormalised($pdo, $alias, $limit) as $row) {
+                    $key = $row['document_id'].'#'.$row['id'];
+
+                    if (isset($merged[$key])) {
+                        continue;
+                    }
+
+                    $row['matched_by'] = 'alias';
+                    $row['matched_term'] = $alias;
+                    $merged[$key] = $row;
+                }
+            }
+        }
+
+        return array_slice(array_values($merged), 0, $limit);
     }
 
     /**
@@ -145,6 +226,8 @@ final class KnowledgeRetriever
                 'review_status' => (string) $row['review_status'],
                 'text' => (string) $row['text'],
                 'score' => (float) $row['score'],
+                'matched_by' => 'query',
+                'matched_term' => null,
             ];
 
             if (count($result) >= $limit) {
@@ -238,7 +321,8 @@ final class KnowledgeRetriever
             return $selected;
         }
 
-        $tokens = preg_split('/[\s,.;:!?()\[\]{}"\']+/u', $question) ?: [];
+        $tokens = preg_split('/[\s,;:!?()\[\]{}"\']+/u', $question) ?: [];
+        $tokens = array_map(static fn (string $token): string => trim($token, '.'), $tokens);
         $tokens = array_values(array_filter(
             $tokens,
             static fn (string $token): bool => mb_strlen(trim($token)) >= 3,

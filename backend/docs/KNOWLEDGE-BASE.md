@@ -52,8 +52,12 @@ as the other AI features.
 ```
 
 `php artisan knowledge:build` writes `database/knowledge/health_kb.sqlite` (documents, chunks,
-keywords, `chunks_fts` FTS5 trigram). The build is deterministic and replaces the file atomically;
-the previous file is untouched on failure.
+keywords, and `chunks_fts`, an FTS5 virtual table with the trigram tokenizer). Each FTS row is keyed
+by the chunk id and has **two** columns: `title` (the document title) and `text` (the chunk body).
+Both columns are passed through `Knowledge\Domain\ThaiText::normalise()` before indexing, so a
+disease name that appears only in the title is findable and a spaced spelling (`มือ เท้า ปาก`) and an
+unspaced query (`มือเท้าปาก`) produce the same token stream. The build is deterministic and replaces
+the file atomically; the previous file is untouched on failure.
 
 ## Commands
 
@@ -68,8 +72,27 @@ php artisan knowledge:review ddc-disease-44 --reviewer="Dr. …" --build
 `knowledge:fetch` refuses non-https URLs, non-allow-listed hosts and robots-disallowed paths; it
 does not retry automatically. `knowledge:validate` checks ids, URLs, hosts, categories, review status
 and text length without touching the network. `knowledge:search` is the operator view of retrieval and
-never calls a provider. `knowledge:review` records `reviewed_by`/`reviewed_at`, revalidates the source
+never calls a provider. It prints a `Matched by` column (`query` or `alias: <term>`) so an operator can
+see why a hit appeared. `knowledge:review` records `reviewed_by`/`reviewed_at`, revalidates the source
 and (with `--build`) publishes the change; a source marked `reviewed` without a reviewer is rejected.
+
+## Retrieval and Thai matching (TASK KB-2)
+
+`KnowledgeRetriever` is lexical and deterministic:
+
+1. **Normalise the query** with `ThaiText::normalise()`: zero-width characters are removed, whitespace
+   between Thai characters is collapsed, and the space inside a Latin+digit measurement is removed
+   (`PM 2.5` → `PM2.5`). Spaces between Latin words are preserved (`Hand, Foot and Mouth`).
+2. **Search FTS5** over the `title` and `text` columns. `bm25(chunks_fts, 8.0, 1.0)` weights the title
+   eight times the body, so a name that the body never repeats still ranks at least as high as a body
+   hit. The keyword vocabulary is used to turn a Thai question without spaces into a term.
+3. **Alias fallback** only when step 2 returned no row: for each key in `config/knowledge.php` →
+   `aliases` that occurs in the normalised question, search every listed spelling and merge the
+   results. Those rows carry `matched_by = alias` and `matched_term`. A query that already has hits is
+   never widened, so the common case keeps its precision.
+
+Current aliases: `ฉี่หนู` → `เลปโตสไปโรซิส`/`leptospirosis`, `มือเท้าปาก` → `HFM`/`Hand Foot and Mouth`,
+`ฝุ่น` → `PM2.5`/`PM 2.5`, `ไข้เลือดออก` → `เด็งกี่`/`dengue`.
 
 ## API
 
@@ -124,7 +147,18 @@ A web admin UI for editing is **not** built: the platform-role model (`platform_
 `RoleGate`/Matrix) has no data-model representation, so `platform.configuration.manage` cannot be
 held by anyone today. That is a separate change-control item; until then the CLI is the admin path.
 
-## Verified (2026-10-24)
+## Verified (2026-10-25, TASK KB-2)
+
+- `php artisan knowledge:validate` → 7 sources, 0 reviewed / 7 `unreviewed`; `knowledge:build` →
+  7 documents, 76 chunks.
+- Before KB-2: `มือเท้าปาก` and `มือเท้า` → no match; `HFM` → `ddc-disease-11`; `ฉี่หนู` → no match;
+  `ฝุ่น` → only `thaihealth-pm25-heart`.
+- After KB-2: `มือเท้าปาก` and `มือ เท้า ปาก` → `ddc-disease-11` (title-only match);
+  `ฉี่หนู` → `ddc-disease-16` with `matched_by: alias`; `PM2.5` and `ฝุ่น` → both ThaiHealth sources;
+  `ไข้เลือดออก` still returns `ddc-disease-44` through the query path (no alias expansion).
+- `KnowledgeRetrievalTest` covers KB-T01 … KB-T07 against the real seven-source corpus.
+
+## Verified (2026-10-24, initial corpus)
 
 - `php artisan knowledge:validate` → 3 sources, all `unreviewed`; `knowledge:build` → 3 documents,
   37 chunks, 508 KB SQLite.
@@ -143,8 +177,9 @@ held by anyone today. That is a separate change-control item; until then the CLI
 - Lexical retrieval cannot answer a question with no keyword overlap; adding embeddings (Qdrant or
   pgvector) is the next step once an embedding provider exists.
 - Thai segmentation is heuristic: titles/headings plus a prefix/suffix fallback. Questions that use
-  a synonym not present in the corpus will not retrieve the document.
-- The corpus is three DDC disease pages (dengue, influenza, road-traffic injuries), all
+  a synonym not present in the corpus rely on the explicit alias table; anything outside it will not
+  retrieve the document.
+- The corpus is seven public sources (five DDC disease pages, two ThaiHealth PM2.5 articles), all
   `unreviewed`; it is a technical seed, not clinical guidance.
 - No live-evaluation suite for the knowledge purpose yet; the deterministic tests cover the gate
   order, citations, disclaimer, grounding and injection.
