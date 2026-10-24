@@ -21,8 +21,11 @@ class Appointment {
     required this.status,
     this.providerName,
     this.facility,
+    this.location,
+    this.notes,
     this.scheduledAt,
     this.durationMinutes,
+    this.version = 1,
   });
 
   final String id;
@@ -30,8 +33,13 @@ class Appointment {
   final String status;
   final String? providerName;
   final String? facility;
+  final String? location;
+  final String? notes;
   final String? scheduledAt;
   final int? durationMinutes;
+
+  /// Optimistic-locking token. Every write sends it as `If-Match`.
+  final int version;
 
   String get statusLabel => appointmentStatusLabel(status);
 
@@ -57,16 +65,20 @@ class Appointment {
   }
 
   factory Appointment.fromJson(Map<String, dynamic> json) {
+    final Object? duration = json['duration_minutes'];
+    final Object? version = json['version'];
+
     return Appointment(
       id: readString(json['id']),
       title: readString(json['title']),
       status: readString(json['status'], fallback: 'planned'),
       providerName: readNullableString(json['provider_name']),
       facility: readNullableString(json['facility']),
+      location: readNullableString(json['location']),
+      notes: readNullableString(json['purpose']),
       scheduledAt: readNullableString(json['scheduled_at']),
-      durationMinutes: json['duration_minutes'] is int
-          ? json['duration_minutes'] as int
-          : null,
+      durationMinutes: duration is int ? duration : null,
+      version: version is int ? version : 1,
     );
   }
 }
@@ -133,6 +145,7 @@ class AppointmentsData {
     required this.hasProfile,
     required List<Appointment> appointments,
     DateTime? now,
+    this.canManage = false,
   }) : appointments = List<Appointment>.unmodifiable(
          orderAppointments(appointments, now ?? DateTime.now()),
        );
@@ -140,15 +153,33 @@ class AppointmentsData {
   const AppointmentsData._({
     required this.hasProfile,
     required this.appointments,
+    required this.canManage,
   });
 
   final bool hasProfile;
   final List<Appointment> appointments;
 
+  /// Whether this session may open the create/edit sheet. The server still
+  /// owns `appointment.create` / `appointment.update` / `appointment.cancel`;
+  /// the flag only decides whether the affordance is rendered (hide vs show,
+  /// `.ai/MOBILE_DESIGN.md` §5).
+  final bool canManage;
+
   bool get isEmpty => appointments.isEmpty;
+
+  Appointment? byId(String id) {
+    for (final Appointment appointment in appointments) {
+      if (appointment.id == id) {
+        return appointment;
+      }
+    }
+
+    return null;
+  }
 
   static const AppointmentsData noProfile = AppointmentsData._(
     hasProfile: false,
     appointments: <Appointment>[],
+    canManage: false,
   );
 }
