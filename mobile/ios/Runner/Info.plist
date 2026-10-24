@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>ใช้กล้องเพื่อถ่ายภาพหลักฐานสำหรับงานดูแล และแนบเข้ากับรายการงาน</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ใช้คลังภาพเพื่อเลือกภาพหลักฐานสำหรับงานดูแล และแนบเข้ากับรายการงาน</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -43,6 +43,26 @@ class TasksRepository {
     return CareTask.fromJson(readMap(body['data']));
   }
 
+  /// Creates the `photo` evidence row for an already-uploaded document.
+  ///
+  /// Upload and evidence are two steps on purpose: a document id only exists
+  /// after a successful upload, so a refused upload can never leave a dangling
+  /// evidence row behind.
+  Future<TaskEvidence> addPhotoEvidence({
+    required WorkspaceContext context,
+    required String taskId,
+    required String documentId,
+    required int version,
+  }) async {
+    final Map<String, dynamic> body = await _api.post(
+      '${_tasksPath(context)}/$taskId/evidence',
+      data: <String, dynamic>{'type': 'photo', 'document_id': documentId},
+      headers: <String, String>{'If-Match': version.toString()},
+    );
+
+    return TaskEvidence.fromJson(readMap(body['data']));
+  }
+
   String _tasksPath(WorkspaceContext context) {
     final String? workspaceId = context.workspaceId;
 

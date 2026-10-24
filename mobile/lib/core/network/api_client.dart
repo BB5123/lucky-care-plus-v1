@@ -64,13 +64,21 @@ class ApiClient {
     );
   }
 
+  /// [onSendProgress] is used by the multipart upload; other calls leave it
+  /// `null` so Dio keeps its default behaviour.
   Future<Map<String, dynamic>> post(
     String path, {
     Object? data,
     Map<String, String>? headers,
+    ProgressCallback? onSendProgress,
   }) {
     return _send(
-      () => _dio.post<dynamic>(path, data: data, options: _options(headers)),
+      () => _dio.post<dynamic>(
+        path,
+        data: data,
+        options: _options(headers),
+        onSendProgress: onSendProgress,
+      ),
     );
   }
 
