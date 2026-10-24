@@ -43,6 +43,8 @@ as the other AI features.
   "fetched_at": "2026-10-24",
   "published_at": null,
   "review_status": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_at": null,
   "license_note": "…",
   "headings": ["ระบาดวิทยา", "อาการ", "การป้องกัน"],
   "text": "…"
@@ -60,12 +62,14 @@ php artisan knowledge:fetch "https://ddc.moph.go.th/disease_detail.php?d=44" --i
 php artisan knowledge:validate
 php artisan knowledge:build
 php artisan knowledge:search "ไข้หวัดใหญ่ป้องกันอย่างไร" --limit=3
+php artisan knowledge:review ddc-disease-44 --reviewer="Dr. …" --build
 ```
 
 `knowledge:fetch` refuses non-https URLs, non-allow-listed hosts and robots-disallowed paths; it
 does not retry automatically. `knowledge:validate` checks ids, URLs, hosts, categories, review status
 and text length without touching the network. `knowledge:search` is the operator view of retrieval and
-never calls a provider.
+never calls a provider. `knowledge:review` records `reviewed_by`/`reviewed_at`, revalidates the source
+and (with `--build`) publishes the change; a source marked `reviewed` without a reviewer is rejected.
 
 ## API
 
@@ -111,7 +115,8 @@ and token counts only — no question, no answer, no corpus text.
 ## Updating the corpus
 
 1. Add or edit a JSON source (or `knowledge:fetch` one).
-2. Set `review_status` to `reviewed` only after a qualified review.
+2. Review it, then run `knowledge:review <id> --reviewer="…" --build` (or set `review_status`,
+   `reviewed_by` and `reviewed_at` by hand).
 3. Run `knowledge:validate` and `knowledge:build`; commit both the source and the rebuilt `.sqlite`.
 4. `knowledge:search` to confirm retrieval before enabling the endpoint.
 
