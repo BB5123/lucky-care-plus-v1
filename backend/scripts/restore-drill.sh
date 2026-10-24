@@ -22,6 +22,14 @@
 #   PGHOST=127.0.0.1 PGPORT=5432 PGUSER=luckycare \
 #   ./backend/scripts/restore-drill.sh
 #
+# Set DUMP_FILE to drill an archive that already exists instead of dumping the
+# source database again. `.github/workflows/backup.yml` uses this to restore the
+# *uploaded artifact*, which proves the artifact itself is restorable rather
+# than proving it about a fresh dump taken seconds later:
+#
+#   DUMP_FILE=./backups/luckycare-20261025T190000Z.dump \
+#   SOURCE_DB=lucky_care_plus APP_ROLE=luckycare_app ./backend/scripts/restore-drill.sh
+#
 # The database must contain at least one workspace (run `migrate:fresh --seed`
 # first). Exit code 0 means the drill passed; anything else means it failed and
 # the scratch database was removed.
@@ -31,7 +39,10 @@ SOURCE_DB="${SOURCE_DB:-lucky_care_plus}"
 ADMIN_DB="${ADMIN_DB:-postgres}"
 APP_ROLE="${APP_ROLE:-luckycare_app}"
 SCRATCH_DB="${SCRATCH_DB:-restore_drill_$$}"
-TMP_DUMP="$(mktemp "${TMPDIR:-/tmp}/lc-restore-drill-XXXXXX")"
+# Optional: restore this archive instead of dumping SOURCE_DB. When set, the
+# file is read-only input and is never deleted by this script.
+DUMP_FILE="${DUMP_FILE:-}"
+TMP_DUMP=""
 
 # Creating and dropping a database needs an admin role; the application role is
 # deliberately NOCREATEDB, so the two must not be confused. `ADMIN_PASSWORD` is
@@ -54,15 +65,27 @@ fail() {
 
 cleanup() {
   admin_psql -d "$ADMIN_DB" -v ON_ERROR_STOP=0 -c "drop database if exists \"$SCRATCH_DB\";" >/dev/null 2>&1 || true
-  rm -f "$TMP_DUMP"
+  if [ -n "$TMP_DUMP" ]; then
+    rm -f "$TMP_DUMP"
+  fi
 }
 trap cleanup EXIT
 
-echo "== restore drill: $SOURCE_DB -> $SCRATCH_DB =="
+# 1. Dump (or reuse an existing archive) ------------------------------------
+if [ -n "$DUMP_FILE" ]; then
+  [ -f "$DUMP_FILE" ] || fail "DUMP_FILE does not exist: $DUMP_FILE"
+  [ -s "$DUMP_FILE" ] || fail "DUMP_FILE is empty: $DUMP_FILE"
+  RESTORE_FROM="$DUMP_FILE"
+  DUMP_ORIGIN="existing dump $DUMP_FILE"
+else
+  TMP_DUMP="$(mktemp "${TMPDIR:-/tmp}/lc-restore-drill-XXXXXX")"
+  RESTORE_FROM="$TMP_DUMP"
+  DUMP_ORIGIN="fresh dump of $SOURCE_DB"
+  PGPASSWORD="$ADMIN_PASSWORD" pg_dump -U "$ADMIN_USER" -d "$SOURCE_DB" -Fc -f "$TMP_DUMP" || fail "pg_dump failed"
+  [ -s "$TMP_DUMP" ] || fail "dump file is empty"
+fi
 
-# 1. Dump -------------------------------------------------------------------
-PGPASSWORD="$ADMIN_PASSWORD" pg_dump -U "$ADMIN_USER" -d "$SOURCE_DB" -Fc -f "$TMP_DUMP" || fail "pg_dump failed"
-[ -s "$TMP_DUMP" ] || fail "dump file is empty"
+echo "== restore drill: $DUMP_ORIGIN -> $SCRATCH_DB =="
 
 # 2. Scratch database + restore --------------------------------------------
 admin_psql -d "$ADMIN_DB" -v ON_ERROR_STOP=1 -c "drop database if exists \"$SCRATCH_DB\";" >/dev/null
@@ -71,7 +94,7 @@ admin_psql -d "$ADMIN_DB" -v ON_ERROR_STOP=1 -c "create database \"$SCRATCH_DB\"
 # Ownership is preserved on purpose. --no-owner makes the restoring user the
 # owner, which strips the application role's privileges and produces a database
 # the app cannot use (this is the bug the drill was written to catch).
-PGPASSWORD="$ADMIN_PASSWORD" pg_restore -U "$ADMIN_USER" -d "$SCRATCH_DB" "$TMP_DUMP" || fail "pg_restore failed"
+PGPASSWORD="$ADMIN_PASSWORD" pg_restore -U "$ADMIN_USER" -d "$SCRATCH_DB" "$RESTORE_FROM" || fail "pg_restore failed"
 
 admin_psql -d "$ADMIN_DB" -v ON_ERROR_STOP=1 \
   -c "grant connect on database \"$SCRATCH_DB\" to \"$APP_ROLE\";" >/dev/null

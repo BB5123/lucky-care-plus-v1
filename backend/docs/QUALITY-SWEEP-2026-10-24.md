@@ -118,8 +118,21 @@ the tests expect.
    executable bit.
 4. **Load behaviour is unmeasured.** No load test has been run against the dashboard aggregate or the
    timeline endpoint.
-5. **Backups are not scheduled.** The drill proves a dump can be restored, but nothing produces a nightly
-   dump yet; that belongs to the deployment target, not this repository.
+5. ~~**Backups are not scheduled.**~~ **Satisfied for CI on 2026-10-25.** `backend/scripts/backup-dump.sh`
+   plus `.github/workflows/backup.yml` (nightly at 19:00 UTC = 02:00 Asia/Bangkok, plus manual dispatch)
+   dump the seeded database with `pg_dump -Fc`, read the archive back with `pg_restore --list` and fail
+   unless `workspaces`, `health_profiles` and `care_tasks` are present, write a `.sha256` next to the dump,
+   and prune dumps older than `KEEP_DAYS` **inside the backup directory only**, refusing to prune if that
+   would leave zero dumps. The workflow uploads dump + checksum as a build artifact with 7-day retention,
+   downloads that artifact back, and feeds it to `restore-drill.sh` through `DUMP_FILE`, so the table row
+   counts and the three RLS probes run against the artifact itself rather than a fresh dump. The first
+   scheduled or manually dispatched run is what proves the whole path end to end; outside CI only the
+   script logic can be checked, not the service container, artifact store or restore.
+   **This is not a production backup.** A GitHub artifact with 7-day retention lives in the same CI system
+   that produces it, `-Fc` is compression and not encryption, and neither off-site storage nor RPO/RTO is
+   defined by it. A production backup — encrypted storage away from the database host, key management,
+   restore drills against production data, agreed RPO/RTO numbers — still belongs to the deployment
+   target (D3/Q-12 in `PROJECT-STATE.md`).
 
 ---
 
