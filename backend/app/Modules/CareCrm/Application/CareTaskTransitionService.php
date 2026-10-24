@@ -11,6 +11,7 @@ use App\Modules\CareCrm\Domain\VersionConflictException;
 use App\Modules\CareCrm\Events\CareTaskAssigned;
 use App\Modules\CareCrm\Models\CareTask;
 use App\Modules\CareCrm\Models\TaskAssignment;
+use App\Modules\Documents\Models\MedicalDocument;
 use App\Modules\Workspace\Models\Workspace;
 use App\Modules\Workspace\Models\WorkspaceMembership;
 use Illuminate\Database\QueryException;
@@ -545,7 +546,20 @@ final class CareTaskTransitionService
         }
 
         $hasValue = $task->evidence()->where('type', 'value')->exists();
-        $hasPhoto = $task->evidence()->where('type', 'photo')->exists();
+        // A photo row must be backed by a document that still exists in this
+        // tenant/workspace/profile and is accepted; a bare `photo` label with a
+        // null document_id is not evidence (CT-005).
+        $hasPhoto = $task->evidence()
+            ->where('type', 'photo')
+            ->whereNotNull('document_id')
+            ->whereExists(function ($query): void {
+                $query->select(DB::raw(1))
+                    ->from('medical_documents')
+                    ->whereColumn('medical_documents.id', 'task_evidence.document_id')
+                    ->where('medical_documents.status', MedicalDocument::STATUS_AVAILABLE)
+                    ->whereNull('medical_documents.deleted_at');
+            })
+            ->exists();
 
         $satisfied = match ($policy) {
             CareTask::EVIDENCE_VALUE => $hasValue,

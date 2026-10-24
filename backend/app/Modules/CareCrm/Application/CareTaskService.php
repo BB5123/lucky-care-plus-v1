@@ -13,6 +13,7 @@ use App\Modules\CareCrm\Events\CareTaskAssigned;
 use App\Modules\CareCrm\Models\CareTask;
 use App\Modules\CareCrm\Models\TaskAssignment;
 use App\Modules\CareCrm\Models\TaskEvidence;
+use App\Modules\Documents\Models\MedicalDocument;
 use App\Modules\HealthRecord\Models\HealthProfile;
 use App\Modules\Workspace\Models\Workspace;
 use App\Modules\Workspace\Models\WorkspaceMembership;
@@ -325,6 +326,21 @@ final class CareTaskService
             throw new CareTaskForbiddenException;
         }
 
+        // A photo is proof of the work, not a free-text claim: it must point
+        // at a document that exists in this exact tenant/workspace/profile and
+        // is still accepted. The composite FK is the backstop, not the rule.
+        $documentId = $input['document_id'] ?? null;
+
+        if (($input['type'] ?? null) === TaskEvidence::TYPE_PHOTO && $documentId === null) {
+            throw ValidationException::withMessages([
+                'document_id' => ['Photo evidence requires a document.'],
+            ]);
+        }
+
+        if ($documentId !== null) {
+            $this->assertDocumentAttachable($task, (string) $documentId);
+        }
+
         return DB::transaction(function () use ($actor, $task, $input): TaskEvidence {
             $evidence = TaskEvidence::query()->create([
                 'tenant_id' => $task->tenant_id,
@@ -414,6 +430,24 @@ final class CareTaskService
             ->where('idempotency_key', $key)
             ->with(['profile.person', 'assignments.user'])
             ->first();
+    }
+
+    private function assertDocumentAttachable(CareTask $task, string $documentId): void
+    {
+        $document = MedicalDocument::query()
+            ->where('tenant_id', $task->tenant_id)
+            ->where('workspace_id', $task->workspace_id)
+            ->where('profile_id', $task->profile_id)
+            ->where('status', MedicalDocument::STATUS_AVAILABLE)
+            ->whereIn('scan_status', [MedicalDocument::SCAN_CLEAN, MedicalDocument::SCAN_SKIPPED])
+            ->whereKey($documentId)
+            ->first();
+
+        if (! $document instanceof MedicalDocument) {
+            throw ValidationException::withMessages([
+                'document_id' => ['The document is not available for this task profile.'],
+            ]);
+        }
     }
 
     private function assertAssigneeIsMember(Workspace $workspace, int $userId): void

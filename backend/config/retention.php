@@ -26,6 +26,9 @@ return [
         'task_events' => 36,
         'task_evidence' => 36,
         'documents_medical' => 60,
+        // Canonical name for the medical document pipeline. `documents_medical`
+        // remains as a compatibility alias for existing tenant overrides.
+        'medical_documents' => 60,
         'documents_identity' => 12, // counted from delegation end
         'ai_conversations' => 6,
         'notification_payload_days' => 90,
@@ -45,6 +48,7 @@ return [
         'task_events' => [12, 120],
         'task_evidence' => [12, 120],
         'documents_medical' => [24, 120],
+        'medical_documents' => [24, 120],
         'documents_identity' => [6, 36],
         'ai_conversations' => [1, 24],
         'notification_payload_days' => [30, 365],

@@ -3,6 +3,7 @@
 namespace App\Modules\Retention\Services;
 
 use App\Modules\Audit\Services\SecurityAuditLogger;
+use App\Modules\Documents\Models\MedicalDocument;
 use App\Modules\HealthRecord\Models\HealthMeasurement;
 use App\Modules\Workspace\Models\Tenant;
 use App\Modules\Workspace\Models\Workspace;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 use LogicException;
 
@@ -52,7 +54,11 @@ final class PurgeService
      * needs the delegation end join; notification periods are not rows in a
      * table owned by this service).
      *
-     * @var array<string, array{table: string, date_column: string, model: class-string|null, soft_deletes: bool}>
+     * `objects` marks a table whose rows point at a private object. The object
+     * is deleted before the row, so a failed object delete never leaves a row
+     * that claims an object exists (or an orphan object with no metadata).
+     *
+     * @var array<string, array{table: string, date_column: string, model: class-string|null, soft_deletes: bool, objects?: bool}>
      */
     private const TYPE_SPECS = [
         'health_measurements' => [
@@ -110,10 +116,18 @@ final class PurgeService
             'soft_deletes' => false,
         ],
         'documents_medical' => [
-            'table' => 'documents',
+            'table' => 'medical_documents',
             'date_column' => 'created_at',
             'model' => null,
             'soft_deletes' => false,
+            'objects' => true,
+        ],
+        'medical_documents' => [
+            'table' => 'medical_documents',
+            'date_column' => 'created_at',
+            'model' => null,
+            'soft_deletes' => false,
+            'objects' => true,
         ],
         'ai_conversations' => [
             'table' => 'ai_conversations',
@@ -316,7 +330,7 @@ final class PurgeService
     }
 
     /**
-     * @param  array{table: string, date_column: string, model: class-string|null, soft_deletes: bool}  $spec
+     * @param  array{table: string, date_column: string, model: class-string|null, soft_deletes: bool, objects?: bool}  $spec
      * @param  list<string>  $ids
      */
     private function deleteRows(array $spec, array $ids): int
@@ -327,6 +341,33 @@ final class PurgeService
         DB::selectOne('select set_config(?, ?, false)', ['app.retention_purge', 'on']);
 
         try {
+            // Object-backed rows: remove the private object first. If that
+            // fails, keep the metadata row so the next run can retry rather
+            // than losing the only pointer to the object (fail closed).
+            if (($spec['objects'] ?? false) === true) {
+                $rows = MedicalDocument::withTrashed()
+                    ->whereIn('id', $ids)
+                    ->get();
+
+                foreach ($rows as $row) {
+                    $path = $row->storage_path;
+
+                    if (! is_string($path) || $path === '') {
+                        continue;
+                    }
+
+                    $disk = Storage::disk($row->storage_disk);
+
+                    if ($disk->exists($path) && ! $disk->delete($path)) {
+                        throw new \RuntimeException(
+                            'Retention could not delete a medical document object; metadata was kept.'
+                        );
+                    }
+                }
+
+                return DB::table($spec['table'])->whereIn('id', $ids)->delete();
+            }
+
             $model = $spec['model'];
 
             if ($model !== null) {
@@ -347,7 +388,7 @@ final class PurgeService
     }
 
     /**
-     * @param  array{table: string, date_column: string, model: class-string|null, soft_deletes: bool}  $spec
+     * @param  array{table: string, date_column: string, model: class-string|null, soft_deletes: bool, objects?: bool}  $spec
      */
     private function usesSoftDeletes(array $spec): bool
     {

@@ -18,9 +18,19 @@ namespace App\Modules\Authz;
  */
 final class RoleGate
 {
-    /** Deletion is denied by default for health records (ABD-011). */
+    /**
+     * Health-record deletion is denied by default (ABD-011).
+     *
+     * Medical documents are deliberately not in this hard-deny list. The
+     * baseline catalog says `medical_document.delete` is "Delete where
+     * permitted" and that retention rules apply, so the role gate leaves the
+     * decision to the normal ownership/grant check (`documents`/`update`).
+     * The document endpoint still soft-deletes metadata only; the object is
+     * removed later by retention.
+     */
     private const DELETION_PERMISSIONS = [
         'health_measurement.delete',
+        // Catalogue: "Delete where permitted" -> "Default denied; retention rules apply".
         'medical_document.delete',
     ];
 
