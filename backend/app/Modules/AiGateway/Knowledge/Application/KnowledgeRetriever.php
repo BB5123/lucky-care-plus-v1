@@ -42,6 +42,40 @@ final class KnowledgeRetriever
     }
 
     /**
+     * Corpus size for the benchmark and the operator report. The counts are
+     * read from the tables rather than from `meta`, so a hand-edited file
+     * cannot silently claim a bigger corpus; `built_at` still comes from the
+     * builder's metadata.
+     *
+     * @return array{documents: int, chunks: int, built_at: ?string, path: string, bytes: int}
+     */
+    public function stats(): array
+    {
+        $path = $this->path();
+        $pdo = $this->connection();
+        $builtAt = $pdo->query("select value from meta where key = 'built_at'")->fetchColumn();
+
+        return [
+            'documents' => (int) $pdo->query('select count(*) from documents')->fetchColumn(),
+            'chunks' => (int) $pdo->query('select count(*) from chunks')->fetchColumn(),
+            'built_at' => is_string($builtAt) && $builtAt !== '' ? $builtAt : null,
+            'path' => $path,
+            'bytes' => is_file($path) ? (int) filesize($path) : 0,
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function documentIds(): array
+    {
+        $pdo = $this->connection();
+        $ids = $pdo->query('select id from documents order by id')->fetchAll(PDO::FETCH_COLUMN);
+
+        return array_values(array_map(static fn (mixed $id): string => (string) $id, $ids));
+    }
+
+    /**
      * @return list<array{
      *     id: int,
      *     document_id: string,

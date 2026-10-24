@@ -1,0 +1,142 @@
+[
+    {
+        "id": "Q-01",
+        "question": "ลูกเป็นมือเท้าปากต้องหยุดเรียนกี่วัน",
+        "expected": ["ddc-disease-11"]
+    },
+    {
+        "id": "Q-02",
+        "question": "มือเท้าปากติดต่อทางไหนบ้าง",
+        "expected": ["ddc-disease-11"]
+    },
+    {
+        "id": "Q-03",
+        "question": "ลูกมีตุ่มขึ้นที่ฝ่ามือ, ฝ่าเท้า, และในปาก ควรดูแลอย่างไร",
+        "expected": ["ddc-disease-11"]
+    },
+    {
+        "id": "Q-04",
+        "question": "มือเท้าปากมีระยะฟักตัวกี่วัน",
+        "expected": ["ddc-disease-11"]
+    },
+    {
+        "id": "Q-05",
+        "question": "เด็กเป็นมือเท้าปากแล้วไม่ยอมกินนมเพราะเจ็บปาก ทำอย่างไร",
+        "expected": ["ddc-disease-11"]
+    },
+    {
+        "id": "Q-06",
+        "question": "ลุยน้ำท่วมแล้วเสี่ยงฉี่หนูไหม",
+        "expected": ["ddc-disease-16"]
+    },
+    {
+        "id": "Q-07",
+        "question": "ฉี่หนูเกิดจากอะไร",
+        "expected": ["ddc-disease-16"]
+    },
+    {
+        "id": "Q-08",
+        "question": "หลังลุยน้ำท่วมมีไข้สูง, ปวดน่องมาก, ตาแดง ควรไปหาหมอไหม",
+        "expected": ["ddc-disease-16"]
+    },
+    {
+        "id": "Q-09",
+        "question": "ฉี่หนูมีอาการในคนอย่างไร",
+        "expected": ["ddc-disease-16"]
+    },
+    {
+        "id": "Q-10",
+        "question": "เป็นเลปโตสไปโรซิสกินยาอะไร",
+        "expected": ["ddc-disease-16"]
+    },
+    {
+        "id": "Q-11",
+        "question": "ไข้เลือดออกติดต่อจากคนสู่คนได้ไหม",
+        "expected": ["ddc-disease-44"]
+    },
+    {
+        "id": "Q-12",
+        "question": "ไข้เลือดออกมีอาการอะไรบ้าง",
+        "expected": ["ddc-disease-44"]
+    },
+    {
+        "id": "Q-13",
+        "question": "ยุงลายเป็นพาหะของไข้เลือดออก ป้องกันอย่างไร",
+        "expected": ["ddc-disease-44"]
+    },
+    {
+        "id": "Q-14",
+        "question": "มีไข้สูง, ปวดกระบอกตา, มีจุดแดงที่ผิวหนัง ควรไปตรวจอะไร",
+        "expected": ["ddc-disease-44"]
+    },
+    {
+        "id": "Q-15",
+        "question": "ป่วยไข้เลือดออกห้ามกินยาอะไร",
+        "expected": ["ddc-disease-44"]
+    },
+    {
+        "id": "Q-16",
+        "question": "ไข้หวัดใหญ่มีอาการอย่างไร",
+        "expected": ["ddc-disease-13"]
+    },
+    {
+        "id": "Q-17",
+        "question": "หวัดใหญ่ระบาดช่วงไหน",
+        "expected": ["ddc-disease-13"]
+    },
+    {
+        "id": "Q-18",
+        "question": "ไข้หวัดใหญ่ติดต่อทางการหายใจอย่างไร",
+        "expected": ["ddc-disease-13"]
+    },
+    {
+        "id": "Q-19",
+        "question": "มีไข้สูงทันทีทันใด, ปวดเมื่อยกล้ามเนื้อ, อ่อนเพลียมาก",
+        "expected": ["ddc-disease-13"]
+    },
+    {
+        "id": "Q-20",
+        "question": "หวัดใหญ่กับหวัดธรรมดาต่างกันอย่างไร",
+        "expected": ["ddc-disease-13"]
+    },
+    {
+        "id": "Q-21",
+        "question": "ฝุ่น PM2.5 ควรใส่หน้ากากอะไร",
+        "expected": ["thaihealth-pm25-heart"]
+    },
+    {
+        "id": "Q-22",
+        "question": "ฝุ่น PM2.5 เยอะแล้วไอ, เจ็บคอ, ต้องบรรเทาอย่างไร",
+        "expected": ["thaihealth-pm25-symptoms"]
+    },
+    {
+        "id": "Q-23",
+        "question": "PM2.5 ทำให้หัวใจเสี่ยงอะไรบ้าง",
+        "expected": ["thaihealth-pm25-heart", "thaihealth-pm25-symptoms"]
+    },
+    {
+        "id": "Q-24",
+        "question": "อยู่กลางฝุ่นนาน ๆ เสี่ยงหัวใจขาดเลือดไหม",
+        "expected": ["thaihealth-pm25-heart", "thaihealth-pm25-symptoms"]
+    },
+    {
+        "id": "Q-25",
+        "question": "ลูกใส่หน้ากาก N95 ตอนฝุ่นสูงพอไหม",
+        "expected": ["thaihealth-pm25-heart"]
+    },
+    {
+        "id": "Q-26",
+        "question": "บรรเทาอาการไอจากฝุ่นทำอย่างไร",
+        "expected": ["thaihealth-pm25-symptoms"]
+    },
+    {
+        "id": "Q-27",
+        "question": "สวมหมวกนิรภัยช่วยลดอุบัติเหตุทางถนนไหม",
+        "expected": ["ddc-disease-73"]
+    },
+    {
+        "id": "Q-28",
+        "question": "อุบัติเหตุทางถนนในไทยเสียชีวิตปีละกี่คน",
+        "expected": ["ddc-disease-73"]
+    }
+]
