@@ -42,6 +42,11 @@ jobs:
       DB_HOST: 127.0.0.1
       DB_PORT: 5432
       DB_DATABASE: lucky_care_drill
+      # Real environment variables, so they win over the copied .env.example.
+      # Without these, Laravel reads DB_PASSWORD from .env.example and migrate
+      # fails with "password authentication failed for user luckycare_app".
+      DB_USERNAME: luckycare_app
+      DB_PASSWORD: luckycare_app_ci
       APP_ENV: testing
       CACHE_STORE: array
       QUEUE_CONNECTION: sync
