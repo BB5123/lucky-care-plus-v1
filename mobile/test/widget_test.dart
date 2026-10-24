@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:lucky_care/core/auth/auth_repository.dart';
+import 'package:lucky_care/core/notifications/notification_models.dart';
 import 'package:lucky_care/features/dashboard/dashboard_models.dart';
 import 'package:lucky_care/features/dashboard/dashboard_repository.dart';
+import 'package:lucky_care/features/notifications/notifications_controller.dart';
 import 'package:lucky_care/main.dart';
 
+import 'support/tab_stubs.dart';
 import 'support/test_doubles.dart';
 
 /// Returns immediately so the router test never touches the network.
@@ -52,6 +55,11 @@ void main() {
             authRepositoryProvider.overrideWithValue(repository),
             dashboardRepositoryProvider.overrideWithValue(
               _EmptyDashboardRepository(),
+            ),
+            notificationDeliveriesControllerProvider.overrideWith(
+              () => StubNotificationDeliveriesController(
+                const <NotificationDelivery>[],
+              ),
             ),
           ],
           child: const LuckyCareApp(),

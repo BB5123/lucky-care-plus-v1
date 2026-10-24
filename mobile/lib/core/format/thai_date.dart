@@ -53,6 +53,17 @@ _ThaiDateParts? _parse(String isoValue) {
   );
 }
 
+/// `24 ต.ค. 2569` — date-only values such as a plan's `starts_on`.
+String formatThaiDate(String isoValue) {
+  final _ThaiDateParts? parts = _parse(isoValue);
+
+  if (parts == null) {
+    return '';
+  }
+
+  return '${parts.day} ${parts.month} ${parts.year}';
+}
+
 /// `24 ต.ค. 2569 เวลา 09:00 น.`
 String formatThaiDateTime(String isoValue) {
   final _ThaiDateParts? parts = _parse(isoValue);

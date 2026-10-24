@@ -8,6 +8,7 @@ import '../../features/auth/register_page.dart';
 import '../../features/dashboard/dashboard_page.dart';
 import '../../features/family/family_page.dart';
 import '../../features/health/health_page.dart';
+import '../../features/notifications/notifications_page.dart';
 import '../../features/shell/app_shell.dart';
 import '../../features/tasks/tasks_page.dart';
 import '../auth/auth_controller.dart';
@@ -107,6 +108,11 @@ final Provider<GoRouter> routerProvider = Provider<GoRouter>((Ref ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: NotificationsPage.routePath,
+        builder: (BuildContext context, GoRouterState state) =>
+            const NotificationsPage(),
       ),
       GoRoute(
         path: LoginPage.routePath,

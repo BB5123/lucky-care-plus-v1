@@ -82,6 +82,16 @@ class ApiClient {
     );
   }
 
+  Future<Map<String, dynamic>> patch(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+  }) {
+    return _send(
+      () => _dio.patch<dynamic>(path, data: data, options: _options(headers)),
+    );
+  }
+
   /// For endpoints whose success body is empty (204, e.g. logout).
   Future<void> postVoid(
     String path, {

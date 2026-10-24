@@ -1,33 +1,76 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/auth/auth_controller.dart';
 import '../../design_system/tokens.dart';
+import '../notifications/notifications_controller.dart';
+import '../notifications/notifications_page.dart';
 
 /// The five-tab shell from `.ai/MOBILE_DESIGN.md` §3.
 ///
-/// It owns no data: [navigationShell] keeps one navigation stack per branch and
-/// each tab page loads its own controller.
-class AppShell extends StatelessWidget {
+/// It owns the app bar (notification bell + sign out) and no data: the
+/// [navigationShell] keeps one navigation stack per branch and each tab page
+/// loads its own controller.
+class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
   static const Key navigationKey = Key('app-shell-navigation');
 
+  static const List<String> _titles = <String>[
+    'LuckyCare+',
+    'สุขภาพ',
+    'งาน',
+    'นัดหมาย',
+    'ครอบครัว',
+  ];
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final int index = navigationShell.currentIndex;
+    final int unread = ref.watch(unreadNotificationCountProvider);
+
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: AppColors.surface,
+        title: Text(_titles[index]),
+        actions: <Widget>[
+          IconButton(
+            key: const Key('notification-bell'),
+            tooltip: 'การแจ้งเตือน',
+            onPressed: () => context.push(NotificationsPage.routePath),
+            icon: unread > 0
+                ? Badge(
+                    key: const Key('notification-badge'),
+                    label: Text('$unread'),
+                    child: const Icon(Icons.notifications_outlined),
+                  )
+                : const Icon(Icons.notifications_outlined),
+          ),
+          IconButton(
+            key: const Key('logout-button'),
+            tooltip: 'ออกจากระบบ',
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              ref.read(authControllerProvider.notifier).signOut();
+            },
+          ),
+        ],
+      ),
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
         key: navigationKey,
-        selectedIndex: navigationShell.currentIndex,
+        selectedIndex: index,
         backgroundColor: AppColors.surfaceRaised,
         indicatorColor: AppColors.infoSurface,
-        onDestinationSelected: (int index) {
+        onDestinationSelected: (int nextIndex) {
           navigationShell.goBranch(
-            index,
+            nextIndex,
             // Tapping the active tab returns it to its first route.
-            initialLocation: index == navigationShell.currentIndex,
+            initialLocation: nextIndex == index,
           );
         },
         destinations: const <NavigationDestination>[
