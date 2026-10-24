@@ -6,7 +6,7 @@
 # Why this exists
 # ---------------
 # `restore-drill.sh` proves that a dump *can* be restored, but for a long time
-# nothing produced a dump at all (PROJECT-STATE.md §6 gap 4). A drill without a
+# nothing produced a dump at all (PROJECT-STATE.md ยง6 gap 4). A drill without a
 # producer is a false comfort. This script is the producer side and is used by
 # `.github/workflows/backup.yml`.
 #
@@ -57,6 +57,22 @@ case "$KEEP_DAYS" in
   "" | *[!0-9]*) fail "KEEP_DAYS must be a non-negative integer, got '$KEEP_DAYS'" ;;
 esac
 
+# Database and role names are interpolated into SQL below, so they are validated
+# as bare identifiers first. psql does NOT expand `:'var'` inside `-c` (verified
+# against PostgreSQL 16 in this repository: it sends the colon to the server and
+# fails with `syntax error at or near ":"`), so a `-v` variable is not an option
+# here โ€” validation plus single quotes is the safe form.
+require_identifier() {
+  case "$1" in
+    "") fail "empty identifier" ;;
+    *[!A-Za-z0-9_]*) fail "invalid identifier: '$1' (letters, digits and underscore only)" ;;
+  esac
+}
+
+require_identifier "$SOURCE_DB"
+require_identifier "$ADMIN_DB"
+require_identifier "$ADMIN_USER"
+
 # Creating and dropping databases needs an admin role; the application role is
 # deliberately NOCREATEDB/NOSUPERUSER. The admin connection is only used for
 # the preflight check here, but keeping the same parameters as restore-drill.sh
@@ -104,8 +120,8 @@ echo "== backup: $SOURCE_DB -> $DUMP_FILE =="
 
 # 0. Preflight ---------------------------------------------------------------
 # A missing database otherwise surfaces as an opaque pg_dump error.
-source_exists="$(admin_psql -d "$ADMIN_DB" -v db="$SOURCE_DB" -tAc \
-  "select 1 from pg_database where datname = :'db';")" \
+source_exists="$(admin_psql -d "$ADMIN_DB" -tAc \
+  "select 1 from pg_database where datname = '$SOURCE_DB';")" \
   || fail "cannot connect to admin database '$ADMIN_DB' as '$ADMIN_USER'"
 [ "$source_exists" = "1" ] || fail "database '$SOURCE_DB' does not exist"
 
