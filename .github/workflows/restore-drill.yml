@@ -1,0 +1,114 @@
+name: Restore drill
+
+# Proves that a dump of the schema can be restored and that row-level security
+# still holds afterwards. This is deliberately separate from CI: it is slow, it
+# mutates a scratch database, and it is the kind of check you want on a schedule
+# rather than on every push.
+#
+# The drill exists because a manual run found that `pg_restore --no-owner`
+# reports success while stripping the application role's privileges — a restore
+# that only checks the exit code is worthless.
+on:
+  workflow_dispatch:
+  schedule:
+    # Sunday 03:00 UTC (10:00 Asia/Bangkok)
+    - cron: "0 3 * * 0"
+
+permissions:
+  contents: read
+
+jobs:
+  drill:
+    name: Backup / restore / RLS
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lucky_care_drill
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: lucky_care_drill
+      APP_ENV: testing
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+      RETENTION_DRY_RUN: "true"
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      # The probes connect as the application role; admin operations override
+      # these with ADMIN_USER / ADMIN_PASSWORD inside the script.
+      PGPASSWORD: luckycare_app_ci
+      ADMIN_USER: postgres
+      ADMIN_PASSWORD: postgres
+      SOURCE_DB: lucky_care_drill
+      ADMIN_DB: postgres
+      APP_ROLE: luckycare_app
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_pgsql, pgsql, redis
+          coverage: none
+
+      - name: Install PostgreSQL client tools
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Create non-superuser runtime role
+        working-directory: .
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+          psql -v ON_ERROR_STOP=1 \
+            --host=127.0.0.1 --port=5432 --username=postgres --dbname=lucky_care_drill <<'SQL'
+          CREATE ROLE luckycare_app
+            LOGIN PASSWORD 'luckycare_app_ci'
+            NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+          GRANT ALL PRIVILEGES ON DATABASE lucky_care_drill TO luckycare_app;
+          ALTER SCHEMA public OWNER TO luckycare_app;
+          GRANT ALL ON SCHEMA public TO luckycare_app;
+          ALTER DATABASE lucky_care_drill OWNER TO luckycare_app;
+          SQL
+
+      - name: Migrate and seed
+        run: php artisan migrate:fresh --seed --force
+
+      - name: Run the restore drill
+        run: ./scripts/restore-drill.sh
+
+      - name: Report failure
+        if: failure()
+        run: |
+          echo "::error::Restore drill failed. A backup that cannot be restored is not a backup."
+          echo "Inspect the step log above: row-count mismatches, or an RLS probe that returned rows it should not."
