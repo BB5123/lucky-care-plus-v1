@@ -91,10 +91,7 @@ export const routes: Routes = [
         path: 'family',
         title: 'ครอบครัวและสิทธิ์ | LuckyCare+',
         data: { title: 'ครอบครัวและสิทธิ์' },
-        loadComponent: () =>
-          import('./features/placeholder/under-construction.page').then(
-            (m) => m.UnderConstructionPage,
-          ),
+        loadComponent: () => import('./features/family/family.page').then((m) => m.FamilyPage),
       },
     ],
   },
