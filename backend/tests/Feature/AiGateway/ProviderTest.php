@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Modules\AiGateway\Application\ContextGateway;
 use App\Modules\AiGateway\Application\CostAccountant;
 use App\Modules\AiGateway\Application\Evaluation\EvaluationRunner;
+use App\Modules\AiGateway\Application\ModelResolver;
 use App\Modules\AiGateway\Application\ProviderRouter;
 use App\Modules\AiGateway\Contracts\LlmProvider;
 use App\Modules\AiGateway\Domain\GatewayRequest;
@@ -34,7 +35,7 @@ use Tests\Concerns\CreatesWorkspaces;
 use Tests\TestCase;
 
 /**
- * TASK P-2 acceptance suite — PRV-T01 ... PRV-T10.
+ * TASK P-2 acceptance suite — PRV-T01 ... PRV-T13.
  *
  * Every outbound call is stubbed with `Http::fake`; `preventStrayRequests`
  * makes a forgotten stub fail instead of reaching the network. AI stays
@@ -498,6 +499,82 @@ class ProviderTest extends TestCase
 
         // max_retries=1 still allows no retry for these two cases.
         Http::assertSentCount(2);
+    }
+
+    public function test_prv_t11_okmd_is_accepted_as_an_alias_for_the_openai_compatible_adapter(): void
+    {
+        $this->configureOpenAi();
+        config(['ai.provider' => 'OKMD']);
+
+        Http::fake([
+            '*' => Http::response($this->completionBody($this->validContent()), 200),
+        ]);
+
+        $result = $this->gateway()->run($this->request());
+
+        $this->assertSame('succeeded', $result->status);
+
+        // The vendor name must reach the same adapter, not the NullProvider.
+        Http::assertSentCount(1);
+
+        $this->useWorkspace();
+
+        $row = AiRequest::query()->sole();
+        $this->assertSame('openai_compatible', $row->provider);
+        $this->assertSame(AiRequest::STATUS_SUCCEEDED, $row->status);
+    }
+
+    public function test_prv_t12_the_envelope_model_overrides_the_configured_default(): void
+    {
+        $this->configureOpenAi();
+
+        Http::fake([
+            '*' => Http::response($this->completionBody($this->validContent()), 200),
+        ]);
+
+        $envelope = new PromptEnvelope(
+            system: 'system',
+            untrustedBlocks: [],
+            structuredContext: [],
+            locale: 'th',
+            maxTokens: 100,
+            temperature: 0.0,
+            model: 'vision-model-x',
+        );
+
+        $this->app->make(OpenAiCompatibleProvider::class)->complete($envelope);
+
+        Http::assertSent(function (Request $request): bool {
+            return ($request->data()['model'] ?? null) === 'vision-model-x';
+        });
+    }
+
+    public function test_prv_t13_the_model_resolver_prefers_the_purpose_model(): void
+    {
+        $resolver = $this->app->make(ModelResolver::class);
+
+        config([
+            'ai.model' => 'generic-model',
+            'ai.openai_compatible.model' => 'default-model',
+            'ai.purposes' => [
+                'summary' => ['model' => 'summary-model'],
+                'ocr' => ['model' => 'vision-model'],
+            ],
+        ]);
+
+        $this->assertSame('summary-model', $resolver->forPurpose(AiRequest::PURPOSE_SUMMARY));
+        $this->assertSame('vision-model', $resolver->forPurpose(AiRequest::PURPOSE_OCR));
+        // An unset purpose falls back to the deployment default.
+        $this->assertSame('default-model', $resolver->forPurpose(AiRequest::PURPOSE_DRAFT));
+
+        config(['ai.purposes' => []]);
+        $this->assertSame('default-model', $resolver->forPurpose(AiRequest::PURPOSE_OCR));
+
+        config(['ai.openai_compatible.model' => null]);
+        $this->assertSame('generic-model', $resolver->forPurpose(AiRequest::PURPOSE_OCR));
+
+        config(['ai.model' => null]);
+        $this->assertNull($resolver->forPurpose(AiRequest::PURPOSE_OCR));
     }
 
     public function test_prv_t10_the_evaluation_suite_still_passes_with_the_router_in_place(): void

@@ -17,6 +17,8 @@ use App\Modules\AiGateway\Domain\ScrubbedContext;
  */
 final class GuardrailPrompting
 {
+    public function __construct(private readonly ModelResolver $models) {}
+
     public function build(ScrubbedContext $context, GatewayRequest $request): PromptEnvelope
     {
         $disclaimer = (string) config('ai.disclaimer');
@@ -67,6 +69,8 @@ PROMPT;
             locale: $request->locale,
             maxTokens: (int) config('ai.max_tokens', 700),
             temperature: (float) config('ai.temperature', 0.2),
+            // A cheap text model for summaries; the vision path sets its own.
+            model: $this->models->forPurpose($request->purpose),
         );
     }
 }

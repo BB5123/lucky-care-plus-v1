@@ -22,17 +22,41 @@ return [
     |--------------------------------------------------------------------------
     |
     | `null` (or the string `null`) means the deterministic in-process
-    | NullProvider. `openai_compatible` selects the HTTP adapter below; it
-    | reports itself unconfigured until `AI_BASE_URL`, `AI_API_KEY` and
-    | `AI_MODEL` are all present, so a half-configured deployment keeps the
-    | in-process provider. Signing the DPA and choosing the vendor remain the
-    | owner's decision (AIG-010).
+    | NullProvider. `openai_compatible` selects the HTTP adapter below; `okmd`
+    | (KKU IntelliSphere) is an accepted alias because that gateway speaks the
+    | same OpenAI-compatible protocol. The adapter reports itself unconfigured
+    | until `AI_BASE_URL`, `AI_API_KEY` and a model are all present, so a
+    | half-configured deployment keeps the in-process provider. Signing the DPA
+    | and choosing the vendor remain the owner's decision (AIG-010).
     |
     */
 
     'provider' => env('AI_PROVIDER', 'null'),
 
-    'model' => env('AI_MODEL', 'null-provider-v1'),
+    'model' => env('AI_MODEL') ?: env('AI_MODEL_1') ?: 'null-provider-v1',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Per-purpose model
+    |--------------------------------------------------------------------------
+    |
+    | The adapter sends one model per request, taken from the prompt envelope.
+    | Summaries therefore use a cheap text model while P-3 vision extraction
+    | uses a model that accepts images (`.ai/08-AI-GATEWAY.md` section 5).
+    |
+    | `AI_MODEL` (alias `AI_MODEL_1`) is the default text model and
+    | `AI_MODEL_VISION` (alias `AI_MODEL_2`) is the vision model.
+    |
+    */
+
+    'purposes' => [
+        'summary' => [
+            'model' => env('AI_MODEL_SUMMARY') ?: env('AI_MODEL') ?: env('AI_MODEL_1'),
+        ],
+        'ocr' => [
+            'model' => env('AI_MODEL_VISION') ?: env('AI_MODEL_2') ?: env('AI_MODEL') ?: env('AI_MODEL_1'),
+        ],
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -43,11 +67,15 @@ return [
     | The list is empty by default: an unlisted (or text-only) model makes the
     | extraction endpoint answer 503 `ai_vision_unavailable` and send nothing,
     | rather than silently posting an image to a model that cannot read it
-    | (F-09 fail closed).
+    | (F-09 fail closed). Configure it as a comma-separated allow-list, e.g.
+    | `AI_VISION_MODELS=gemini-3.8-flash`.
     |
     */
 
-    'vision_models' => [],
+    'vision_models' => array_values(array_filter(array_map(
+        static fn (string $id): string => trim($id),
+        explode(',', (string) env('AI_VISION_MODELS', '')),
+    ), static fn (string $id): bool => $id !== '')),
 
     /*
     |--------------------------------------------------------------------------
@@ -73,7 +101,7 @@ return [
     'openai_compatible' => [
         'base_url' => env('AI_BASE_URL'),              // e.g. https://api.example.com/v1
         'api_key' => env('AI_API_KEY'),
-        'model' => env('AI_MODEL'),
+        'model' => env('AI_MODEL') ?: env('AI_MODEL_1'),
         'timeout_seconds' => env('AI_TIMEOUT', 20),
         'max_retries' => env('AI_MAX_RETRIES', 1),
     ],

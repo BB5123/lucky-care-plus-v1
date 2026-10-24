@@ -62,14 +62,20 @@ class ExtractionTest extends TestCase
         config([
             'ai.enabled' => true,
             'ai.provider' => 'openai_compatible',
-            'ai.model' => 'test-vision-model',
+            // The default text model differs from the vision model on purpose:
+            // every extraction test proves the purpose model is the one sent.
+            'ai.model' => 'test-text-model',
+            'ai.purposes' => [
+                'summary' => ['model' => 'test-text-model'],
+                'ocr' => ['model' => 'test-vision-model'],
+            ],
             'ai.vision_models' => ['test-vision-model'],
             'ai.limits.per_user_day' => 20,
             'ai.limits.per_user_minute' => 1000,
             'ai.openai_compatible' => [
                 'base_url' => 'https://api.example.com/v1',
                 'api_key' => 'test-key',
-                'model' => 'test-vision-model',
+                'model' => 'test-text-model',
                 'timeout_seconds' => 2,
                 'max_retries' => 0,
             ],
@@ -574,6 +580,37 @@ class ExtractionTest extends TestCase
 
         $this->assertSame(0, MedicationPlan::query()->count());
         $this->assertSame(0, HealthMeasurement::query()->count());
+    }
+
+    public function test_ocr_t12_the_vision_model_is_sent_instead_of_the_summary_model(): void
+    {
+        // The deployment default is a cheap text model; only the vision
+        // purpose may name the image-capable model (`.ai/08` section 5).
+        Http::fake([
+            '*' => Http::response($this->completionFor([
+                'name' => 'Amlodipine',
+                'dosage' => '5 mg',
+                'doses_per_day' => 1,
+                'schedule_times' => ['08:00'],
+                'instructions' => null,
+                'confidence' => 0.9,
+            ]), 200),
+        ]);
+
+        $document = $this->makeDocument($this->profile);
+
+        Sanctum::actingAs($this->owner);
+
+        $this->postJson($this->path(), [
+            'document_id' => $document->id,
+            'kind' => 'medication_label',
+        ])->assertOk();
+
+        Http::assertSent(function (Request $request): bool {
+            return ($request->data()['model'] ?? null) === 'test-vision-model';
+        });
+
+        $this->assertSame('test-text-model', config('ai.purposes.summary.model'));
     }
 
     private function path(?HealthProfile $profile = null, ?Workspace $workspace = null): string
