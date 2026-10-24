@@ -307,3 +307,64 @@ class MedicationData {
     adherence: <MedicationAdherence>[],
   );
 }
+
+/// The body of `POST .../medication-plans`.
+///
+/// `doses_per_day` and `schedule_times` must agree: the server requires exactly
+/// one valid `HH:MM` slot per daily dose. The review sheet checks that before
+/// sending, but the server remains the judge.
+class CreateMedicationPlanInput {
+  const CreateMedicationPlanInput({
+    required this.name,
+    this.dosage,
+    this.form = 'tablet',
+    required this.dosesPerDay,
+    required this.scheduleTimes,
+    required this.startsOn,
+    this.instructions,
+  });
+
+  final String name;
+  final String? dosage;
+  final String form;
+  final int dosesPerDay;
+  final List<String> scheduleTimes;
+
+  /// `YYYY-MM-DD`.
+  final String startsOn;
+  final String? instructions;
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> json = <String, dynamic>{
+      'name': name.trim(),
+      'form': form,
+      'doses_per_day': dosesPerDay,
+      'schedule_times': scheduleTimes,
+      'starts_on': startsOn,
+    };
+    final String? dosageValue = dosage?.trim();
+    final String? instructionsValue = instructions?.trim();
+
+    if (dosageValue != null && dosageValue.isNotEmpty) {
+      json['dosage'] = dosageValue;
+    }
+
+    if (instructionsValue != null && instructionsValue.isNotEmpty) {
+      json['instructions'] = instructionsValue;
+    }
+
+    return json;
+  }
+}
+
+/// The medication forms accepted by the server (`MedicationPlanRules::FORMS`)
+/// with the Thai label the review sheet shows.
+const Map<String, String> medicationFormLabels = <String, String>{
+  'tablet': 'เม็ด',
+  'capsule': 'แคปซูล',
+  'liquid': 'น้ำ',
+  'injection': 'ฉีด',
+  'patch': 'แผ่นแปะ',
+  'inhaler': 'สูด',
+  'other': 'อื่น ๆ',
+};

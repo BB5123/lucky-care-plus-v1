@@ -30,6 +30,7 @@ class _RecordingMedicationRepository implements MedicationRepository {
 
   final List<MedicationPlan> plans;
   int recordCalls = 0;
+  int createCalls = 0;
 
   @override
   Future<List<MedicationPlan>> listPlans(WorkspaceContext context) async {
@@ -42,6 +43,26 @@ class _RecordingMedicationRepository implements MedicationRepository {
     int days = 7,
   }) async {
     return const <MedicationAdherence>[];
+  }
+
+  @override
+  Future<MedicationPlan> createPlan(
+    WorkspaceContext context,
+    CreateMedicationPlanInput input,
+  ) async {
+    createCalls += 1;
+
+    return MedicationPlan(
+      id: 'plan-new',
+      name: input.name,
+      dosage: input.dosage ?? '',
+      form: input.form,
+      dosesPerDay: input.dosesPerDay,
+      scheduleTimes: input.scheduleTimes,
+      startsOn: input.startsOn,
+      instructions: input.instructions,
+      status: 'active',
+    );
   }
 
   @override

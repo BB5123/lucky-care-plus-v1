@@ -52,6 +52,18 @@ class AiQuotaExceeded implements Exception {
   String toString() => 'AiQuotaExceeded';
 }
 
+/// The server answered `503 ai_vision_unavailable`.
+///
+/// The configured model cannot read images at all. Like [AiUnavailable] this is
+/// a configuration state, not a transient error: the scan flow shows one calm
+/// explanation and offers no draft, because there is nothing to review.
+class AiVisionUnavailable implements Exception {
+  const AiVisionUnavailable();
+
+  @override
+  String toString() => 'AiVisionUnavailable';
+}
+
 /// The corpus has no answer for this question (422 `knowledge_not_found`).
 ///
 /// An empty result is not an error: the card explains it in muted copy and
@@ -214,4 +226,195 @@ class KnowledgeAnswer {
       usage: AiUsage.fromJson(readMap(json['usage'])),
     );
   }
+}
+
+/// The two vision-extraction kinds `POST .../ai/extractions` accepts.
+enum AiExtractionKind { medicationLabel, deviceReading }
+
+extension AiExtractionKindRules on AiExtractionKind {
+  String get apiValue {
+    return switch (this) {
+      AiExtractionKind.medicationLabel => 'medication_label',
+      AiExtractionKind.deviceReading => 'device_reading',
+    };
+  }
+}
+
+/// A vision-extraction **draft** from `POST .../ai/extractions` (TASK P-3).
+///
+/// A draft is the only source of the review sheet's fields; the AI never writes
+/// a health row (AIG-007). Two deliberate limits protect the screen:
+///
+///  - `document_id` is not kept. A widget cannot render an identifier it never
+///    receives (N-02), and the draft does not need one after extraction.
+///  - [fields] is filtered to the closed per-kind schema. A provider answer (or
+///    a malformed payload) that carries an extra key, such as a raw reading or
+///    a patient name, cannot reach a form by accident.
+class AiExtractionDraft {
+  const AiExtractionDraft({
+    required this.kind,
+    required this.fields,
+    required this.warnings,
+    required this.confidence,
+    required this.model,
+    this.requiresConfirmation = true,
+  });
+
+  /// `medication_label` or `device_reading`.
+  final String kind;
+
+  /// Only the keys in the per-kind schema, with nulls removed.
+  final Map<String, Object?> fields;
+
+  /// Server warning codes. Rendered through [aiExtractionWarningMessage];
+  /// the raw code is never shown.
+  final List<String> warnings;
+
+  final double confidence;
+  final String model;
+
+  /// The server always answers `true`; a draft without it is not writable.
+  final bool requiresConfirmation;
+
+  static const String medicationKind = 'medication_label';
+  static const String deviceKind = 'device_reading';
+
+  static const List<String> medicationFieldNames = <String>[
+    'name',
+    'dosage',
+    'doses_per_day',
+    'schedule_times',
+    'instructions',
+  ];
+
+  static const List<String> deviceFieldNames = <String>[
+    'type',
+    'value',
+    'secondary_value',
+    'unit',
+    'measured_at',
+  ];
+
+  bool get isMedication => kind == medicationKind;
+
+  bool get isDeviceReading => kind == deviceKind;
+
+  /// A success without a confirmation flag is not a draft this screen may
+  /// present as writable: fail closed instead of guessing (F-09).
+  bool get isValid => requiresConfirmation && (isMedication || isDeviceReading);
+
+  String stringValue(String key) {
+    final Object? value = fields[key];
+
+    return value is String ? value.trim() : '';
+  }
+
+  double? numberValue(String key) {
+    final Object? value = fields[key];
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
+    if (value is String) {
+      return double.tryParse(value.trim());
+    }
+
+    return null;
+  }
+
+  int? intValue(String key) {
+    final double? value = numberValue(key);
+
+    if (value == null || value != value.roundToDouble()) {
+      return null;
+    }
+
+    return value.toInt();
+  }
+
+  List<String> stringListValue(String key) {
+    final Object? value = fields[key];
+
+    if (value is! List) {
+      return const <String>[];
+    }
+
+    return value
+        .whereType<String>()
+        .map((String item) => item.trim())
+        .where((String item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  factory AiExtractionDraft.fromJson(Map<String, dynamic> json) {
+    final String kind = readString(json['kind']);
+    final Map<String, dynamic> rawFields = readMap(json['fields']);
+    final List<String> allowed;
+    if (kind == medicationKind) {
+      allowed = medicationFieldNames;
+    } else if (kind == deviceKind) {
+      allowed = deviceFieldNames;
+    } else {
+      allowed = const <String>[];
+    }
+    final Map<String, Object?> fields = <String, Object?>{};
+
+    for (final String name in allowed) {
+      final Object? value = rawFields[name];
+
+      if (value != null) {
+        fields[name] = value;
+      }
+    }
+
+    final List<String> warnings = readList(json['warnings'])
+        .whereType<String>()
+        .map((String warning) => warning.trim())
+        .where((String warning) => warning.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+
+    return AiExtractionDraft(
+      kind: kind,
+      fields: Map<String, Object?>.unmodifiable(fields),
+      warnings: warnings,
+      confidence: (readNullableDouble(json['confidence']) ?? 0)
+          .clamp(0, 1)
+          .toDouble(),
+      model: readString(json['model']),
+      requiresConfirmation: json['requires_confirmation'] == true,
+    );
+  }
+}
+
+/// A safe Thai sentence for one server warning code.
+///
+/// The code itself is an implementation detail; an unknown code falls back to a
+/// generic "some fields could not be read" line so a new server warning can
+/// never surface as an English identifier in the UI.
+String aiExtractionWarningMessage(String code) {
+  return switch (code) {
+    'name_invalid' => 'ชื่อยาบนซองอ่านไม่ชัด จึงยังไม่ถูกกรอกไว้ กรุณาตรวจสอบ',
+    'dosage_invalid' => 'ขนาดยาบนซองอ่านไม่ชัด จึงยังไม่ถูกกรอกไว้',
+    'doses_per_day_out_of_range' =>
+      'จำนวนครั้งต่อวันอยู่นอกช่วงที่บันทึกได้ จึงไม่ถูกกรอกไว้',
+    'schedule_times_invalid' =>
+      'เวลาทานยาอ่านไม่ครบหรือไม่ถูกต้อง จึงไม่ถูกกรอกไว้',
+    'instructions_invalid' =>
+      'คำแนะนำบนฉลากอ่านไม่ชัด จึงยังไม่ถูกกรอกไว้',
+    'type_not_supported' =>
+      'ชนิดค่าที่อ่านได้ไม่รองรับในแอป จึงให้เลือกชนิดเอง',
+    'value_out_of_range' =>
+      'ค่าที่อ่านได้อยู่นอกช่วงที่บันทึกได้ จึงไม่ถูกกรอกไว้',
+    'secondary_value_invalid' =>
+      'ค่าตัวล่างอ่านไม่ชัด จึงไม่ถูกกรอกไว้',
+    'unit_mismatch' =>
+      'หน่วยบนหน้าจอไม่ตรงกับชนิดค่าที่เลือก กรุณาตรวจสอบ',
+    'measured_at_invalid' =>
+      'เวลาที่วัดอ่านไม่ชัด จึงไม่ถูกกรอกไว้',
+    'injection_neutralised' =>
+      'พบข้อความที่ดูเหมือนคำสั่งในภาพ จึงถูกตัดออกเพื่อความปลอดภัย',
+    _ => 'ข้อมูลบางส่วนอ่านไม่ชัด จึงไม่ถูกกรอกไว้ กรุณาตรวจสอบ',
+  };
 }

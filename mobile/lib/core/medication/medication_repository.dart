@@ -31,6 +31,27 @@ class MedicationRepository {
     );
   }
 
+  /// Creates a plan through the normal medication endpoint.
+  ///
+  /// This is also the confirmation path for an OCR draft: the AI never writes,
+  /// so the review sheet sends the corrected values here (AIG-007).
+  Future<MedicationPlan> createPlan(
+    WorkspaceContext context,
+    CreateMedicationPlanInput input,
+  ) async {
+    final Map<String, dynamic> body = await _api.post(
+      '${_profilePath(context)}/medication-plans',
+      data: input.toJson(),
+    );
+    final MedicationPlan plan = MedicationPlan.fromJson(readMap(body['data']));
+
+    if (plan.id.isEmpty) {
+      throw ApiFailure.protocol;
+    }
+
+    return plan;
+  }
+
   /// Reports one dose. A skipped dose without a note is refused by the server;
   /// the sheet blocks it locally first.
   Future<MedicationRecord> recordDose(

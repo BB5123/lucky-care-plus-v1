@@ -53,6 +53,56 @@ class AiUnavailableCard extends StatelessWidget {
   }
 }
 
+/// The calm card shown when the extraction endpoint answers
+/// `503 ai_vision_unavailable`: the configured model cannot read images.
+///
+/// There is nothing to retry and no draft to review, so the card offers neither
+/// an error colour nor a "try again" action. The manual forms stay available.
+class AiVisionUnavailableCard extends StatelessWidget {
+  const AiVisionUnavailableCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('ai-vision-unavailable-card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: AppColors.infoSurface,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              const Icon(
+                Icons.image_not_supported_outlined,
+                color: AppColors.info,
+                size: AppSpacing.xl,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'ยังอ่านภาพไม่ได้ในขณะนี้',
+                  style: AppType.sectionTitle,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'โมเดล AI ที่เปิดใช้งานอยู่ยังไม่รองรับการอ่านภาพ '
+            'คุณยังบันทึกค่าหรือข้อมูลยาได้ตามปกติ',
+            style: AppType.bodySecondary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// "Today's limit is used up" line, shared by both surfaces.
 ///
 /// Muted by design: nothing is broken, the counter simply rolls over. The

@@ -117,6 +117,19 @@ String measurementContextLabel(String? context) {
   };
 }
 
+/// Maps an extraction `type` to the three kinds this slice can record.
+///
+/// The server supports more types than the mobile form; an unsupported one
+/// stays `null` so the review sheet asks the user to choose instead of guessing.
+MeasurementKind? measurementKindForApiValue(String value) {
+  return switch (value) {
+    'blood_pressure' => MeasurementKind.bloodPressure,
+    'blood_glucose' => MeasurementKind.bloodGlucose,
+    'weight' => MeasurementKind.weight,
+    _ => null,
+  };
+}
+
 /// One reading from `GET .../measurements`.
 class HealthMeasurement {
   const HealthMeasurement({
@@ -256,12 +269,17 @@ class CreateMeasurementInput {
     required this.value,
     this.secondaryValue,
     this.context,
+    this.recordedAt,
   });
 
   final String type;
   final double value;
   final double? secondaryValue;
   final String? context;
+
+  /// A timestamp read from the device screen, or `null` to let the server use
+  /// "now". The server validates the format and rejects a future time.
+  final String? recordedAt;
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> json = <String, dynamic>{
@@ -270,6 +288,7 @@ class CreateMeasurementInput {
     };
     final double? secondary = secondaryValue;
     final String? glucoseContext = context;
+    final String? at = recordedAt?.trim();
 
     if (secondary != null) {
       json['secondary_value'] = secondary;
@@ -277,6 +296,10 @@ class CreateMeasurementInput {
 
     if (glucoseContext != null && glucoseContext.isNotEmpty) {
       json['context'] = glucoseContext;
+    }
+
+    if (at != null && at.isNotEmpty) {
+      json['recorded_at'] = at;
     }
 
     return json;

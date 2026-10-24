@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/ai/ai_models.dart';
 import '../../../core/network/api_failure.dart';
 import '../../../design_system/state_views.dart';
 import '../../../design_system/tokens.dart';
@@ -9,6 +10,7 @@ import 'health_models.dart';
 import 'ai_view.dart';
 import 'widgets/measurement_tile.dart';
 import 'widgets/medication_view.dart';
+import 'widgets/ocr_scan_sheet.dart';
 import 'widgets/record_measurement_sheet.dart';
 
 /// The sections inside the health tab. Measurements stay the default so the
@@ -137,34 +139,57 @@ class _HealthPageState extends ConsumerState<HealthPage> {
           );
         }
 
-        if (value.isEmpty) {
-          return const EmptyState(
-            key: Key('health-empty-state'),
-            icon: Icons.monitor_heart_outlined,
-            title: 'ยังไม่มีค่าที่บันทึกไว้',
-            message: 'กด “บันทึกค่า” เพื่อเริ่มบันทึกความดัน น้ำตาล หรือน้ำหนัก',
-          );
-        }
+        final Widget content = value.isEmpty
+            ? const EmptyState(
+                key: Key('health-empty-state'),
+                icon: Icons.monitor_heart_outlined,
+                title: 'ยังไม่มีค่าที่บันทึกไว้',
+                message: 'กด “บันทึกค่า” เพื่อเริ่มบันทึกความดัน น้ำตาล หรือน้ำหนัก',
+              )
+            : ListView.separated(
+                key: const Key('health-list'),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.xxxl * 2,
+                ),
+                itemCount: value.measurements.length,
+                separatorBuilder: (BuildContext context, int index) =>
+                    const SizedBox(height: AppSpacing.md),
+                itemBuilder: (BuildContext context, int index) {
+                  final HealthMeasurement measurement =
+                      value.measurements[index];
 
-        return ListView.separated(
-          key: const Key('health-list'),
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.lg,
-            AppSpacing.xxxl * 2,
-          ),
-          itemCount: value.measurements.length,
-          separatorBuilder: (BuildContext context, int index) =>
-              const SizedBox(height: AppSpacing.md),
-          itemBuilder: (BuildContext context, int index) {
-            final HealthMeasurement measurement = value.measurements[index];
+                  return MeasurementTile(
+                    key: Key('measurement-${measurement.id}'),
+                    measurement: measurement,
+                  );
+                },
+              );
 
-            return MeasurementTile(
-              key: Key('measurement-${measurement.id}'),
-              measurement: measurement,
-            );
-          },
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                0,
+              ),
+              child: OutlinedButton.icon(
+                key: const Key('health-scan-device'),
+                onPressed: () => OcrScanSheet.show(
+                  context,
+                  AiExtractionKind.deviceReading,
+                ),
+                icon: const Icon(Icons.document_scanner_outlined),
+                label: const Text('สแกนหน้าจอเครื่องวัด'),
+              ),
+            ),
+            Expanded(child: content),
+          ],
         );
       },
     );
