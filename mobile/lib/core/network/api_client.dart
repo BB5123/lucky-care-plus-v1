@@ -92,6 +92,13 @@ class ApiClient {
     );
   }
 
+  /// For revocations whose success body is empty (204).
+  Future<void> delete(String path, {Map<String, String>? headers}) async {
+    await _send(
+      () => _dio.delete<dynamic>(path, options: _options(headers)),
+    );
+  }
+
   /// For endpoints whose success body is empty (204, e.g. logout).
   Future<void> postVoid(
     String path, {
