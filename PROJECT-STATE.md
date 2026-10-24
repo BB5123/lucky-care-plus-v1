@@ -34,18 +34,18 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 15-document knowledge base with a measured benchmark, web + mobile AI surfaces |
 | **4 - Scale/compliance** | not started | |
 
-**Verified test counts (2026-10-25 05:30):**
+**Verified test counts (2026-10-25 06:10):**
 
 | Suite | Result |
 |---|---|
 | backend `php artisan test` | **377 passed / 3,983 assertions** |
 | web `npm test` | **126 passed / 42 files** |
-| mobile `flutter test` | **102 passed** |
+| mobile `flutter test` | **116 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.893, hit@3 0.964, MRR 0.929** (15 docs / 181 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **56 merged PRs**, no open PRs.
+8 mobile feature folders, **58 merged PRs**, no open PRs.
 
 ---
 
@@ -68,7 +68,7 @@ npx prettier --check "src/**/*.{ts,html,css}"
 
 cd ../mobile
 flutter analyze
-flutter test                     # 102
+flutter test                     # 116
 ```
 
 Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr checks --watch` ->
@@ -126,8 +126,8 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 6. **Retention has never deleted anything** (`dry_run = true`).
 7. **Mobile** closed its write gaps on 2026-10-25: appointments create/edit/cancel, family invites and
    OCR scan-and-confirm now exist. What remains read-only is **history pagination** on long lists.
-8. **AI surfaces are at parity** (summary, knowledge answers, OCR) on web and mobile. The **data export UI**
-   exists on web (#56); mobile still has none, so an Android user can only get their copy through the web app.
+8. **AI and export surfaces are at parity** (summary, knowledge answers, OCR, data export) on web and mobile.
+   Mobile's download hands the short-lived URL to the clipboard because `url_launcher` is not a dependency.
 9. **Knowledge sources cannot be reviewed from the product.** `knowledge:review` is a console command, so a
    clinician needs shell access to mark 15 sources as reviewed - and until then every answer warns.
 
@@ -147,6 +147,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | Local model evaluation (Pathumma/Kaggle) | `backend/docs/LOCAL-AI-PATHUMMA.md` |
 | Backup and restore | `backend/docs/QUALITY-SWEEP-2026-10-24.md`, `.github/workflows/backup.yml` (nightly producer), `.github/workflows/restore-drill.yml` (weekly drill) |
 | First overnight run | `MORNING-REPORT.md` |
+| Second overnight run (this one) | `NIGHT-REPORT-2026-10-25.md` |
 
 ---
 
