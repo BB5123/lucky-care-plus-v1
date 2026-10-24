@@ -6,7 +6,7 @@ name: Restore drill
 # rather than on every push.
 #
 # The drill exists because a manual run found that `pg_restore --no-owner`
-# reports success while stripping the application role's privileges โ€” a restore
+# reports success while stripping the application role's privileges - a restore
 # that only checks the exit code is worthless.
 on:
   workflow_dispatch:

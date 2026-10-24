@@ -1,10 +1,14 @@
-# PROJECT STATE — Lucky Care Plus (LuckyCare+)
+# PROJECT STATE - Lucky Care Plus (LuckyCare+)
 
-> **อ่านไฟล์นี้ก่อนทำงานทุกครั้ง.** It is the single source of truth for *where the work is*.
+> **Read this file before doing any work.** It is the single source of truth for *where the work is*.
 > It is written in English (like the rest of the repo) so any agent session can read it.
-> Update it in the same PR as the work it describes — never let it drift.
+> Update it in the same PR as the work it describes - never let it drift.
+>
+> Punctuation rule for this file: **ASCII only** (plain hyphens, no em dashes, no curly quotes). An em dash
+> written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
+> on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 01:33 (Asia/Bangkok) on `feat/kb3-benchmark` (from `main` @ `03d0506`)
+**Last verified:** 2026-10-25 02:15 (Asia/Bangkok) on `main`
 
 ---
 
@@ -14,8 +18,8 @@ A family health CRM for Thai families: several caregivers coordinate the care of
 fine-grained, revocable access to health data. Backend Laravel 13 / PHP 8.4 / PostgreSQL 16 (RLS),
 web Angular 22 + Tailwind 4, mobile Flutter (`lucky_care`).
 
-Design authority, in order: `.ai/00-CONSTITUTION.md` → `docs/baseline-v1.0.0/*` (content = **v1.3.0**)
-→ other `.ai/*` → historical docs. A ticket never outranks the baseline.
+Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*` (content = **v1.3.0**)
+-> other `.ai/*` -> historical docs. A ticket never outranks the baseline.
 
 ---
 
@@ -23,24 +27,24 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` → `docs/baseline-v1.0.0/*
 
 | Phase | State | Evidence |
 |---|---|---|
-| **0 · Foundation** | ✅ G0 passed (2026-10-23) | `backend/docs/G0-CHECKLIST.md` |
-| **1 · Core MVP** | ✅ backend + web | health vault, medication, care tasks, appointments, dashboard, notifications, timeline, family |
-| **2 · Coordination** | ✅ | recurring templates, escalation ladder, doctor brief, documents + photo evidence, quality sweep |
-| **3 · AI** | 🚧 **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, knowledge base |
-| **4 · Scale/compliance** | ⬜ | not started |
+| **0 - Foundation** | G0 passed (2026-10-23) | `backend/docs/G0-CHECKLIST.md` |
+| **1 - Core MVP** | backend + web complete | health vault, medication, care tasks, appointments, dashboard, notifications, timeline, family |
+| **2 - Coordination** | complete | recurring templates, escalation ladder, doctor brief, documents + photo evidence, quality sweep |
+| **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 15-document knowledge base with a measured benchmark, web + mobile AI surfaces |
+| **4 - Scale/compliance** | not started | |
 
-**Verified test counts (2026-10-25):**
+**Verified test counts (2026-10-25 02:15):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **337 passed / 3,524 assertions** |
+| backend `php artisan test` | **340 passed / 3,532 assertions** |
 | web `npm test` | **111 passed / 40 files** |
-| mobile `flutter test` | **59 passed** |
+| mobile `flutter test` | **74 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
-| `php artisan knowledge:bench` | **28 questions · hit@1 0.929 · hit@3 0.964 · MRR 0.946** (7 docs / 76 chunks) |
+| `php artisan knowledge:bench` | **28 questions - hit@1 0.893, hit@3 0.964, MRR 0.929** (15 docs / 181 chunks) |
 
-**Repo shape:** 15 backend modules · 51 migrations · 88 API routes · 22 web feature folders ·
-8 mobile feature folders · **36 merged PRs** · no open PRs.
+**Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
+8 mobile feature folders, **46 merged PRs**, no open PRs.
 
 ---
 
@@ -48,7 +52,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` → `docs/baseline-v1.0.0/*
 
 ```bash
 cd backend
-php artisan test                 # 337
+php artisan test                 # 340
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
 ./vendor/bin/pint --test
@@ -57,14 +61,15 @@ cd ../frontend
 npm test                         # 111
 npm run build
 npm run check:encoding           # Thai double-encoding guard
+npm run check:mojibake           # repo-wide mojibake guard (added 2026-10-25)
 npx prettier --check "src/**/*.{ts,html,css}"
 
 cd ../mobile
 flutter analyze
-flutter test                     # 59
+flutter test                     # 74
 ```
 
-Workflow used throughout: branch → verify → commit → `gh pr create` → `gh pr checks --watch` →
+Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr checks --watch` ->
 `gh pr merge --merge --delete-branch`. Required checks: Backend / Frontend / Mobile.
 
 ---
@@ -74,9 +79,11 @@ Workflow used throughout: branch → verify → commit → `gh pr create` → `g
 - `AI_ENABLED` defaults to **false**; with it false the endpoint returns `503 ai_disabled` and writes a
   `disabled` row. **AI is not live.**
 - A live evaluation **was** run against the OKMD/KKU gateway (text `llama-4-maverick`, vision
-  `gemini-3.8-flash`) — evidence in `backend/docs/G4-LIVE-EVALUATION.md`.
+  `gemini-3.8-flash`) - evidence in `backend/docs/G4-LIVE-EVALUATION.md`.
 - G4 is **not signed off**: the DPA / provider-approval item (AIG-010) is an owner decision, and the
   production text model (`deepseek-v4-flash`) must repeat the run after its daily quota resets.
+- A local model can be scored with the same suites:
+  `php artisan ai:evaluate --live --base-url=<tunnel>/v1 --model=<name>` (see `backend/docs/LOCAL-AI-PATHUMMA.md`).
 - Credentials live only in `backend/.env` (gitignored). No key is tracked in git.
 
 ---
@@ -87,33 +94,27 @@ Workflow used throughout: branch → verify → commit → `gh pr create` → `g
 |---|---|---|
 | D1 | **Provider + DPA (AIG-010)**: which vendor, and written confirmation the data is not used for training | G4 sign-off, `AI_ENABLED=true` |
 | D2 | **API keys rotated** after they appeared in a chat transcript | security hygiene, not a blocker |
-| D3 | Retention numbers + privacy notice (Q-12) — `retention.dry_run` is still true | turning retention on |
-| D4 | ClamAV before production — `DOCUMENTS_SCAN_REQUIRED=false`, uploads are unscanned | production readiness |
+| D3 | Retention numbers + privacy notice (Q-12) - `retention.dry_run` is still true | turning retention on |
+| D4 | ClamAV before production - uploads are unscanned unless `scan_required` is on | production readiness |
 | D5 | Pricing / plan entitlements (Q-2) | billing, quota tiers |
 
 ---
 
 ## 6. Known gaps (honest list)
 
-1. **AI UI is web-only**; mobile has no AI summary / knowledge-ask screens yet.
-2. **Knowledge retrieval is lexical (SQLite FTS5), not vector search.** Measured 2026-10-25 by
-   `php artisan knowledge:bench` on 28 Thai questions against 7 documents / 76 chunks: **hit@1 0.929,
-   hit@3 0.964, MRR 0.946**. The one outright miss is a symptom-only leptospirosis question (Q-08);
-   the two PM2.5 articles are not separated by intent (Q-21 returns the symptom article before the
-   heart article). Decision, costs and the switch trigger live in
-   [`backend/docs/RAG-VECTOR-OPTIONS.md`](backend/docs/RAG-VECTOR-OPTIONS.md): keep lexical until a
-   real-traffic sample falls below hit@3 0.90 (or the corpus passes 500 chunks with no recall gain).
-   `KnowledgeRetriever` remains the seam for a Qdrant/hybrid retriever.
+1. **Knowledge base is lexical (SQLite FTS5)**, not vector search. Measured hit@3 = 0.964; the switch
+   trigger and the exact Qdrant work are in `backend/docs/RAG-VECTOR-OPTIONS.md`. The known blind spot is a
+   pure symptom question that shares no vocabulary with the corpus (benchmark Q-08).
+2. **All 15 sources are `unreviewed`** - every answer carries the "not yet reviewed" warning until a
+   clinician marks them with `knowledge:review`.
 3. **No load test** on the dashboard aggregate or the timeline endpoint.
-4. **Backups are produced nightly in CI, not in production.** `.github/workflows/backup.yml` +
-   `backend/scripts/backup-dump.sh` dump the seeded database with `pg_dump -Fc`, verify the archive's
-   table of contents (`workspaces`, `health_profiles`, `care_tasks`) and its sha256, upload it as a
-   7-day build artifact, then restore *that artifact* into a scratch database and re-run the three RLS
-   probes. A GitHub artifact is a safety net, not a compliance backup: no encrypted off-site storage,
-   no key management, no RPO/RTO (D3/Q-12) — those belong to the deployment target.
-5. **Documents are unscanned** (fail closed only if `scan_required` is turned on).
+4. **Backups**: the nightly producer (`.github/workflows/backup.yml`) and the weekly restore drill exist and
+   both run in CI, but a 7-day workflow artifact is a safety net, not a production backup - encrypted
+   off-site storage, RPO/RTO and key management stay with the deployment target.
+5. **Documents are unscanned** (ClamAV absent; the pipeline fails closed only when `scan_required` is on).
 6. **Retention has never deleted anything** (`dry_run = true`).
-7. **Mobile** has no appointments create/edit, no family invite, no history pagination — read-mostly.
+7. **Mobile** has no appointments create/edit, no family invite, no history pagination - read-mostly.
+8. **AI summary and knowledge answers exist on web and mobile, but OCR upload is web-only.**
 
 ---
 
@@ -121,19 +122,20 @@ Workflow used throughout: branch → verify → commit → `gh pr create` → `g
 
 | Topic | File |
 |---|---|
-| Blueprint (design authority) | `.ai/` — start at `.ai/README.md` |
+| Blueprint (design authority) | `.ai/` - start at `.ai/README.md` |
 | Authorization baseline | `docs/baseline-v1.0.0/` (v1.3.0) |
-| Change records | `.ai/changes/CR-001|CR-003|CR-004` |
+| Change records | `.ai/changes/CR-001`, `CR-003`, `CR-004` |
 | G0 gate evidence | `backend/docs/G0-CHECKLIST.md` |
 | G4 live evaluation | `backend/docs/G4-LIVE-EVALUATION.md` |
 | Knowledge base | `backend/docs/KNOWLEDGE-BASE.md` |
 | RAG retrieval decision (lexical vs vector) | `backend/docs/RAG-VECTOR-OPTIONS.md` |
-| Backup and restore | `backend/docs/QUALITY-SWEEP-2026-10-24.md` · `.github/workflows/backup.yml` (nightly producer) · `.github/workflows/restore-drill.yml` (weekly drill) |
+| Local model evaluation (Pathumma/Kaggle) | `backend/docs/LOCAL-AI-PATHUMMA.md` |
+| Backup and restore | `backend/docs/QUALITY-SWEEP-2026-10-24.md`, `.github/workflows/backup.yml` (nightly producer), `.github/workflows/restore-drill.yml` (weekly drill) |
 | First overnight run | `MORNING-REPORT.md` |
 
 ---
 
 ## 8. How to resume in one line
 
-> “Read `PROJECT-STATE.md`, then continue with the next open item in §5/§6 — verify with the commands
-> in §3 before committing.”
+> "Read `PROJECT-STATE.md`, then continue with the next open item in section 5 or 6 - verify with the
+> commands in section 3 before committing."
