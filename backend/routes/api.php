@@ -19,6 +19,7 @@ use App\Modules\Documents\Http\Controllers\DocumentDownloadController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
 use App\Modules\HealthRecord\Http\Controllers\BriefController;
 use App\Modules\HealthRecord\Http\Controllers\ConditionController;
+use App\Modules\HealthRecord\Http\Controllers\DataExportController;
 use App\Modules\HealthRecord\Http\Controllers\HealthReportController;
 use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationAdherenceController;
@@ -266,6 +267,28 @@ Route::prefix('v1')->group(function (): void {
             'authorize.permission:medical_document.export',
         ])
         ->name('documents.download');
+
+    // -- PDPA data exports (permission catalogue `data_export.*`) ------------
+    // Request, inspect and link are three separate actions with three frozen
+    // permissions. The request and status endpoints use `data_export.request`;
+    // only the link endpoint uses `data_export.download`, because issuing a
+    // short-lived capability is the actual export (F-06). Both permissions are
+    // mapped to the `data_export` consent purpose in the Authorizer, so a
+    // withdrawn consent closes all three routes.
+    //
+    // The link points at a short-lived signed object-store URL. The object is
+    // private and opaque (`exports/{tenant}/{export}.json`); the API never
+    // returns the key and never mails the file.
+    Route::prefix('/workspaces/{workspace}/profiles/{profile}/exports')
+        ->middleware(['auth:sanctum', 'throttle:60,1,exports', 'workspace.context'])
+        ->group(function (): void {
+            Route::post('/', [DataExportController::class, 'store'])
+                ->middleware('authorize.permission:data_export.request');
+            Route::get('/{export}', [DataExportController::class, 'show'])
+                ->middleware('authorize.permission:data_export.request');
+            Route::post('/{export}/link', [DataExportController::class, 'link'])
+                ->middleware('authorize.permission:data_export.download');
+        });
 
     // -- Appointments (Phase 1.4) -------------------------------------------
     // A profile-scoped coordination surface (APT-001). Every route declares

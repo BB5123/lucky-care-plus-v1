@@ -2,21 +2,24 @@
 
 namespace Tests\Feature\AiGateway;
 
+use App\Modules\HealthRecord\Jobs\BuildDataExport;
 use App\Modules\HealthRecord\Models\HealthCondition;
 use App\Modules\HealthRecord\Models\HealthMeasurement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 use Tests\Feature\Documents\DocumentTestCase;
 
 /**
  * G4 gate — EXPORT-01 ... EXPORT-04 (ADR-018, `.ai/10-TESTING.md` G4).
  *
- * The export surfaces that exist today are the medical-document signed link
- * and the Doctor Brief share. Both are gated by the *export* permission, not
- * by `.read` (F-06), both are time-bounded, and each writes exactly one
- * PHI-free security-audit decision. The `data_export.*` permissions are in the
- * catalogue but have no route, so the API cannot leak data through them.
+ * The export surfaces are the medical-document signed link, the Doctor Brief
+ * share and the PDPA data export. Each is gated by an *export* permission, not
+ * by `.read` (F-06), each is time-bounded, and each writes a PHI-free
+ * security-audit decision. The `data_export.*` permissions now have three
+ * routes; EXPORT-03 proves they are reachable but still fail closed without
+ * consent or an export grant, and that no response leaks a URL or object key.
  */
 class ExportGateTest extends DocumentTestCase
 {
@@ -98,42 +101,82 @@ class ExportGateTest extends DocumentTestCase
             ->assertJsonPath('code', 'out_of_scope');
     }
 
-    public function test_export_03_data_export_permissions_are_catalogued_but_have_no_route(): void
+    public function test_export_03_data_export_permissions_now_have_a_consent_gated_route(): void
     {
         $catalog = (array) config('authorization.permissions');
 
         $this->assertContains('data_export.request', $catalog);
         $this->assertContains('data_export.download', $catalog);
 
-        // No API surface exists for them yet: a catalogued ID without a route is
-        // a capability that cannot be invoked, which is the safe state.
+        // The permissions are no longer catalogued-but-unreachable: exactly
+        // three routes exist, and each declares the frozen permission it uses.
         $exportRoutes = collect(app('router')->getRoutes()->getRoutes())
-            ->map(static fn ($route): string => $route->uri())
-            ->filter(static fn (string $uri): bool => str_contains($uri, 'data-export')
-                || str_contains($uri, 'data_export'))
-            ->values()
-            ->all();
+            ->filter(static fn ($route): bool => str_contains($route->uri(), '/profiles/{profile}/exports'))
+            ->keyBy(static fn ($route): string => $route->uri());
 
-        $this->assertSame([], $exportRoutes);
+        $base = 'api/v1/workspaces/{workspace}/profiles/{profile}/exports';
+
+        $this->assertCount(3, $exportRoutes);
+        $this->assertContains(
+            'authorize.permission:data_export.request',
+            $exportRoutes[$base]->gatherMiddleware(),
+        );
+        $this->assertContains(
+            'authorize.permission:data_export.request',
+            $exportRoutes[$base.'/{export}']->gatherMiddleware(),
+        );
+        $this->assertContains(
+            'authorize.permission:data_export.download',
+            $exportRoutes[$base.'/{export}/link']->gatherMiddleware(),
+        );
 
         $this->useWorkspace();
-        $auditBefore = DB::table('security_audit_logs')->count();
+        Queue::fake();
+        $before = DB::table('data_exports')->count();
 
         Sanctum::actingAs($this->owner);
 
+        // Reachable, but the `data_export` consent gate still fails closed.
         $request = $this->postJson($this->dataExportPath(), ['format' => 'json']);
-        $request->assertNotFound();
+        $request->assertStatus(403)->assertJsonPath('code', 'no_consent');
 
         $body = (array) $request->json();
 
         $this->assertArrayNotHasKey('data', $body);
         $this->assertArrayNotHasKey('download_url', $body);
 
-        $this->getJson($this->dataExportPath().'/download')->assertNotFound();
-
-        // No authorization decision and therefore no data path was reached.
         $this->useWorkspace();
-        $this->assertSame($auditBefore, DB::table('security_audit_logs')->count());
+        $this->assertSame($before, DB::table('data_exports')->count());
+        Queue::assertNotPushed(BuildDataExport::class);
+
+        // Consent is not authority: a read grant is not an export grant (F-06).
+        $this->consent('data_export');
+        $this->grant($this->caregiver, ['profile.basic'], ['read']);
+
+        Sanctum::actingAs($this->caregiver);
+
+        $this->postJson($this->dataExportPath(), ['format' => 'json'])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'forbidden');
+
+        $this->useWorkspace();
+        $this->assertSame($before, DB::table('data_exports')->count());
+
+        // The export grant reaches the route, queues exactly one row and never
+        // returns a URL or an object key from the request/status surface.
+        $this->grant($this->caregiver, ['profile.basic'], ['export']);
+
+        $queued = $this->postJson($this->dataExportPath(), ['format' => 'json'])
+            ->assertStatus(202)
+            ->assertJsonPath('data.status', 'queued');
+
+        $this->assertArrayNotHasKey('url', (array) $queued->json('data'));
+        $this->assertArrayNotHasKey('object_key', (array) $queued->json('data'));
+
+        $this->useWorkspace();
+        $this->assertSame($before + 1, DB::table('data_exports')->count());
+
+        Queue::assertPushed(BuildDataExport::class);
     }
 
     public function test_export_04_every_export_path_writes_exactly_one_phi_free_audit_row(): void
@@ -207,7 +250,7 @@ class ExportGateTest extends DocumentTestCase
 
     private function dataExportPath(): string
     {
-        return "/api/v1/workspaces/{$this->workspace->id}/profiles/{$this->profile->id}/data-exports";
+        return "/api/v1/workspaces/{$this->workspace->id}/profiles/{$this->profile->id}/exports";
     }
 
     private function reportsPath(): string
