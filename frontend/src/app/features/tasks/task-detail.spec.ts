@@ -273,4 +273,101 @@ describe('TaskDetail', () => {
 
     httpMock.expectNone((item) => item.url.endsWith('/care-tasks/task-1/complete'));
   });
+
+  it('FE7-T06 the completion button becomes enabled once a photo evidence row exists (policy photo)', async () => {
+    const fixture = await render(
+      baseTask({
+        tier: 'clinical',
+        status: 'in_progress',
+        evidence_policy: 'photo',
+        version: 2,
+      }),
+      [],
+    );
+
+    click(fixture, '[data-testid="task-action-complete"]');
+
+    const before = fixture.nativeElement.querySelector(
+      '[data-testid="task-complete-submit"]',
+    ) as HTMLButtonElement | null;
+
+    expect(before?.disabled).toBe(true);
+
+    const select = fixture.nativeElement.querySelector(
+      '[data-testid="evidence-type"]',
+    ) as HTMLSelectElement;
+
+    select.value = 'photo';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    const file = new File(['photo-bytes'], 'pressure.jpg', { type: 'image/jpeg' });
+    const input = fixture.nativeElement.querySelector(
+      '[data-testid="evidence-photo-input"]',
+    ) as HTMLInputElement;
+
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: { 0: file, length: 1, item: () => file },
+    });
+    input.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    const form = fixture.nativeElement.querySelector(
+      '[data-testid="evidence-form"]',
+    ) as HTMLFormElement;
+
+    form.dispatchEvent(new Event('submit'));
+    fixture.detectChanges();
+
+    httpMock
+      .expectOne((item) => item.url.endsWith('/profiles/profile-1/documents'))
+      .flush(
+        {
+          data: {
+            id: 'doc-1',
+            kind: 'photo',
+            mime_type: 'image/jpeg',
+            size_bytes: 11,
+            captured_at: null,
+            status: 'available',
+          },
+        },
+        { status: 201, statusText: 'Created' },
+      );
+
+    await nextTick();
+    fixture.detectChanges();
+
+    httpMock
+      .expectOne((item) => item.url.endsWith('/care-tasks/task-1/evidence'))
+      .flush(
+        {
+          data: {
+            id: 'evidence-1',
+            type: 'photo',
+            metric: null,
+            value: null,
+            unit: null,
+            document_id: 'doc-1',
+            note: null,
+            created_by: 7,
+            created_at: '2026-10-24T09:00:00+07:00',
+          },
+        },
+        { status: 201, statusText: 'Created' },
+      );
+
+    await nextTick();
+    fixture.detectChanges();
+
+    const after = fixture.nativeElement.querySelector(
+      '[data-testid="task-complete-submit"]',
+    ) as HTMLButtonElement | null;
+
+    expect(after?.disabled).toBe(false);
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="task-evidence-required"]'),
+    ).toBeNull();
+  });
 });

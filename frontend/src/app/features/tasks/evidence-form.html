@@ -7,7 +7,9 @@
 >
   <header class="mb-3">
     <h3 class="text-base font-medium text-ink">เพิ่มหลักฐาน</h3>
-    <p class="mt-1 text-sm text-ink-muted">แนบค่าที่วัดหรือบันทึกประกอบก่อนปิดงานทางคลินิก</p>
+    <p class="mt-1 text-sm text-ink-muted">
+      แนบค่าที่วัด บันทึกประกอบ หรือภาพถ่ายก่อนปิดงานทางคลินิก
+    </p>
   </header>
 
   @if (conflict()) {
@@ -91,7 +93,7 @@
         }
       </div>
     </div>
-  } @else {
+  } @else if (selectedType() === 'note') {
     <div class="field">
       <label class="field-label" for="evidence-note">บันทึกหลักฐาน</label>
       <textarea
@@ -106,22 +108,78 @@
         <p class="field-error" data-field-error="note">{{ error }}</p>
       }
     </div>
+  } @else {
+    <div class="field">
+      <label class="field-label" for="evidence-photo">ไฟล์หลักฐาน</label>
+      <input
+        #photoInput
+        id="evidence-photo"
+        class="field-input"
+        type="file"
+        accept="image/*,application/pdf"
+        [attr.capture]="captureHint"
+        data-testid="evidence-photo-input"
+        (change)="choosePhoto($event)"
+      />
+      <p class="field-hint">ขนาดไฟล์ไม่เกิน 10 MB รองรับภาพถ่ายและไฟล์ PDF</p>
+      <p class="field-hint">
+        ไฟล์จะถูกเก็บไว้บนเซิร์ฟเวอร์ และเปิดได้เฉพาะผู้ที่ได้รับสิทธิ์เท่านั้น
+      </p>
+      @if (selectedPhotoName(); as name) {
+        <p class="text-sm text-ink" data-testid="evidence-photo-selected">เลือกไฟล์: {{ name }}</p>
+      }
+      @if (photoError(); as message) {
+        <p class="field-error" role="alert" data-testid="evidence-photo-error">{{ message }}</p>
+      }
+      @if (uploadProgress() !== null) {
+        <div class="mt-2" role="status" data-testid="evidence-upload-progress">
+          <progress class="h-2 w-full" max="100" [value]="uploadProgress() ?? 0"></progress>
+          <p class="field-hint mt-1 tabular-nums">อัปโหลดแล้ว {{ uploadProgress() }}%</p>
+        </div>
+      }
+    </div>
   }
 
-  <p class="field-hint">
-    หลักฐานประเภทภาพถ่ายยังอัปโหลดจากหน้านี้ไม่ได้ ต้องแนบผ่านเอกสารสุขภาพก่อน
-  </p>
+  @if (attachedPhoto(); as attached) {
+    <div class="mt-3 rounded-md border border-line p-3" data-testid="evidence-photo-attached">
+      <p class="text-sm text-ink">
+        แนบไฟล์แล้ว: <span class="font-medium">{{ attached.name }}</span>
+      </p>
+      <button
+        class="btn btn-secondary mt-2"
+        type="button"
+        data-testid="evidence-photo-open"
+        [disabled]="openingFile()"
+        (click)="openAttachedFile()"
+      >
+        @if (openingFile()) {
+          <span class="spinner" aria-hidden="true"></span>
+          <span>กำลังเปิด...</span>
+        } @else {
+          <span>ดูไฟล์</span>
+        }
+      </button>
+      @if (fileError(); as message) {
+        <p class="field-error mt-2" role="alert" data-testid="evidence-photo-open-error">
+          {{ message }}
+        </p>
+      }
+    </div>
+  }
 
   <div class="mt-3">
     <button
       class="btn btn-primary"
       type="submit"
       data-testid="evidence-submit"
-      [disabled]="submitting()"
+      [disabled]="submitting() || uploading()"
     >
-      @if (submitting()) {
+      @if (uploading()) {
         <span class="spinner" aria-hidden="true"></span>
-        <span>กําลังบันทึก...</span>
+        <span>กำลังอัปโหลด {{ uploadProgress() ?? 0 }}%</span>
+      } @else if (submitting()) {
+        <span class="spinner" aria-hidden="true"></span>
+        <span>กำลังบันทึก...</span>
       } @else {
         <span>เพิ่มหลักฐาน</span>
       }
