@@ -379,7 +379,7 @@ final class CareTaskService
      */
     public function listEvidence(CareTask $task, User $actor): Collection
     {
-        $this->assertFullAccess($task, $actor);
+        $this->assertEvidenceAccess($task, $actor);
 
         return $task->evidence()
             ->orderByDesc('created_at')
@@ -418,6 +418,20 @@ final class CareTaskService
     public function assertFullAccess(CareTask $task, User $actor): void
     {
         if ($this->canReadFull($actor, $task)) {
+            return;
+        }
+
+        throw new CareTaskForbiddenException;
+    }
+
+    /**
+     * CR-004: reading evidence is a separate authority from reading the task.
+     * Task-read authority (and an assignment) is not enough to disclose the
+     * photos, measured values or notes attached as proof.
+     */
+    public function assertEvidenceAccess(CareTask $task, User $actor): void
+    {
+        if ($this->access->canReadEvidence($actor, $task->profile)) {
             return;
         }
 

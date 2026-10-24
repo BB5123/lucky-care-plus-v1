@@ -2,7 +2,7 @@
 
 > **Normative parent:** [`docs/baseline-v1.0.0/`](../docs/baseline-v1.0.0/) — permission ID, role, matrix, test ID ทุกตัวมาจากที่นั่น
 > ไฟล์นี้อธิบาย *วิธีประกอบ* กลไกเหล่านั้นเป็นระบบที่รันได้ ไม่ได้ประกาศ permission ใหม่
-> **Baseline ปัจจุบัน:** `v1.2.0` — **99 permission ID** (amend โดย [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24)
+> **Baseline ปัจจุบัน:** `v1.3.0` — **99 permission ID** (amend โดย [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24 และ [CR-004](changes/CR-004-task-evidence-scope-v1.3.md), 2026-10-24)
 
 ---
 
@@ -131,12 +131,14 @@ baseline มี 8 role ตายตัว:
 | `appointments` | `appointments` |
 | `documents` | `documents` (metadata + ไฟล์) |
 | `tasks` | `care_tasks` ที่เกี่ยวกับ profile นี้ |
+| `task_evidence` | หลักฐานของงาน (`task_evidence`: รูป ค่าที่วัด โน้ต) — **แยกจาก `tasks`**: อ่านงานได้ไม่เท่ากับอ่านหลักฐาน (CR-004) |
 | `mental_health` | ข้อมูลสุขภาพจิต — **reserved, ปิดใน MVP** ([ADR-014](DECISIONS.md#adr-014--sensitive-scopes-ปิดใน-mvp-mental_health-lab_results)) |
 | `lab_results` | ผลแล็บ (structured) — **reserved, ปิดใน MVP**; เก็บใบแล็บเป็น `documents` แทน |
 | `timeline` | `timeline_entries` (กรองตาม scope อื่นอีกชั้น) |
 | `ai_context` | อนุญาตให้ดึงเข้าประมวลผล AI |
 
 **กฎเหล็ก:** `timeline`, `tasks`, `documents` **ไม่ใช่**ประตูข้าม scope — การเปิดรายละเอียดต้องตรวจ scope ของข้อมูลต้นทางอีกครั้ง (F-06, DM-007)
+`task_evidence` เป็น scope ปลายทางของหลักฐานงาน: grant ที่มี `tasks:read` ไม่ได้แปลว่าอ่านหลักฐานได้ (ABD-018)
 
 **ประกาศ ≠ เปิดใช้:** scope ที่อยู่ในตารางนี้คือ *คำศัพท์* ที่ระบบเข้าใจ ไม่ได้แปลว่าทุกตัวเปิดใช้งานแล้ว
 `mental_health` และ `lab_results` ถูกประกาศแต่ **ปิดใน MVP** — การขอเข้าถึงต้องได้ `403` และการสร้าง grant ที่ระบุ scope เหล่านี้ต้องได้ `422` (ADR-014)

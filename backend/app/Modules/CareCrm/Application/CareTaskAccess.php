@@ -72,6 +72,16 @@ final class CareTaskAccess
             || $this->hasScope($actor, $profile, 'vitals', 'read');
     }
 
+    /**
+     * CR-004: evidence is the PHI-bearing artifact, so it needs its own scope.
+     * A `tasks`/`vitals` read grant no longer implies it; only the owner or an
+     * explicit `task_evidence:read` grant may read the evidence rows.
+     */
+    public function canReadEvidence(User $actor, HealthProfile $profile): bool
+    {
+        return $this->hasScope($actor, $profile, 'task_evidence', 'read');
+    }
+
     public function canCreate(User $actor, HealthProfile $profile): bool
     {
         return $this->hasScope($actor, $profile, 'tasks', 'create');

@@ -9,9 +9,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
- * Evidence read/create. Reading evidence is full-access only: it may contain
- * health data, so a bare assignee's need-to-know card must not expose it
- * (F-04 / CRM-006).
+ * Evidence read/create. Reading evidence requires the separate
+ * `task_evidence:read` scope (CR-004): it may contain health data, so a bare
+ * task reader or assignee must not receive it (F-04 / CRM-006). Attaching
+ * evidence stays on `tasks:create` because it is part of doing the task.
  */
 final class TaskEvidenceController extends CareCrmController
 {
