@@ -2,17 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/ai/ai_models.dart';
-import '../../../core/ai/ai_repository.dart';
+import '../../../core/format/thai_date.dart';
 import '../../../core/network/api_failure.dart';
 import '../../../core/workspace/current_workspace.dart';
 import '../../../design_system/tokens.dart';
+import '../ai_controller.dart';
+import 'ai_state_views.dart';
 
-/// "ถามความรู้สุขภาพ" against the government-source corpus.
+/// "ถามเรื่องสุขภาพ" against the government-source corpus.
 ///
-/// The answer is always cited; the card lists each source with its label and
-/// publisher. The URL is selectable (no external-browser dependency) so a
-/// caregiver can copy it. Errors map to Thai sentences, including the
-/// "no corpus match" case where the server never called a provider.
+/// The answer arrives already cited with `[A]`/`[B]` markers; the card lists
+/// each source with the marker, title, publisher and date, and flags any source
+/// that has not passed review. The input is a single line with a send action.
+/// No document id and no patient value is ever rendered.
 class KnowledgeAskCard extends ConsumerStatefulWidget {
   const KnowledgeAskCard({super.key, required this.context});
 
@@ -27,10 +29,6 @@ class _KnowledgeAskCardState extends ConsumerState<KnowledgeAskCard> {
 
   final TextEditingController _controller = TextEditingController();
 
-  bool _loading = false;
-  KnowledgeAnswer? _answer;
-  String? _error;
-
   @override
   void dispose() {
     _controller.dispose();
@@ -40,55 +38,42 @@ class _KnowledgeAskCardState extends ConsumerState<KnowledgeAskCard> {
   Future<void> _ask() async {
     final String question = _controller.text.trim();
 
-    if (question.isEmpty || _loading) {
+    if (question.isEmpty || ref.read(aiAnswerControllerProvider).isLoading) {
       return;
     }
 
-    setState(() {
-      _loading = true;
-      _error = null;
-      _answer = null;
-    });
-
-    try {
-      final KnowledgeAnswer answer = await ref
-          .read(aiRepositoryProvider)
-          .ask(widget.context, question);
-
-      if (mounted) {
-        setState(() => _answer = answer);
-      }
-    } on ApiFailure catch (failure) {
-      if (mounted) {
-        setState(() => _error = _message(failure));
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = ApiFailure.genericMessage);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
+    await ref
+        .read(aiAnswerControllerProvider.notifier)
+        .ask(widget.context, question);
   }
 
+  /// Server sentences for the states that are not modelled as typed outcomes.
   String _message(ApiFailure failure) {
     return switch (failure.code) {
-      'knowledge_not_found' =>
-        'ไม่พบข้อมูลในฐานความรู้สำหรับคำถามนี้ ลองถามด้วยคำที่เฉพาะเจาะจงขึ้น หรือปรึกษาแพทย์',
-      'ai_disabled' => 'ฟีเจอร์ AI ยังไม่เปิดใช้งานในระบบนี้',
       'no_consent' => 'ต้องได้รับความยินยอมสำหรับการประมวลผลด้วย AI ก่อนใช้ฟีเจอร์นี้',
-      'ai_quota_exceeded' => 'คุณใช้ AI ครบจำนวนที่กำหนดในวันนี้แล้ว กรุณาลองใหม่พรุ่งนี้',
       'forbidden' => 'คุณยังไม่มีสิทธิ์ใช้ AI กับข้อมูลนี้',
-      _ when failure.status == 503 => 'ระบบ AI ไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่ภายหลัง',
-      _ => failure.message,
+      'validation' => 'กรุณาพิมพ์คำถามก่อนส่ง',
+      _ when failure.status == 403 || failure.status == 404 =>
+        'คุณยังไม่มีสิทธิ์ใช้ AI กับข้อมูลนี้',
+      _ => 'ตอบคำถามไม่สำเร็จ กรุณาลองใหม่ภายหลัง',
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final KnowledgeAnswer? answer = _answer;
+    final AsyncValue<KnowledgeAnswer?> state = ref.watch(
+      aiAnswerControllerProvider,
+    );
+
+    if (state.error is AiUnavailable) {
+      return const AiUnavailableCard();
+    }
+
+    final KnowledgeAnswer? answer = state.value;
+    final Object? error = state.error;
+    final bool loading = state.isLoading;
+    final AiQuotaExceeded? quota = error is AiQuotaExceeded ? error : null;
+    final bool inputEnabled = !loading && quota == null;
 
     return Container(
       key: const Key('knowledge-ask-card'),
@@ -102,7 +87,7 @@ class _KnowledgeAskCardState extends ConsumerState<KnowledgeAskCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('ถามความรู้สุขภาพ', style: AppType.sectionTitle),
+          Text('ถามเรื่องสุขภาพ', style: AppType.sectionTitle),
           const SizedBox(height: AppSpacing.xs),
           Text(
             'ตอบจากเอกสารของหน่วยงานราชการที่อ้างอิงไว้ เป็นความรู้ทั่วไป '
@@ -114,35 +99,58 @@ class _KnowledgeAskCardState extends ConsumerState<KnowledgeAskCard> {
             key: const Key('knowledge-question'),
             controller: _controller,
             maxLength: _maxLength,
-            maxLines: 3,
-            minLines: 2,
-            enabled: !_loading,
-            textInputAction: TextInputAction.newline,
-            decoration: const InputDecoration(
-              hintText: 'เช่น ไข้เลือดออกป้องกันอย่างไร',
-              border: OutlineInputBorder(),
-            ),
+            maxLines: 1,
+            enabled: inputEnabled,
+            textInputAction: TextInputAction.send,
+            onSubmitted: (_) => _ask(),
             onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              hintText: 'เช่น ไข้หวัดใหญ่ป้องกันอย่างไร',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
           ),
           const SizedBox(height: AppSpacing.sm),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
               key: const Key('knowledge-ask-submit'),
-              onPressed: _loading || _controller.text.trim().isEmpty
+              onPressed:
+                  !inputEnabled || _controller.text.trim().isEmpty
                   ? null
                   : _ask,
-              child: Text(_loading ? 'กำลังค้นหา...' : 'ถาม'),
+              child: Text(loading ? 'กำลังค้นหา...' : 'ถาม'),
             ),
           ),
-          if (_loading) ...<Widget>[
+          if (loading) ...<Widget>[
             const SizedBox(height: AppSpacing.md),
             const LinearProgressIndicator(),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'กำลังค้นฐานความรู้...',
+              key: const Key('knowledge-loading'),
+              style: AppType.caption,
+            ),
           ],
-          if (_error != null) ...<Widget>[
+          if (quota != null) ...<Widget>[
+            const SizedBox(height: AppSpacing.md),
+            AiQuotaNotice(
+              key: const Key('knowledge-quota'),
+              resetAt: quota.resetAt,
+            ),
+          ],
+          if (error is AiNoMatch) ...<Widget>[
             const SizedBox(height: AppSpacing.md),
             Text(
-              _error!,
+              error.message,
+              key: const Key('knowledge-empty'),
+              style: AppType.caption,
+            ),
+          ],
+          if (error is ApiFailure) ...<Widget>[
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              _message(error),
               key: const Key('knowledge-ask-error'),
               style: AppType.body.copyWith(color: AppColors.danger),
             ),
@@ -167,15 +175,48 @@ class _KnowledgeAskCardState extends ConsumerState<KnowledgeAskCard> {
               style: AppType.caption,
             ),
             const SizedBox(height: AppSpacing.sm),
-            for (final KnowledgeSource source in answer.sources) ...<Widget>[
-              Text(
-                '[${source.label}] ${source.title} — ${source.publisher}',
-                style: AppType.caption.copyWith(color: AppColors.info),
-              ),
-              SelectableText(source.url, style: AppType.caption),
-              const SizedBox(height: AppSpacing.xs),
-            ],
+            for (final KnowledgeSource source in answer.sources)
+              _SourceRow(source: source),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One cited source: marker, title, publisher, date, review status.
+class _SourceRow extends StatelessWidget {
+  const _SourceRow({required this.source});
+
+  final KnowledgeSource source;
+
+  @override
+  Widget build(BuildContext context) {
+    final String date = formatThaiDate(source.dateValue);
+    final String meta = date.isEmpty
+        ? source.publisher
+        : '${source.publisher} · $date';
+
+    return Padding(
+      key: Key('knowledge-source-${source.label}'),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            '[${source.label}] ${source.title}',
+            style: AppType.label.copyWith(color: AppColors.info),
+          ),
+          if (meta.isNotEmpty)
+            Text(meta, style: AppType.caption),
+          if (source.isUnreviewed)
+            Text(
+              'ยังไม่ผ่านการตรวจ',
+              key: Key('knowledge-source-unreviewed-${source.label}'),
+              style: AppType.caption.copyWith(color: AppColors.warning),
+            ),
+          if (source.url.isNotEmpty)
+            SelectableText(source.url, style: AppType.caption),
         ],
       ),
     );

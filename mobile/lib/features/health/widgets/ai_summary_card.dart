@@ -2,78 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/ai/ai_models.dart';
-import '../../../core/ai/ai_repository.dart';
-import '../../../core/network/api_failure.dart';
 import '../../../core/workspace/current_workspace.dart';
 import '../../../design_system/tokens.dart';
+import '../ai_controller.dart';
+import 'ai_state_views.dart';
 
-/// "สรุปแนวโน้มด้วย AI" for one profile.
+/// "สรุปภาพรวม" for one profile.
 ///
-/// Click-to-generate: the first call sends the profile's 30-day context only
-/// after the user presses the button (AIG-004). Every provider error is mapped
-/// to a Thai sentence; the server disclaimer is always shown with the draft.
-class AiSummaryCard extends ConsumerStatefulWidget {
+/// Click-to-generate: no health context leaves the device until the button is
+/// pressed (AIG-004). The server's disclaimer is always shown with the draft,
+/// the reference count is the only thing the expander reveals, and the record
+/// ids were dropped in [AiSummary.fromJson] so no id can be rendered here.
+class AiSummaryCard extends ConsumerWidget {
   const AiSummaryCard({super.key, required this.context});
 
   final WorkspaceContext context;
 
   @override
-  ConsumerState<AiSummaryCard> createState() => _AiSummaryCardState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AsyncValue<AiSummary?> state = ref.watch(aiSummaryControllerProvider);
 
-class _AiSummaryCardState extends ConsumerState<AiSummaryCard> {
-  bool _loading = false;
-  AiSummary? _summary;
-  String? _error;
-
-  Future<void> _generate() async {
-    if (_loading) {
-      return;
+    if (state.error is AiUnavailable) {
+      return const AiUnavailableCard();
     }
 
-    setState(() {
-      _loading = true;
-      _error = null;
-      _summary = null;
-    });
-
-    try {
-      final AiSummary summary = await ref
-          .read(aiRepositoryProvider)
-          .summarize(widget.context);
-
-      if (mounted) {
-        setState(() => _summary = summary);
-      }
-    } on ApiFailure catch (failure) {
-      if (mounted) {
-        setState(() => _error = _message(failure));
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = ApiFailure.genericMessage);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
-  }
-
-  String _message(ApiFailure failure) {
-    return switch (failure.code) {
-      'ai_disabled' => 'ฟีเจอร์ AI ยังไม่เปิดใช้งานในระบบนี้',
-      'no_consent' => 'ต้องได้รับความยินยอมสำหรับการประมวลผลด้วย AI ก่อนใช้ฟีเจอร์นี้',
-      'ai_quota_exceeded' => 'คุณใช้ AI ครบจำนวนที่กำหนดในวันนี้แล้ว กรุณาลองใหม่พรุ่งนี้',
-      'forbidden' => 'คุณยังไม่มีสิทธิ์ใช้ AI กับข้อมูลนี้',
-      _ when failure.status == 503 => 'ระบบ AI ไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่ภายหลัง',
-      _ => failure.message,
-    };
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final AiSummary? summary = _summary;
+    final AiSummary? summary = state.value;
+    final Object? error = state.error;
+    final bool loading = state.isLoading;
+    final AiQuotaExceeded? quota = error is AiQuotaExceeded ? error : null;
 
     return Container(
       key: const Key('ai-summary-card'),
@@ -87,7 +43,7 @@ class _AiSummaryCardState extends ConsumerState<AiSummaryCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('สรุปแนวโน้มด้วย AI', style: AppType.sectionTitle),
+          Text('สรุปภาพรวม', style: AppType.sectionTitle),
           const SizedBox(height: AppSpacing.xs),
           Text(
             'AI จะอ่านข้อมูลที่บันทึกไว้ใน 30 วันล่าสุดแล้วสรุปให้อ่านเร็วขึ้น '
@@ -99,26 +55,64 @@ class _AiSummaryCardState extends ConsumerState<AiSummaryCard> {
             width: double.infinity,
             child: FilledButton(
               key: const Key('ai-summary-generate'),
-              onPressed: _loading ? null : _generate,
-              child: Text(_loading ? 'กำลังสรุป...' : 'สร้างสรุป'),
+              onPressed: loading || quota != null
+                  ? null
+                  : () {
+                      ref
+                          .read(aiSummaryControllerProvider.notifier)
+                          .generate(this.context);
+                    },
+              child: Text(
+                loading
+                    ? 'กำลังสรุป...'
+                    : summary == null
+                    ? 'สร้างสรุป'
+                    : 'สร้างสรุปใหม่',
+              ),
             ),
           ),
-          if (_loading) ...<Widget>[
+          if (loading) ...<Widget>[
             const SizedBox(height: AppSpacing.md),
             const LinearProgressIndicator(),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'กำลังให้ AI สรุปข้อมูล...',
+              key: const Key('ai-summary-loading'),
+              style: AppType.caption,
+            ),
           ],
-          if (_error != null) ...<Widget>[
+          if (quota != null) ...<Widget>[
+            const SizedBox(height: AppSpacing.md),
+            AiQuotaNotice(
+              key: const Key('ai-summary-quota'),
+              resetAt: quota.resetAt,
+            ),
+          ],
+          if (error != null && quota == null) ...<Widget>[
             const SizedBox(height: AppSpacing.md),
             Text(
-              _error!,
+              'สร้างสรุปไม่สำเร็จ กรุณาลองใหม่ภายหลัง',
               key: const Key('ai-summary-error'),
               style: AppType.body.copyWith(color: AppColors.danger),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                key: const Key('ai-summary-retry'),
+                onPressed: () {
+                  ref
+                      .read(aiSummaryControllerProvider.notifier)
+                      .generate(this.context);
+                },
+                child: const Text('ลองอีกครั้ง'),
+              ),
             ),
           ],
           if (summary != null) ...<Widget>[
             const SizedBox(height: AppSpacing.md),
             Text(
-              summary.summary,
+              summary.text,
               key: const Key('ai-summary-text'),
               style: AppType.body,
             ),
@@ -129,8 +123,33 @@ class _AiSummaryCardState extends ConsumerState<AiSummaryCard> {
               style: AppType.caption,
             ),
             const SizedBox(height: AppSpacing.sm),
+            ExpansionTile(
+              key: const Key('ai-summary-refs'),
+              title: Text(
+                'อ้างอิง ${summary.recordRefs} รายการ',
+                style: AppType.label,
+              ),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              dense: true,
+              shape: const Border(),
+              collapsedShape: const Border(),
+              iconColor: AppColors.textSecondary,
+              collapsedIconColor: AppColors.textSecondary,
+              textColor: AppColors.textPrimary,
+              children: <Widget>[
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'สรุปนี้สร้างจากบันทึก ${summary.recordRefs} รายการ '
+                    'โดยไม่แสดงรายละเอียดของข้อมูลสุขภาพ',
+                    key: const Key('ai-summary-refs-detail'),
+                    style: AppType.caption,
+                  ),
+                ),
+              ],
+            ),
             Text(
-              'อ้างอิง ${summary.recordRefs} รายการ · '
               'เหลือ ${summary.remaining} ครั้งวันนี้',
               style: AppType.caption,
             ),
