@@ -4,8 +4,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { computed, signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { MembershipSummary } from '../../core/auth/auth.models';
-import { DashboardPayload } from '../../core/dashboard/dashboard.models';
-import { DashboardService } from '../../core/dashboard/dashboard.service';
+import { HealthProfileSummary, selectCurrentProfile } from '../../core/profiles/profiles.models';
+import { ProfilesService } from '../../core/profiles/profiles.service';
 import { WorkspaceService } from '../../core/workspace/workspace.service';
 import { TimelinePage } from './timeline.page';
 
@@ -18,43 +18,22 @@ const WORKSPACE: MembershipSummary = {
   status: 'active',
 };
 
-const DASHBOARD: DashboardPayload = {
-  family: {
-    visible: true,
-    members: [
-      {
-        person_id: 'person-1',
-        profile_id: 'profile-1',
-        display_name: 'คุณพ่อ',
-        ring: 'inner',
-        status: 'green',
-        reason: 'stable',
-      },
-      {
-        person_id: 'person-2',
-        profile_id: 'profile-2',
-        display_name: 'คุณแม่',
-        ring: 'support',
-        status: 'yellow',
-        reason: 'tasks_pending',
-      },
-    ],
+const PROFILES: readonly HealthProfileSummary[] = [
+  {
+    id: 'profile-1',
+    person_id: 'person-1',
+    display_name: 'คุณพ่อ',
+    relationship: 'self',
+    kind: 'self',
   },
-  alerts: { visible: false, reason: 'absent', items: [] },
-  tasks_today: { visible: false, reason: 'absent', total: 0, done: 0, overdue: 0, items: [] },
-  vitals: { visible: false, reason: 'absent', cards: [] },
-  next_appointment: {
-    visible: false,
-    reason: 'absent',
-    id: null,
-    profile_id: null,
-    title: null,
-    scheduled_at: null,
-    status: null,
+  {
+    id: 'profile-2',
+    person_id: 'person-2',
+    display_name: 'คุณแม่',
+    relationship: 'dependent',
+    kind: 'dependent',
   },
-  generated_at: '2026-10-24T08:00:00+00:00',
-  cache_ttl: 30,
-};
+];
 
 function workspaceStub(): Partial<WorkspaceService> {
   const current = signal<MembershipSummary | null>(WORKSPACE);
@@ -66,13 +45,14 @@ function workspaceStub(): Partial<WorkspaceService> {
   };
 }
 
-function dashboardStub(): Partial<DashboardService> {
-  const data = signal<DashboardPayload | null>(DASHBOARD);
+function profilesStub(): Partial<ProfilesService> {
+  const profiles = signal<readonly HealthProfileSummary[]>(PROFILES);
 
   return {
-    dashboard: data.asReadonly(),
+    profiles: profiles.asReadonly(),
+    currentProfile: computed(() => selectCurrentProfile(profiles())),
     load: () => Promise.resolve(),
-    invalidate: () => undefined,
+    reset: () => undefined,
   };
 }
 
@@ -135,7 +115,7 @@ describe('TimelinePage', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: WorkspaceService, useValue: workspaceStub() },
-        { provide: DashboardService, useValue: dashboardStub() },
+        { provide: ProfilesService, useValue: profilesStub() },
       ],
     });
 

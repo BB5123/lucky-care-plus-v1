@@ -2,50 +2,60 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_models.dart';
 import '../auth/auth_repository.dart';
-import '../network/api_client.dart';
-import '../network/json_read.dart';
-import '../network/network_providers.dart';
+import '../profiles/profile.models.dart';
+import '../profiles/profiles_repository.dart';
 
-/// The workspace and default health profile every tab addresses.
+/// The workspace and health profiles every tab addresses.
 ///
 /// The client never chooses a tenant, workspace or profile on its own: it
-/// reuses what `/me` and the dashboard aggregate already resolved
-/// (N-01). The server remains the authority for every later read.
+/// reuses the workspace `/me` resolved and the profile list the server
+/// authorized (N-01). The list is the only source of `profile_id` values for
+/// the health, appointments and timeline screens; the dashboard family card
+/// needs `person.read` and is not a substitute.
 class WorkspaceContext {
   const WorkspaceContext({
     this.workspaceId,
     this.workspaceName,
     this.role,
-    this.profileId,
-    this.profileDisplayName,
+    this.profiles = const <HealthProfileSummary>[],
+    this.currentProfile,
   });
 
   final String? workspaceId;
   final String? workspaceName;
   final String? role;
 
-  /// The first profile the dashboard family card exposed, or `null` when the
-  /// actor has no visible profile (the server chose not to reveal one).
-  final String? profileId;
-  final String? profileDisplayName;
+  /// Every profile the actor may read, in server order.
+  final List<HealthProfileSummary> profiles;
+
+  /// The profile to open first: `relationship == 'self'`, otherwise the first
+  /// readable profile, otherwise `null` when the server returned nothing.
+  final HealthProfileSummary? currentProfile;
+
+  String? get profileId => currentProfile?.id;
+
+  String? get profileDisplayName {
+    final String? name = currentProfile?.displayName;
+
+    return name == null || name.isEmpty ? null : name;
+  }
 
   bool get hasWorkspace => _isPresent(workspaceId);
 
-  bool get hasProfile => _isPresent(profileId);
+  bool get hasProfile => currentProfile != null;
 
   static bool _isPresent(String? value) => value != null && value.isNotEmpty;
 
   static const WorkspaceContext absent = WorkspaceContext();
 }
 
-/// Resolves the current workspace exactly the way the dashboard does: `/me`
-/// picks the first membership, then the aggregate resolves the visible family
-/// (and therefore the first profile).
+/// Resolves the current workspace from `/me`, then asks the profile list which
+/// profiles the actor may actually enter.
 class WorkspaceContextRepository {
-  WorkspaceContextRepository(this._auth, this._api);
+  WorkspaceContextRepository(this._auth, this._profiles);
 
   final AuthRepository _auth;
-  final ApiClient _api;
+  final ProfilesRepository _profiles;
 
   Future<WorkspaceContext> load() async {
     final MeResponse me = await _auth.me();
@@ -55,48 +65,16 @@ class WorkspaceContextRepository {
     }
 
     final MembershipSummary workspace = me.workspaces.first;
-    final Map<String, dynamic> body = await _api.get(
-      '/workspaces/${workspace.workspaceId}/dashboard',
+    final ProfileSelection selection = await _profiles.load(
+      workspace.workspaceId,
     );
-    final Map<String, dynamic> data = readMap(body['data']);
-    final Map<String, dynamic> family = readMap(data['family']);
-
-    String? profileId;
-    String? profileDisplayName;
-
-    if (readBool(family['visible'])) {
-      Map<String, dynamic>? chosen;
-
-      for (final Object? entry in readList(family['members'])) {
-        final Map<String, dynamic> member = readMap(entry);
-        final String candidate = readString(member['profile_id']);
-
-        if (candidate.isEmpty) {
-          continue;
-        }
-
-        // Prefer the actor's own profile (`ring: inner`) when the server
-        // exposes one; otherwise use the first visible family member.
-        if (chosen == null ||
-            (readString(member['ring']) == 'inner' &&
-                readString(chosen['ring']) != 'inner')) {
-          chosen = member;
-        }
-      }
-
-      if (chosen != null) {
-        profileId = readString(chosen['profile_id']);
-        final String name = readString(chosen['display_name']);
-        profileDisplayName = name.isEmpty ? null : name;
-      }
-    }
 
     return WorkspaceContext(
       workspaceId: workspace.workspaceId,
       workspaceName: workspace.name,
       role: workspace.role,
-      profileId: profileId,
-      profileDisplayName: profileDisplayName,
+      profiles: selection.profiles,
+      currentProfile: selection.currentProfile,
     );
   }
 }
@@ -105,7 +83,7 @@ final Provider<WorkspaceContextRepository> workspaceContextRepositoryProvider =
     Provider<WorkspaceContextRepository>(
       (Ref ref) => WorkspaceContextRepository(
         ref.watch(authRepositoryProvider),
-        ref.watch(apiClientProvider),
+        ref.watch(profilesRepositoryProvider),
       ),
     );
 

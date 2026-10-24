@@ -11,9 +11,9 @@ import {
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { toUserMessage } from '../../core/api/problem-details';
-import { DashboardService } from '../../core/dashboard/dashboard.service';
 import { HealthRecordService } from '../../core/health-record/health-record.service';
 import { MedicationService } from '../../core/medication/medication.service';
+import { ProfilesService } from '../../core/profiles/profiles.service';
 import { WorkspaceService } from '../../core/workspace/workspace.service';
 import { AllergyList } from './allergies/allergy-list';
 import { ConditionList } from './conditions/condition-list';
@@ -36,7 +36,7 @@ interface HealthTabDefinition {
 export class HealthPage {
   private readonly route = inject(ActivatedRoute);
   private readonly workspace = inject(WorkspaceService);
-  private readonly dashboard = inject(DashboardService);
+  private readonly profilesService = inject(ProfilesService);
   private readonly health = inject(HealthRecordService);
   private readonly medication = inject(MedicationService);
   private readonly destroyRef = inject(DestroyRef);
@@ -57,19 +57,17 @@ export class HealthPage {
   protected readonly hasWorkspace = this.workspace.hasWorkspace;
 
   /**
-   * Reuses the dashboard's family card, which is the only place the client
-   * learns `profile_id` values. A user who may read only one profile still gets
-   * that single member; a deep link may pass `?profile_id=` when the family
-   * card itself is not readable.
+   * The health-profile picker comes from `GET /workspaces/{w}/profiles`, which
+   * is authorized per profile. The dashboard family card is deliberately not
+   * used here: it needs `person.read` and would hide profiles a granted
+   * caregiver may enter.
    */
-  protected readonly family = computed(() => {
-    const payload = this.dashboard.dashboard();
+  protected readonly profiles = this.profilesService.profiles;
 
-    if (payload === null || !payload.family.visible) {
-      return [];
-    }
+  protected readonly profilesDenied = computed(() => {
+    const status = this.profilesService.errorStatus();
 
-    return payload.family.members.filter((member) => member.profile_id !== '');
+    return status === 403 || status === 404;
   });
 
   protected readonly selectedProfileName = computed(() => {
@@ -79,7 +77,7 @@ export class HealthPage {
       return null;
     }
 
-    return this.family().find((member) => member.profile_id === profileId)?.display_name ?? null;
+    return this.profiles().find((profile) => profile.id === profileId)?.display_name ?? null;
   });
 
   private requestedProfileId: string | null = null;
@@ -124,7 +122,7 @@ export class HealthPage {
         this.announcement.set(null);
         this.health.reset();
         this.medication.reset();
-        this.dashboard.invalidate();
+        this.profilesService.reset();
         void this.initialize();
       });
     });
@@ -153,10 +151,19 @@ export class HealthPage {
       return;
     }
 
-    await this.dashboard.load(null);
+    await this.profilesService.load();
 
-    const members = this.family();
-    const profileId = this.requestedProfileId ?? members[0]?.profile_id ?? null;
+    const error = this.profilesService.error();
+    const status = this.profilesService.errorStatus();
+
+    if (error !== null && status !== 403 && status !== 404) {
+      this.pageError.set(error);
+      this.pageLoading.set(false);
+      this.bootstrapped = true;
+      return;
+    }
+
+    const profileId = this.requestedProfileId ?? this.profilesService.currentProfile()?.id ?? null;
 
     this.selectedProfileId.set(profileId);
     this.pageLoading.set(false);

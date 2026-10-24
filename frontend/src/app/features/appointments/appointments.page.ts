@@ -13,7 +13,7 @@ import { Subscription } from 'rxjs';
 import { toUserMessage } from '../../core/api/problem-details';
 import { Appointment } from '../../core/appointments/appointment.models';
 import { AppointmentService } from '../../core/appointments/appointment.service';
-import { DashboardService } from '../../core/dashboard/dashboard.service';
+import { ProfilesService } from '../../core/profiles/profiles.service';
 import { WorkspaceService } from '../../core/workspace/workspace.service';
 import { AppointmentForm } from './appointment-form';
 import { AppointmentList } from './appointment-list';
@@ -21,9 +21,9 @@ import { AppointmentList } from './appointment-list';
 /**
  * Appointments landing page.
  *
- * The profile selector is fed by the dashboard family payload, the same source
- * the health and timeline screens use. The list itself keeps appointments in
- * two groups: upcoming (soonest first) and past.
+ * The profile selector is fed by the per-profile authorized profile list, the
+ * same source the health and timeline screens use. The list itself keeps
+ * appointments in two groups: upcoming (soonest first) and past.
  */
 @Component({
   selector: 'app-appointments-page',
@@ -34,7 +34,7 @@ import { AppointmentList } from './appointment-list';
 export class AppointmentsPage {
   private readonly route = inject(ActivatedRoute);
   private readonly workspace = inject(WorkspaceService);
-  private readonly dashboard = inject(DashboardService);
+  private readonly profilesService = inject(ProfilesService);
   private readonly appointments = inject(AppointmentService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -46,15 +46,7 @@ export class AppointmentsPage {
   protected readonly formOpen = signal(false);
   protected readonly announcement = signal<string | null>(null);
 
-  protected readonly family = computed(() => {
-    const payload = this.dashboard.dashboard();
-
-    if (payload === null || !payload.family.visible) {
-      return [];
-    }
-
-    return payload.family.members.filter((member) => member.profile_id !== '');
-  });
+  protected readonly profiles = this.profilesService.profiles;
 
   protected readonly selectedProfileName = computed(() => {
     const profileId = this.selectedProfileId();
@@ -63,7 +55,7 @@ export class AppointmentsPage {
       return null;
     }
 
-    return this.family().find((member) => member.profile_id === profileId)?.display_name ?? null;
+    return this.profiles().find((profile) => profile.id === profileId)?.display_name ?? null;
   });
 
   private requestedProfileId: string | null = null;
@@ -108,7 +100,7 @@ export class AppointmentsPage {
         this.formOpen.set(false);
         this.announcement.set(null);
         this.appointments.reset();
-        this.dashboard.invalidate();
+        this.profilesService.reset();
         void this.initialize();
       });
     });
@@ -137,10 +129,9 @@ export class AppointmentsPage {
       return;
     }
 
-    await this.dashboard.load(null);
+    await this.profilesService.load();
 
-    const members = this.family();
-    const profileId = this.requestedProfileId ?? members[0]?.profile_id ?? null;
+    const profileId = this.requestedProfileId ?? this.profilesService.currentProfile()?.id ?? null;
 
     this.selectedProfileId.set(profileId);
     this.pageLoading.set(false);

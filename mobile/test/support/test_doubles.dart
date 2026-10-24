@@ -1,5 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:lucky_care/core/auth/auth_models.dart';
 import 'package:lucky_care/core/auth/auth_repository.dart';
+import 'package:lucky_care/core/network/api_client.dart';
 import 'package:lucky_care/core/network/api_failure.dart';
 
 /// In-memory [AuthRepository] for controller and widget tests. It counts calls
@@ -83,6 +85,35 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<void> logout() async {
     logoutCalls++;
+  }
+}
+
+/// In-memory [ApiClient] for repository tests.
+///
+/// It records the paths it was asked for and either returns a fixed envelope
+/// or throws a prepared [ApiFailure]. No request ever reaches Dio.
+class StubApiClient extends ApiClient {
+  StubApiClient({this.response, this.failure}) : super(dio: Dio());
+
+  Map<String, dynamic>? response;
+  ApiFailure? failure;
+  final List<String> requestedPaths = <String>[];
+
+  @override
+  Future<Map<String, dynamic>> get(
+    String path, {
+    Map<String, dynamic>? query,
+    Map<String, String>? headers,
+  }) async {
+    requestedPaths.add(path);
+
+    final ApiFailure? failure = this.failure;
+
+    if (failure != null) {
+      throw failure;
+    }
+
+    return response ?? const <String, dynamic>{};
   }
 }
 

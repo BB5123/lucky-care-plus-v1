@@ -16,30 +16,23 @@ const WORKSPACE: MembershipSummary = {
   status: 'active',
 };
 
-const DASHBOARD_PAYLOAD = {
-  family: {
-    visible: true,
-    members: [
-      {
-        person_id: 'person-1',
-        profile_id: 'profile-1',
-        display_name: 'คุณพ่อ',
-        ring: 'inner',
-        status: 'green',
-        reason: 'stable',
-      },
-      {
-        person_id: 'person-2',
-        profile_id: 'profile-2',
-        display_name: 'คุณแม่',
-        ring: 'inner',
-        status: 'green',
-        reason: 'stable',
-      },
-    ],
-  },
-  generated_at: '2026-10-23T02:00:00+00:00',
-  cache_ttl: 30,
+const PROFILE_LIST = {
+  data: [
+    {
+      id: 'profile-1',
+      person_id: 'person-1',
+      display_name: 'คุณพ่อ',
+      relationship: 'self',
+      kind: 'self',
+    },
+    {
+      id: 'profile-2',
+      person_id: 'person-2',
+      display_name: 'คุณแม่',
+      relationship: 'dependent',
+      kind: 'dependent',
+    },
+  ],
 };
 
 const ALLERGIES_PAGE = {
@@ -126,8 +119,8 @@ describe('HealthPage', () => {
     await nextTick();
 
     httpMock
-      .expectOne((item) => item.url.includes('/dashboard'))
-      .flush({ data: DASHBOARD_PAYLOAD });
+      .expectOne((item) => item.url.endsWith('/workspaces/ws-1/profiles'))
+      .flush(PROFILE_LIST);
 
     await nextTick();
     fixture.detectChanges();
@@ -243,5 +236,36 @@ describe('HealthPage', () => {
 
     expect(fixture.nativeElement.textContent).toContain('Penicillin G');
     expect(fixture.nativeElement.textContent).toContain('บันทึกแล้ว');
+  });
+
+  it('I2-T05 an empty profile list renders the empty state, not an error', async () => {
+    const fixture = TestBed.createComponent(HealthPage);
+    fixture.detectChanges();
+    await nextTick();
+
+    httpMock
+      .expectOne((item) => item.url.endsWith('/workspaces/ws-1/profiles'))
+      .flush({ data: [] });
+
+    await nextTick();
+    fixture.detectChanges();
+    await nextTick();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="health-no-profile"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.alert-error')).toBeNull();
+    httpMock.expectNone((item) => item.url.includes('/measurements'));
+  });
+
+  it('I2-T06 the health page requests the profile list, not the dashboard aggregate', async () => {
+    const fixture = await renderPage();
+
+    httpMock.expectNone((item) => item.url.includes('/dashboard'));
+
+    const mother = fixture.nativeElement.querySelector(
+      'button[data-profile-id="profile-2"]',
+    ) as HTMLButtonElement | null;
+
+    expect(mother).not.toBeNull();
   });
 });
