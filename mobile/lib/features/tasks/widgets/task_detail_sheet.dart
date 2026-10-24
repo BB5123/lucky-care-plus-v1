@@ -59,14 +59,16 @@ class _TaskDetailSheetState extends ConsumerState<TaskDetailSheet> {
 
     // Evidence is remembered for the life of the tasks controller, so closing
     // and reopening the sheet does not forget an attachment made in this
-    // session. A fresh launch learns the truth from the server: the complete
-    // transition is refused until a photo row exists (fail closed).
+    // session. On a fresh launch the task payload's `has_photo_evidence` flag
+    // is the server's answer; it carries no document id, so the "open file"
+    // action stays hidden until this session actually learns one.
     final String? documentId = ref
         .read(tasksControllerProvider.notifier)
         .photoDocumentId(widget.task.id);
 
-    _hasPhotoEvidence = documentId != null;
-    _attachedDocumentId = documentId;
+    _hasPhotoEvidence = widget.task.hasPhotoEvidence || documentId != null;
+    _attachedDocumentId =
+        documentId == TasksController.serverEvidenceSentinel ? null : documentId;
   }
 
   Future<void> _run(TaskAction action, {String? outcome}) async {

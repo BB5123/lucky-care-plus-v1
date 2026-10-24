@@ -269,7 +269,7 @@ class DashboardTest extends TestCase
 
         foreach ($items as $item) {
             $this->assertSame(
-                ['due_at', 'id', 'priority', 'profile_display_name', 'status', 'title', 'type', 'version'],
+                ['due_at', 'has_photo_evidence', 'id', 'priority', 'profile_display_name', 'status', 'title', 'type', 'version'],
                 $this->sortedKeys($item),
                 'Task cards must use the P1.3 safe projection only.',
             );

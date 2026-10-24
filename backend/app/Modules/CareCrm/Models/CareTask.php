@@ -182,6 +182,36 @@ class CareTask extends Model
             ->whereNotIn('status', [self::STATUS_COMPLETED, self::STATUS_CANCELLED]);
     }
 
+    /**
+     * Add the derived `has_photo_evidence` flag as one EXISTS subquery.
+     *
+     * A photo row only counts when it still points at a document, so the flag
+     * mirrors {@see TaskEvidence::TYPE_PHOTO}. It is task metadata, not
+     * evidence content: it carries no document id, filename or note, and it
+     * costs one subquery for the whole page instead of one query per task.
+     */
+    public function scopeWithPhotoEvidenceFlag(Builder $query): Builder
+    {
+        return $query->withExists([
+            'evidence as has_photo_evidence' => fn (Builder $evidence) => $evidence
+                ->where('type', TaskEvidence::TYPE_PHOTO)
+                ->whereNotNull('document_id'),
+        ]);
+    }
+
+    /**
+     * Load the derived flag on an already-hydrated task (create/transition
+     * responses), using the same single-query subquery.
+     */
+    public function loadPhotoEvidenceFlag(): static
+    {
+        return $this->loadExists([
+            'evidence as has_photo_evidence' => fn (Builder $evidence) => $evidence
+                ->where('type', TaskEvidence::TYPE_PHOTO)
+                ->whereNotNull('document_id'),
+        ]);
+    }
+
     public static function isTerminal(string $status): bool
     {
         return in_array($status, [self::STATUS_COMPLETED, self::STATUS_CANCELLED], true);

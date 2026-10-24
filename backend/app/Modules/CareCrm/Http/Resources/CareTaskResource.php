@@ -36,6 +36,9 @@ class CareTaskResource extends JsonResource
             'verification' => $this->verification,
             'verification_required' => $this->verification_required,
             'evidence_policy' => $this->evidence_policy,
+            // Derived task metadata: a photo row with a document. Never the
+            // document id, filename or note (F-06 / N-02).
+            'has_photo_evidence' => (bool) ($this->has_photo_evidence ?? false),
             'escalation_level' => $this->escalation_level,
             'blocked_reason' => $this->blocked_reason,
             'review_at' => $this->review_at?->toIso8601String(),

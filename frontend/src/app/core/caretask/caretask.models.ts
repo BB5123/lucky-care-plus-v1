@@ -93,6 +93,12 @@ export interface CareTaskBase {
   readonly status: string;
   readonly priority: string;
   readonly profile_display_name: string | null;
+  /**
+   * Derived task metadata: a `photo` evidence row with a document exists.
+   * Never carries the document id, filename or note, so it is safe on the
+   * safe card. Missing/malformed means `false` (fail closed).
+   */
+  readonly has_photo_evidence: boolean;
   readonly version: number;
 }
 
@@ -432,6 +438,7 @@ export function parseCareTask(value: unknown): CareTask | null {
     status: readString(raw['status']) ?? 'open',
     priority: readString(raw['priority']) ?? 'normal',
     profile_display_name: readString(raw['profile_display_name']),
+    has_photo_evidence: readBoolean(raw['has_photo_evidence']),
     version: readNumber(raw['version']) ?? 0,
   };
 
@@ -683,6 +690,7 @@ export function actionRequiresReviewAt(action: TaskAction): boolean {
 export function missingEvidenceMessage(
   task: CareTask,
   evidence: readonly TaskEvidence[],
+  attachedDocumentId: string | null = null,
 ): string | null {
   if (task.kind !== 'full' || task.tier !== 'clinical') {
     return null;
@@ -695,7 +703,13 @@ export function missingEvidenceMessage(
   }
 
   const hasValue = evidence.some((item) => item.type === 'value');
-  const hasPhoto = evidence.some((item) => item.type === 'photo');
+  // The server flag and a document attached in this session prove a photo
+  // even when the evidence list could not be read (a different authority,
+  // F-06). Never infer it from the document id itself.
+  const hasPhoto =
+    task.has_photo_evidence ||
+    attachedDocumentId !== null ||
+    evidence.some((item) => item.type === 'photo');
   const satisfied =
     policy === 'value' ? hasValue : policy === 'photo' ? hasPhoto : hasValue && hasPhoto;
 

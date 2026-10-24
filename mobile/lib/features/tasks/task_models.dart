@@ -75,6 +75,7 @@ class CareTask {
     this.evidencePolicy = '',
     this.verification = '',
     this.blockedReason,
+    this.hasPhotoEvidence = false,
   });
 
   final String id;
@@ -94,6 +95,12 @@ class CareTask {
   final String evidencePolicy;
   final String verification;
   final String? blockedReason;
+
+  /// Server-derived task metadata: at least one `photo` evidence row with a
+  /// document. The flag never includes the document id, so a reader who may
+  /// complete the task but not read evidence can still see that proof exists.
+  /// Absent or malformed means `false` (fail closed).
+  final bool hasPhotoEvidence;
 
   String get tierLabel => taskTierLabel(tier);
 
@@ -135,6 +142,7 @@ class CareTask {
       evidencePolicy: readString(json['evidence_policy']),
       verification: readString(json['verification']),
       blockedReason: readNullableString(json['blocked_reason']),
+      hasPhotoEvidence: readBool(json['has_photo_evidence']),
     );
   }
 }

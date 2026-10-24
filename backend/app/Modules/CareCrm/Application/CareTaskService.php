@@ -101,6 +101,7 @@ final class CareTaskService
         }
 
         return $query
+            ->withPhotoEvidenceFlag()
             ->with(['profile.person'])
             ->orderBy('due_at')
             ->orderBy('id')
@@ -112,6 +113,7 @@ final class CareTaskService
         $task = CareTask::query()
             ->where('tenant_id', $workspace->tenant_id)
             ->where('workspace_id', $workspace->id)
+            ->withPhotoEvidenceFlag()
             ->with(['profile.person', 'assignments.user'])
             ->whereKey($taskId)
             ->first();
@@ -274,7 +276,7 @@ final class CareTaskService
                     ['tier' => $tier, 'type' => $task->type, 'version' => 1],
                 );
 
-                $task = $task->refresh();
+                $task = $task->refresh()->loadPhotoEvidenceFlag();
 
                 if ($assigneeId !== null) {
                     // Same transaction as the assignment: the queued job is
@@ -428,6 +430,7 @@ final class CareTaskService
             ->where('tenant_id', $workspace->tenant_id)
             ->where('workspace_id', $workspace->id)
             ->where('idempotency_key', $key)
+            ->withPhotoEvidenceFlag()
             ->with(['profile.person', 'assignments.user'])
             ->first();
     }

@@ -260,6 +260,7 @@ final class DashboardAssembler
                         ->whereNull('released_at'));
                 }
             })
+            ->withPhotoEvidenceFlag()
             ->with(['profile.person'])
             ->orderBy('due_at')
             ->orderBy('id')
