@@ -552,6 +552,36 @@ class ContextGatewayTest extends TestCase
         $this->assertSame([], $row->record_refs);
     }
 
+    public function test_diagnosis_question_is_refused_inside_the_gateway_before_any_fetch(): void
+    {
+        Sanctum::actingAs($this->owner);
+
+        DB::enableQueryLog();
+        DB::flushQueryLog();
+
+        $response = $this->postJson($this->path(), [
+            'question' => 'ช่วยวินิจฉัยหน่อยว่าเป็นโรคอะไร',
+        ])->assertStatus(422);
+
+        $queries = collect(DB::getQueryLog())->pluck('query')->implode(' ');
+        DB::disableQueryLog();
+
+        $this->assertSame('refuse_diagnosis', $response->json('code'));
+        $this->assertSame('AI request refused', $response->json('title'));
+
+        // The refusal happens before step 2, so no health table is touched.
+        foreach (['health_measurements', 'medication_plans', 'appointments', 'care_tasks'] as $table) {
+            $this->assertStringNotContainsString($table, $queries, "A refused question fetched {$table}");
+        }
+
+        $this->useWorkspace();
+
+        $row = AiRequest::query()->sole();
+        $this->assertSame(AiRequest::STATUS_REFUSED, $row->status);
+        $this->assertSame('refuse_diagnosis', $row->error_code);
+        $this->assertSame([], $row->record_refs);
+    }
+
     public function test_invalid_window_is_422_and_exactly_180_days_is_allowed(): void
     {
         Sanctum::actingAs($this->owner);

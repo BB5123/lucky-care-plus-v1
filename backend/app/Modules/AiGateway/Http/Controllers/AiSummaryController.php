@@ -74,6 +74,7 @@ final class AiSummaryController extends Controller
         }
 
         $window = $request->window();
+        $question = $request->validated('question');
 
         $result = $this->gateway->run(new GatewayRequest(
             workspace: $workspace,
@@ -83,6 +84,7 @@ final class AiSummaryController extends Controller
             periodTo: $window['to'],
             purpose: AiRequest::PURPOSE_SUMMARY,
             locale: (string) config('ai.locale', 'th'),
+            requestText: is_string($question) ? $question : null,
         ));
 
         if ($result->status === 'succeeded') {
@@ -124,6 +126,10 @@ final class AiSummaryController extends Controller
             'no_consent' => ['Consent required', 'ไม่ได้รับความยินยอมสำหรับการประมวลผลด้วย AI'],
             'forbidden' => ['Forbidden', 'ไม่ได้รับอนุญาตให้ใช้ข้อมูลนี้กับ AI'],
             'authorization_unavailable' => ['Authorization unavailable', 'ไม่สามารถตรวจสอบสิทธิ์ได้ในขณะนี้'],
+            'refuse_diagnosis', 'refuse_prescribing', 'refuse_emergency' => [
+                'AI request refused',
+                (string) config('ai.intake.messages.'.$code, 'ไม่สามารถดำเนินการกับคำขอนี้ได้'),
+            ],
             default => ['AI request failed', 'ไม่สามารถดำเนินการกับ AI ได้ในขณะนี้'],
         };
 

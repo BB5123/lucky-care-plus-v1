@@ -281,21 +281,29 @@ final class PiiScrubber
 
     /**
      * Shared by step 5 so the same PII vocabulary is used on input and output.
+     *
+     * The redaction placeholders themselves are removed before scanning: they
+     * deliberately contain words such as "address", and treating the marker we
+     * just wrote as residual PII would make every address-bearing context fail
+     * closed forever. Removing the placeholder can only merge its neighbours,
+     * which is stricter (more likely to be flagged), not looser.
      */
     public function hasResidualPii(string $text): bool
     {
+        $candidate = str_replace([self::REDACTED_ADDRESS, self::REDACTED], '', $text);
+
         foreach ([
             self::NATIONAL_ID_PATTERN,
             self::PHONE_PATTERN,
             self::EMAIL_PATTERN,
             self::LINE_ID_PATTERN,
         ] as $pattern) {
-            if (preg_match($pattern, $text) === 1) {
+            if (preg_match($pattern, $candidate) === 1) {
                 return true;
             }
         }
 
-        return $this->containsAddressMarker($text);
+        return $this->containsAddressMarker($candidate);
     }
 
     private function assertNoResidualPii(mixed $scrubbed): void

@@ -11,6 +11,10 @@ use Carbon\CarbonInterface;
  * A single gateway attempt. The workspace and profile are resolved server-side
  * from the route; the purpose is a closed vocabulary, never client text
  * (N-01 / AIG-009).
+ *
+ * `requestText` is the user's own request (e.g. "ยาลดความดันควรเพิ่มไหม").
+ * It is used only by the intake classifier and is never placed in the
+ * provider envelope.
  */
 final class GatewayRequest
 {
@@ -22,5 +26,6 @@ final class GatewayRequest
         public readonly CarbonInterface $periodTo,
         public readonly string $purpose = 'summary',
         public readonly string $locale = 'th',
+        public readonly ?string $requestText = null,
     ) {}
 }
