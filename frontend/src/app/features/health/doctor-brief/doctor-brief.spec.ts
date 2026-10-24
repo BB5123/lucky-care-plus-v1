@@ -11,6 +11,9 @@ const REPORT: HealthReport = {
   periodTo: '2026-10-24',
   createdAt: '2026-10-24T16:00:00+00:00',
   payload: {
+    generatedAt: '2026-10-24T16:00:00+00:00',
+    periodFrom: '2026-09-24',
+    periodTo: '2026-10-24',
     sections: ['conditions', 'allergies', 'medications', 'vitals', 'appointments', 'care_tasks'],
     profile: { name: 'สมชาย', birthYear: 1985 },
     conditions: [{ name: 'เบาหวาน', diagnosedYear: 2018 }],

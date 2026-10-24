@@ -26,6 +26,14 @@ export const routes: Routes = [
       import('./features/auth/verify-phone/verify-phone.page').then((m) => m.VerifyPhonePage),
   },
   {
+    // The Doctor Brief capability link is deliberately public: the 256-bit
+    // token in the path is the whole grant (DB-003), so this route has no
+    // authGuard and no app shell.
+    path: 'briefs/:token',
+    title: 'สรุปสำหรับแพทย์ | LuckyCare+',
+    loadComponent: () => import('./features/brief/brief.page').then((m) => m.BriefPage),
+  },
+  {
     path: '',
     canActivate: [authGuard],
     loadComponent: () => import('./shared/layout/app-shell/app-shell').then((m) => m.AppShell),
