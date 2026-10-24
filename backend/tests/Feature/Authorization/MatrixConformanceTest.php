@@ -78,6 +78,12 @@ class MatrixConformanceTest extends TestCase
         'Verify task' => ['care_task.verify'],
         'Reopen/cancel task' => ['care_task.reopen', 'care_task.cancel'],
         'Read task evidence' => ['care_task.evidence.read'],
+        'Read task templates' => ['care_task.template.read'],
+        'Create task template' => ['care_task.template.create'],
+        'Update task template' => ['care_task.template.update'],
+        'Deactivate task template' => ['care_task.template.deactivate'],
+        'Read escalation policy' => ['escalation_policy.read'],
+        'Update escalation policy' => ['escalation_policy.update'],
 
         // Matrix D — consent, delegation, AI, and export.
         'Read own/authorized consent status' => ['consent.read'],
@@ -108,7 +114,7 @@ class MatrixConformanceTest extends TestCase
      * @var array<string, string>
      */
     private const DEFERRED_ROWS = [
-        // None in the frozen v1.1.0 matrices.
+        // None in the frozen v1.2.0 matrices.
     ];
 
     /**

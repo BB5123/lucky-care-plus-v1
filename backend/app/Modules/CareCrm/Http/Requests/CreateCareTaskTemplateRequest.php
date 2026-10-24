@@ -8,9 +8,9 @@ use Illuminate\Validation\Rule;
 /**
  * Input shape for a recurring care-task template.
  *
- * Authorization is declared on the route (`care_task.create`); this request
- * only validates shape. Tenant/workspace/profile identity come from the
- * trusted route and the Authorizer, never from the body (N-01).
+ * Authorization is declared on the route (`care_task.template.create`); this
+ * request only validates shape. Tenant/workspace/profile identity come from
+ * the trusted route and the Authorizer, never from the body (N-01).
  */
 class CreateCareTaskTemplateRequest extends FormRequest
 {

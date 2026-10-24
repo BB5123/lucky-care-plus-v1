@@ -12,7 +12,7 @@ Repository layout:
 | Path | Contents |
 |---|---|
 | `.ai/` | **Blueprint — the single source of truth for design.** Read before writing code. |
-| `docs/` | Source summaries + frozen authorization baseline (`docs/baseline-v1.0.0/`, content = v1.1.0) |
+| `docs/` | Source summaries + frozen authorization baseline (`docs/baseline-v1.0.0/`, content = v1.2.0) |
 | `backend/` | Laravel 13 API (PHP 8.4) |
 | `frontend/` | Angular 22 + Tailwind 4 web app |
 | `mobile/` | Flutter app (`lucky_care`) |

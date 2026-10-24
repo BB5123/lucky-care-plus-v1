@@ -2,6 +2,7 @@
 
 > **Normative parent:** [`docs/baseline-v1.0.0/`](../docs/baseline-v1.0.0/) — permission ID, role, matrix, test ID ทุกตัวมาจากที่นั่น
 > ไฟล์นี้อธิบาย *วิธีประกอบ* กลไกเหล่านั้นเป็นระบบที่รันได้ ไม่ได้ประกาศ permission ใหม่
+> **Baseline ปัจจุบัน:** `v1.2.0` — **99 permission ID** (amend โดย [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24)
 
 ---
 

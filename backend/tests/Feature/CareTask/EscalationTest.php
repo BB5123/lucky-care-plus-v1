@@ -381,9 +381,21 @@ class EscalationTest extends CareTaskTestCase
 
     // -- ESC-T11 ------------------------------------------------------------
 
-    public function test_esc_t11_get_needs_workspace_read_and_put_needs_workspace_update(): void
+    public function test_esc_t11_get_needs_escalation_policy_read_and_put_needs_update(): void
     {
+        // CR-003: a viewer has no escalation authority (Matrix C = D).
         Sanctum::actingAs($this->viewer);
+
+        $this->getJson($this->escalationPath())
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'forbidden');
+
+        $this->putJson($this->escalationPath(), ['policies' => [$this->policyPayload()]])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'forbidden');
+
+        // A caregiver may read the ladder they follow, but not replace it.
+        Sanctum::actingAs($this->caregiver);
 
         $this->getJson($this->escalationPath())
             ->assertOk()

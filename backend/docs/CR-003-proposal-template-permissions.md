@@ -1,9 +1,16 @@
 # CR-003 — Template permissions for recurring care tasks
 
-**Status:** Proposal (not approved, not implemented in `config/authorization.php`)
+> **Superseded (2026-10-24):** this early proposal was superseded by the applied
+> change record [`.ai/changes/CR-003-permission-delta-v1.2.md`](../../.ai/changes/CR-003-permission-delta-v1.2.md).
+> The approved delta adds six IDs (`care_task.template.read/create/update/deactivate`
+> and `escalation_policy.read/update`), not the five proposed below, and it does
+> **not** add `care_task.template.exception.manage`: exceptions use
+> `care_task.template.update`. Baseline is now `AUTH-BASELINE-001` **v1.2.0**.
+
+**Status:** Superseded by applied CR-003 / baseline v1.2.0
 **Owner:** Care CRM / Authorization
 **Introduced by:** TASK P2.1 (recurring care-task templates)
-**Baseline:** `AUTH-BASELINE-001` v1.1.0 (frozen)
+**Baseline:** `AUTH-BASELINE-001` v1.2.0 (frozen)
 
 ## 1. Gap
 
