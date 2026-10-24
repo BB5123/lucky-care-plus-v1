@@ -34,6 +34,42 @@ return [
 
     'model' => env('AI_MODEL', 'null-provider-v1'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Vision capability gate (AIG-007, TASK P-3)
+    |--------------------------------------------------------------------------
+    |
+    | A model id is allowed to receive an image only when it is listed here.
+    | The list is empty by default: an unlisted (or text-only) model makes the
+    | extraction endpoint answer 503 `ai_vision_unavailable` and send nothing,
+    | rather than silently posting an image to a model that cannot read it
+    | (F-09 fail closed).
+    |
+    */
+
+    'vision_models' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vision extraction limits
+    |--------------------------------------------------------------------------
+    |
+    | `DocumentService` already caps an upload at 10 MiB. The extraction path
+    | applies its own, narrower cap because an image is inlined into the
+    | provider request as a `data:` URL. Only the listed image types may be
+    | sent to a model; a PDF or an unknown type is rejected with 422.
+    |
+    */
+
+    'extraction' => [
+        'max_bytes' => 5 * 1024 * 1024,
+        'allowed_mime' => [
+            'image/jpeg',
+            'image/png',
+            'image/heic',
+        ],
+    ],
+
     'openai_compatible' => [
         'base_url' => env('AI_BASE_URL'),              // e.g. https://api.example.com/v1
         'api_key' => env('AI_API_KEY'),
@@ -89,6 +125,7 @@ return [
         'provider_refused' => 'ระบบ AI ไม่สามารถให้คำตอบสำหรับคำขอนี้ได้ กรุณาปรึกษาแพทย์หรือเจ้าหน้าที่สาธารณสุข',
         'provider_not_configured' => 'ระบบ AI ยังไม่พร้อมใช้งาน',
         'ai_provider_unavailable' => 'ระบบ AI ไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่ภายหลัง หรือดูสรุปแบบไม่ใช้ AI',
+        'ai_vision_unavailable' => 'ระบบ AI ไม่รองรับการอ่านภาพจากเอกสารในขณะนี้',
         'pii_in_output' => 'ระบบ AI ไม่สามารถให้คำตอบที่ปลอดภัยได้ กรุณาลองใหม่ภายหลัง',
     ],
 

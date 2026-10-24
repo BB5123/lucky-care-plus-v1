@@ -103,7 +103,7 @@ final class OpenAiCompatibleProvider implements LlmProvider
                     ],
                     [
                         'role' => 'user',
-                        'content' => $this->userContent($envelope),
+                        'content' => $this->messageContent($envelope),
                     ],
                 ],
                 'max_tokens' => $envelope->maxTokens,
@@ -113,8 +113,38 @@ final class OpenAiCompatibleProvider implements LlmProvider
 
     /**
      * Serialise the scrubbed record blocks and non-record metadata as one user
-     * message. No raw data source is consulted here: the envelope is already
-     * the complete, scrubbed input.
+     * message. An image-carrying envelope uses the OpenAI-compatible content
+     * parts form and inlines the bytes as a `data:` URL; it never points the
+     * provider at a signed or public storage URL (TASK P-3, N-02).
+     *
+     * @return string|array<int, array<string, mixed>>
+     */
+    private function messageContent(PromptEnvelope $envelope): string|array
+    {
+        $text = $this->userContent($envelope);
+
+        if ($envelope->image === null) {
+            return $text;
+        }
+
+        return [
+            [
+                'type' => 'text',
+                'text' => $text,
+            ],
+            [
+                'type' => 'image_url',
+                'image_url' => [
+                    'url' => $envelope->image->dataUrl(),
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Serialise the scrubbed record blocks and non-record metadata as one
+     * text payload. No raw data source is consulted here: the envelope is
+     * already the complete, scrubbed input.
      */
     private function userContent(PromptEnvelope $envelope): string
     {
