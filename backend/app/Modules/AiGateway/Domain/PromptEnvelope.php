@@ -22,6 +22,7 @@ final class PromptEnvelope
         public readonly string $locale,
         public readonly int $maxTokens,
         public readonly float $temperature,
+        public readonly ?PromptImage $image = null,
     ) {}
 
     /**
@@ -45,7 +46,7 @@ final class PromptEnvelope
      */
     public function toArray(): array
     {
-        return [
+        $envelope = [
             'system' => $this->system,
             'untrusted_blocks' => $this->untrustedBlocks,
             'structured_context' => $this->structuredContext,
@@ -53,6 +54,13 @@ final class PromptEnvelope
             'max_tokens' => $this->maxTokens,
             'temperature' => $this->temperature,
         ];
+
+        // Existing text-only envelopes keep their canonical shape (and hash).
+        if ($this->image !== null) {
+            $envelope['image'] = $this->image->descriptor();
+        }
+
+        return $envelope;
     }
 
     private function canonicalize(mixed $value): mixed

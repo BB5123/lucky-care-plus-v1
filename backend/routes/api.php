@@ -4,6 +4,7 @@ use App\Http\Controllers\WorkspacePingController;
 use App\Modules\Accounts\Http\Controllers\AuthController;
 use App\Modules\Accounts\Http\Controllers\OtpController;
 use App\Modules\Accounts\Http\Controllers\PinController;
+use App\Modules\AiGateway\Http\Controllers\AiExtractionController;
 use App\Modules\AiGateway\Http\Controllers\AiSummaryController;
 use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
@@ -299,6 +300,19 @@ Route::prefix('v1')->group(function (): void {
             'throttle:60,1,ai-summaries',
             'workspace.context',
             'authorize.permission:ai.report.create',
+        ]);
+
+    // -- Vision extraction (Phase 3, TASK P-3) ------------------------------
+    // `ai.health_context.use` is the frozen permission for sending health
+    // context to a model, and it is consent-gated on `ai_processing`. The
+    // gateway re-checks both before reading a byte, then returns a draft only
+    // (AIG-007: no AI write to a health table).
+    Route::post('/workspaces/{workspace}/profiles/{profile}/ai/extractions', AiExtractionController::class)
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,ai-extractions',
+            'workspace.context',
+            'authorize.permission:ai.health_context.use',
         ]);
 
     // -- Doctor Brief snapshots (Phase 2.3) ---------------------------------
