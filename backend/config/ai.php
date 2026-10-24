@@ -21,15 +21,76 @@ return [
     | Provider adapter
     |--------------------------------------------------------------------------
     |
-    | `null` means the deterministic in-process NullProvider. No adapter in
-    | this slice is allowed to open an outbound HTTP connection. A real
-    | provider class can be named here later (AIG-010).
+    | `null` (or the string `null`) means the deterministic in-process
+    | NullProvider. `openai_compatible` selects the HTTP adapter below; it
+    | reports itself unconfigured until `AI_BASE_URL`, `AI_API_KEY` and
+    | `AI_MODEL` are all present, so a half-configured deployment keeps the
+    | in-process provider. Signing the DPA and choosing the vendor remain the
+    | owner's decision (AIG-010).
     |
     */
 
-    'provider' => env('AI_PROVIDER'),
+    'provider' => env('AI_PROVIDER', 'null'),
 
     'model' => env('AI_MODEL', 'null-provider-v1'),
+
+    'openai_compatible' => [
+        'base_url' => env('AI_BASE_URL'),              // e.g. https://api.example.com/v1
+        'api_key' => env('AI_API_KEY'),
+        'model' => env('AI_MODEL'),
+        'timeout_seconds' => env('AI_TIMEOUT', 20),
+        'max_retries' => env('AI_MAX_RETRIES', 1),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cost accounting
+    |--------------------------------------------------------------------------
+    |
+    | Minor units (satang) per 1,000 tokens, keyed by the model name returned
+    | by the provider. An unknown model falls back to `default`; the default
+    | is zero so an unpriced model cannot silently spend money.
+    |
+    */
+
+    'pricing' => [                                     // minor units per 1k tokens, per model
+        'default' => ['input' => 0, 'output' => 0],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Circuit breaker (`.ai/08-AI-GATEWAY.md` section 4 / 7)
+    |--------------------------------------------------------------------------
+    */
+
+    'circuit_breaker' => [
+        'window_seconds' => 300,
+        'error_threshold' => 0.20,
+        'cooldown_seconds' => 120,
+        'min_samples' => 5,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Provider-facing messages
+    |--------------------------------------------------------------------------
+    |
+    | Neutral Thai copy for the failure modes in `.ai/08-AI-GATEWAY.md` section
+    | 7. The controller reads the same strings so the adapter never has to
+    | invent user-facing text.
+    |
+    */
+
+    'provider_messages' => [
+        'provider_timeout' => 'ระบบ AI ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง',
+        'provider_unavailable' => 'ระบบ AI ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง',
+        'provider_rejected' => 'ระบบ AI ไม่สามารถประมวลผลคำขอนี้ได้ กรุณาลองใหม่ภายหลัง',
+        'provider_invalid_response' => 'ระบบ AI ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง',
+        'provider_refused' => 'ระบบ AI ไม่สามารถให้คำตอบสำหรับคำขอนี้ได้ กรุณาปรึกษาแพทย์หรือเจ้าหน้าที่สาธารณสุข',
+        'provider_not_configured' => 'ระบบ AI ยังไม่พร้อมใช้งาน',
+        'ai_provider_unavailable' => 'ระบบ AI ไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่ภายหลัง หรือดูสรุปแบบไม่ใช้ AI',
+        'pii_in_output' => 'ระบบ AI ไม่สามารถให้คำตอบที่ปลอดภัยได้ กรุณาลองใหม่ภายหลัง',
+    ],
 
     /*
     |--------------------------------------------------------------------------

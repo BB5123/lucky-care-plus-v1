@@ -7,7 +7,9 @@ use App\Modules\AiGateway\Domain\GatewayRequest;
 use App\Modules\AiGateway\Domain\GatewayResult;
 use App\Modules\AiGateway\Domain\InvalidOutputException;
 use App\Modules\AiGateway\Domain\PiiScrubException;
+use App\Modules\AiGateway\Domain\ProviderException;
 use App\Modules\AiGateway\Models\AiRequest;
+use App\Modules\Audit\Services\SecurityAuditLogger;
 use Throwable;
 
 /**
@@ -32,6 +34,8 @@ final class ContextGateway
         private readonly AiQuotaService $quota,
         private readonly AiRequestRecorder $recorder,
         private readonly LlmProvider $provider,
+        private readonly CostAccountant $cost,
+        private readonly SecurityAuditLogger $audit,
     ) {}
 
     public function run(GatewayRequest $request): GatewayResult
@@ -131,13 +135,20 @@ final class ContextGateway
             $response = $outcome->response;
 
             $latencyMs = $this->latency($started);
-            $usage = $this->quota->observe(
+
+            // Cost accounting owns token/cost persistence. It updates the same
+            // daily counter the quota reserved, so the response usage and the
+            // ledger cannot disagree.
+            $accounting = $this->cost->settle(
                 $request->workspace,
                 $request->actor,
-                $response->inputTokens,
-                $response->outputTokens,
-                null,
+                $response,
             );
+
+            $usage = [
+                'requests_today' => $accounting['requests_today'],
+                'remaining' => $accounting['remaining'],
+            ];
 
             // A neutralised injection still produces a summary, but the event is
             // recorded so an operator can audit it (record which, per G4).
@@ -148,6 +159,8 @@ final class ContextGateway
                 $contextHash,
                 $latencyMs,
                 $outcome->injection->detected() ? 'injection_neutralized' : null,
+                $accounting,
+                $this->providerName(),
             );
 
             return GatewayResult::success(
@@ -157,6 +170,21 @@ final class ContextGateway
                 $usage,
                 $response->model ?? (string) config('ai.model', 'null-provider-v1'),
             );
+        } catch (ProviderException $e) {
+            // The adapter/router has already mapped the failure. Only the
+            // stable code is recorded; the body and the transport exception are
+            // never stored (N-02).
+            $this->recorder->record(
+                request: $request,
+                status: AiRequest::STATUS_FAILED,
+                errorCode: $e->errorCode,
+                recordRefs: $fetched?->recordRefs ?? [],
+                contextHash: $contextHash,
+                latencyMs: $this->latency($started),
+                provider: $this->providerName(),
+            );
+
+            return GatewayResult::failed($e->errorCode, $e->httpStatus, $usage);
         } catch (PiiScrubException $e) {
             // A rule could not be applied confidently: do not send the context
             // (AIG-003).
@@ -167,17 +195,39 @@ final class ContextGateway
                 recordRefs: $fetched?->recordRefs ?? [],
                 contextHash: $contextHash,
                 latencyMs: $this->latency($started),
+                provider: $this->providerName(),
             );
 
             return GatewayResult::refused('ai_context_refused', 403, $usage);
         } catch (InvalidOutputException $e) {
+            $errorCode = $e->getMessage();
+
+            if ($errorCode === 'output_pii') {
+                // The completion itself still contains PII. Discard it, keep
+                // only metadata, and put the incident on the security chain.
+                $row = $this->recorder->record(
+                    request: $request,
+                    status: AiRequest::STATUS_FAILED,
+                    errorCode: 'pii_in_output',
+                    recordRefs: $fetched?->recordRefs ?? [],
+                    contextHash: $contextHash,
+                    latencyMs: $this->latency($started),
+                    provider: $this->providerName(),
+                );
+
+                $this->recordPiiIncident($request, $row);
+
+                return GatewayResult::failed('pii_in_output', 503, $usage);
+            }
+
             $this->recorder->record(
                 request: $request,
                 status: AiRequest::STATUS_FAILED,
-                errorCode: $e->getMessage(),
+                errorCode: $errorCode,
                 recordRefs: $fetched?->recordRefs ?? [],
                 contextHash: $contextHash,
                 latencyMs: $this->latency($started),
+                provider: $this->providerName(),
             );
 
             return GatewayResult::failed('ai_output_invalid', 503, $usage);
@@ -193,9 +243,46 @@ final class ContextGateway
                 recordRefs: $fetched?->recordRefs ?? [],
                 contextHash: $contextHash,
                 latencyMs: $this->latency($started),
+                provider: $this->providerName(),
             );
 
             return GatewayResult::failed('ai_provider_unavailable', 503, $usage);
+        }
+    }
+
+    /**
+     * The provider actually used for this attempt, when the router owns the
+     * decision. A test double bound directly to LlmProvider keeps the
+     * recorder's configuration-derived default.
+     */
+    private function providerName(): ?string
+    {
+        return $this->provider instanceof ProviderRouter
+            ? $this->provider->activeProviderName()
+            : null;
+    }
+
+    /**
+     * Append one PHI-free security row. The completion is never passed here;
+     * the row names only the request, purpose and reason.
+     */
+    private function recordPiiIncident(GatewayRequest $request, AiRequest $row): void
+    {
+        try {
+            $this->audit->record([
+                'actor_id' => $request->actor->id,
+                'actor_type' => 'user',
+                'action' => 'ai.output.pii',
+                'target_type' => 'ai_request',
+                'target_id' => $row->id,
+                'result' => 'error',
+                'reason_code' => 'pii_in_output',
+                'metadata' => ['purpose' => $request->purpose],
+            ]);
+        } catch (Throwable $e) {
+            // The security ledger must not turn a discarded output into a
+            // provider error. Record the failure class only (N-02).
+            report(new \RuntimeException('AI PII audit failure: '.$e::class));
         }
     }
 

@@ -3,6 +3,9 @@
 namespace Tests\Feature\AiGateway;
 
 use App\Modules\AiGateway\Application\Evaluation\EvaluationRunner;
+use App\Modules\AiGateway\Application\ProviderRouter;
+use App\Modules\AiGateway\Models\AiRequest;
+use App\Modules\AiGateway\Providers\NullProvider;
 use Tests\TestCase;
 
 /**
@@ -73,7 +76,13 @@ class AiEvaluationTest extends TestCase
     public function test_evaluation_runs_while_ai_is_disabled(): void
     {
         $this->assertFalse((bool) config('ai.enabled'), 'AI_ENABLED must stay false until G4 passes.');
-        $this->assertNull(config('ai.provider'), 'No live provider may be configured in this slice.');
+
+        // A local .env may name a real provider, but the router must still
+        // select the in-process adapter while the gate is closed.
+        $this->assertInstanceOf(
+            NullProvider::class,
+            $this->app->make(ProviderRouter::class)->providerFor(AiRequest::PURPOSE_SUMMARY),
+        );
 
         $results = $this->app->make(EvaluationRunner::class)->runAll();
 
