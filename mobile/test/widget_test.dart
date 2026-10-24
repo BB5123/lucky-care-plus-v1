@@ -1,30 +1,85 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:lucky_care/core/auth/auth_repository.dart';
+import 'package:lucky_care/features/dashboard/dashboard_models.dart';
+import 'package:lucky_care/features/dashboard/dashboard_repository.dart';
 import 'package:lucky_care/main.dart';
 
+import 'support/test_doubles.dart';
+
+/// Returns immediately so the router test never touches the network.
+class _EmptyDashboardRepository implements DashboardRepository {
+  @override
+  Future<DashboardData> load() async => DashboardData.absent;
+}
+
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets(
+    'an unauthenticated cold start shows the login screen',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(FakeAuthRepository()),
+          ],
+          child: const LuckyCareApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      expect(find.text('LuckyCare+'), findsOneWidget);
+      expect(find.text('เข้าสู่ระบบ'), findsWidgets);
+      expect(find.byKey(const Key('login-email')), findsOneWidget);
+      expect(find.byKey(const Key('login-password')), findsOneWidget);
+      expect(find.byKey(const Key('login-submit')), findsOneWidget);
+      // The dashboard must not be built (and must not hit the network) while
+      // there is no token.
+      expect(find.byKey(const Key('dashboard-loading')), findsNothing);
+    },
+  );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets(
+    'a successful login redirects to the dashboard and sign-out returns to login',
+    (WidgetTester tester) async {
+      final FakeAuthRepository repository = FakeAuthRepository(
+        session: testSession(token: 'token-ui'),
+      );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
-  });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(repository),
+            dashboardRepositoryProvider.overrideWithValue(
+              _EmptyDashboardRepository(),
+            ),
+          ],
+          child: const LuckyCareApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('login-email')),
+        'somchai@example.com',
+      );
+      await tester.enterText(
+        find.byKey(const Key('login-password')),
+        '1234567890',
+      );
+
+      await tester.tap(find.byKey(const Key('login-submit')));
+      await tester.pumpAndSettle();
+
+      expect(repository.loginCalls, 1);
+      expect(find.byKey(const Key('login-email')), findsNothing);
+      expect(find.byKey(const Key('dashboard-no-workspace')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('logout-button')));
+      await tester.pumpAndSettle();
+
+      expect(repository.logoutCalls, 1);
+      expect(find.byKey(const Key('login-email')), findsOneWidget);
+    },
+  );
 }

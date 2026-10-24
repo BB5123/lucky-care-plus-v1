@@ -4,4 +4,8 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The default API base is the host machine on the emulator
+         (http://10.0.2.2:8000). Debug builds therefore allow cleartext; the
+         release manifest keeps Android's default cleartext block. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

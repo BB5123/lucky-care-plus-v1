@@ -162,3 +162,8 @@ jobs:
 
       - name: Analyze
         run: flutter analyze
+
+      # The mobile app now carries real logic (auth state, routing, error mapping),
+      # so the analyzer alone is no longer enough to catch a regression.
+      - name: Run tests
+        run: flutter test
