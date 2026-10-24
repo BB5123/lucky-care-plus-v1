@@ -95,13 +95,32 @@ class FamilyController extends AsyncNotifier<FamilyData> {
       return FamilyData.noWorkspace;
     }
 
-    final List<FamilyMembership> members = await repository.list(context);
+    List<FamilyMembership> members;
+    bool canReadMembers = true;
+
+    try {
+      members = await repository.list(context);
+    } on ApiFailure catch (failure) {
+      // Matrix A denies the member list to viewers and caregivers. Export is a
+      // separate permission, so the page must still be able to show that card
+      // instead of turning the whole tab into a permission wall.
+      if (!failure.isPermissionDenied) {
+        rethrow;
+      }
+
+      canReadMembers = false;
+      members = const <FamilyMembership>[];
+    }
 
     return FamilyData(
       hasWorkspace: true,
-      canInvite: _inviteRoles.contains(context.role),
+      canInvite: canReadMembers && _inviteRoles.contains(context.role),
+      canReadMembers: canReadMembers,
+      profileId: context.profileId,
       members: members,
-      invitations: await _knownInvitations(repository, context),
+      invitations: canReadMembers
+          ? await _knownInvitations(repository, context)
+          : const <FamilyInvitation>[],
     );
   }
 
