@@ -10,6 +10,7 @@ use App\Modules\Workspace\Models\Tenant;
 use App\Modules\Workspace\Models\Workspace;
 use App\Support\Id\Uuid7;
 use Database\Factories\HealthProfileFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -41,7 +42,14 @@ class HealthProfile extends Model
     {
         return [
             'version' => 'integer',
+            'archived_at' => 'datetime',
         ];
+    }
+
+    /** Live profiles only: an archived profile is not a health-entry point. */
+    public function scopeNotArchived(Builder $query): Builder
+    {
+        return $query->whereNull('archived_at');
     }
 
     protected static function booted(): void

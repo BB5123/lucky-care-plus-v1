@@ -278,6 +278,36 @@ class RoutePermissionCoverageTest extends TestCase
         }
     }
 
+    /**
+     * PRF-T08 (TASK I): the profile list is its own route and declares the
+     * frozen `health_profile.read` permission — not `person.read` (which the
+     * dashboard family card uses) and not a new invented ID. The general
+     * AP-001..004 sweep would catch a missing guard, but this focused
+     * assertion pins the exact permission so the endpoint cannot silently
+     * drift to a broader one.
+     */
+    public function test_prf_t08_profile_list_route_is_permission_guarded(): void
+    {
+        $routes = [];
+
+        foreach ($this->apiRoutes() as $entry) {
+            $routes[$entry['key']] = $entry['route'];
+        }
+
+        $key = 'GET api/v1/workspaces/{workspace}/profiles';
+
+        $this->assertArrayHasKey($key, $routes, 'PRF-T08: the profile list route is missing');
+        $this->assertTrue(
+            $this->hasAuthorizingMiddleware($routes[$key]),
+            'PRF-T08: the profile list route has no EnsureAuthorized middleware',
+        );
+        $this->assertSame(
+            ['health_profile.read'],
+            $this->declaredPermissions($routes[$key]),
+            'PRF-T08: the profile list route must declare only health_profile.read',
+        );
+    }
+
     public function test_ap_004_allowlist_entries_are_live_and_keep_authentication(): void
     {
         $routes = [];
