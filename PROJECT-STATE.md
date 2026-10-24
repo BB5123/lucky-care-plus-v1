@@ -34,18 +34,18 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 15-document knowledge base with a measured benchmark, web + mobile AI surfaces |
 | **4 - Scale/compliance** | not started | |
 
-**Verified test counts (2026-10-25 03:18):**
+**Verified test counts (2026-10-25 05:30):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **353 passed / 3,709 assertions** |
-| web `npm test` | **111 passed / 40 files** |
-| mobile `flutter test` | **74 passed** |
+| backend `php artisan test` | **377 passed / 3,983 assertions** |
+| web `npm test` | **126 passed / 42 files** |
+| mobile `flutter test` | **102 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.893, hit@3 0.964, MRR 0.929** (15 docs / 181 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **46 merged PRs**, no open PRs.
+8 mobile feature folders, **56 merged PRs**, no open PRs.
 
 ---
 
@@ -53,14 +53,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 353
+php artisan test                 # 377
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
 ./vendor/bin/pint --test
 
 cd ../frontend
-npm test                         # 111
+npm test                         # 126
 npm run build
 npm run check:encoding           # Thai double-encoding guard
 npm run check:mojibake           # repo-wide mojibake guard (added 2026-10-25)
@@ -68,7 +68,7 @@ npx prettier --check "src/**/*.{ts,html,css}"
 
 cd ../mobile
 flutter analyze
-flutter test                     # 74
+flutter test                     # 102
 ```
 
 Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr checks --watch` ->
@@ -124,8 +124,12 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    (`backend/docs/MALWARE-SCANNING.md`), but `DOCUMENTS_SCAN_REQUIRED` is false and no deployment runs
    clamd yet; turning it on needs a shared unix socket plus the owner decision in D4.
 6. **Retention has never deleted anything** (`dry_run = true`).
-7. **Mobile** has no appointments create/edit, no family invite, no history pagination - read-mostly.
-8. **AI summary and knowledge answers exist on web and mobile, but OCR upload is web-only.**
+7. **Mobile** closed its write gaps on 2026-10-25: appointments create/edit/cancel, family invites and
+   OCR scan-and-confirm now exist. What remains read-only is **history pagination** on long lists.
+8. **AI surfaces are at parity** (summary, knowledge answers, OCR) on web and mobile. The **data export UI**
+   exists on web (#56); mobile still has none, so an Android user can only get their copy through the web app.
+9. **Knowledge sources cannot be reviewed from the product.** `knowledge:review` is a console command, so a
+   clinician needs shell access to mark 15 sources as reviewed - and until then every answer warns.
 
 ---
 
