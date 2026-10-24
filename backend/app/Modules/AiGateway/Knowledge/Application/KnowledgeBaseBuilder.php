@@ -75,6 +75,8 @@ final class KnowledgeBaseBuilder
                 fetched_at text not null,
                 published_at text null,
                 review_status text not null,
+                reviewed_by text null,
+                reviewed_at text null,
                 license_note text not null,
                 headings text not null,
                 text text not null,
@@ -115,10 +117,10 @@ final class KnowledgeBaseBuilder
             $insertDocument = $pdo->prepare(<<<'SQL'
                 insert into documents
                     (id, title, publisher, url, category, language, fetched_at, published_at,
-                     review_status, license_note, headings, text, checksum)
+                     review_status, reviewed_by, reviewed_at, license_note, headings, text, checksum)
                 values
                     (:id, :title, :publisher, :url, :category, :language, :fetched_at, :published_at,
-                     :review_status, :license_note, :headings, :text, :checksum)
+                     :review_status, :reviewed_by, :reviewed_at, :license_note, :headings, :text, :checksum)
                 SQL);
 
             $insertChunk = $pdo->prepare(
@@ -150,6 +152,8 @@ final class KnowledgeBaseBuilder
                     'fetched_at' => $source['fetched_at'],
                     'published_at' => $source['published_at'] ?? null,
                     'review_status' => $source['review_status'],
+                    'reviewed_by' => $source['reviewed_by'] ?? null,
+                    'reviewed_at' => $source['reviewed_at'] ?? null,
                     'license_note' => $source['license_note'] ?? '',
                     'headings' => (string) json_encode(
                         array_values($source['headings'] ?? []),
@@ -324,6 +328,16 @@ final class KnowledgeBaseBuilder
 
             if (! in_array($review, ['unreviewed', 'reviewed'], true)) {
                 $errors[] = $label.': review_status must be unreviewed|reviewed';
+            }
+
+            if ($review === 'reviewed') {
+                if (trim((string) ($source['reviewed_by'] ?? '')) === '') {
+                    $errors[] = $label.': reviewed_by is required when review_status is reviewed';
+                }
+
+                if (strtotime((string) ($source['reviewed_at'] ?? '')) === false) {
+                    $errors[] = $label.': reviewed_at must be a date when review_status is reviewed';
+                }
             }
 
             if (! in_array($language, ['th', 'en'], true)) {

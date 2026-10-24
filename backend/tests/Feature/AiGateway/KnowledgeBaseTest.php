@@ -141,6 +141,73 @@ class KnowledgeBaseTest extends TestCase
         );
     }
 
+    public function test_review_command_marks_a_source_and_rebuilds(): void
+    {
+        $this->writeSource('ddc-disease-44', [
+            'title' => 'ไข้เลือดออก (Dengue)',
+            'headings' => ['อาการ', 'การป้องกัน'],
+            'text' => str_repeat('ไข้เลือดออกมียุงลายเป็นพาหะและป้องกันได้ด้วยการกำจัดน้ำขัง ', 20),
+        ]);
+
+        config([
+            'knowledge.sources_path' => $this->directory,
+            'knowledge.sqlite_path' => $this->directory.'/kb.sqlite',
+        ]);
+
+        $this->artisan('knowledge:review', [
+            'id' => 'ddc-disease-44',
+            '--reviewer' => 'Dr. Reviewer',
+            '--build' => true,
+        ])->assertExitCode(0);
+
+        $source = json_decode(
+            (string) file_get_contents($this->directory.'/ddc-disease-44.json'),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+
+        $this->assertSame('reviewed', $source['review_status']);
+        $this->assertSame('Dr. Reviewer', $source['reviewed_by']);
+        $this->assertSame('2026-10-24', $source['reviewed_at']);
+
+        $pdo = new \PDO('sqlite:'.$this->directory.'/kb.sqlite');
+        $status = $pdo->query("select review_status from documents where id = 'ddc-disease-44'")->fetchColumn();
+
+        $this->assertSame('reviewed', $status);
+    }
+
+    public function test_review_command_requires_a_reviewer(): void
+    {
+        $this->writeSource('ddc-disease-44', []);
+
+        config(['knowledge.sources_path' => $this->directory]);
+
+        $this->artisan('knowledge:review', [
+            'id' => 'ddc-disease-44',
+            '--status' => 'reviewed',
+        ])->assertExitCode(1);
+
+        $source = json_decode(
+            (string) file_get_contents($this->directory.'/ddc-disease-44.json'),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+
+        $this->assertSame('unreviewed', $source['review_status']);
+    }
+
+    public function test_review_command_rejects_an_unknown_id(): void
+    {
+        config(['knowledge.sources_path' => $this->directory]);
+
+        $this->artisan('knowledge:review', [
+            'id' => 'does-not-exist',
+            '--reviewer' => 'Dr. Reviewer',
+        ])->assertExitCode(1);
+    }
+
     /**
      * @param  array<string, mixed>  $overrides
      */
