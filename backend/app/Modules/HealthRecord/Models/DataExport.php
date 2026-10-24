@@ -18,8 +18,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * `medical_documents.storage_path`).
  *
  * Lifecycle: `queued` -> `building` -> `ready`, or `building` -> `failed`.
- * A `ready` export whose `expires_at` has passed becomes `expired`; the link
- * endpoint re-checks the clock before issuing any signed URL.
+ * A `ready` export whose `expires_at` has passed becomes `expired`; a `ready`
+ * export whose requester lost read access to its sections becomes `revoked`.
+ * Both are terminal, and the link endpoint re-checks the section decisions
+ * before issuing any signed URL (E7/F-08).
  */
 class DataExport extends Model
 {
@@ -32,6 +34,8 @@ class DataExport extends Model
     public const STATUS_FAILED = 'failed';
 
     public const STATUS_EXPIRED = 'expired';
+
+    public const STATUS_REVOKED = 'revoked';
 
     public const FORMAT_JSON = 'json';
 
@@ -48,6 +52,7 @@ class DataExport extends Model
         'requested_by',
         'status',
         'format',
+        'included_sections',
         'object_key',
         'byte_size',
         'expires_at',
@@ -60,6 +65,7 @@ class DataExport extends Model
     {
         return [
             'object_key' => 'encrypted',
+            'included_sections' => 'array',
             'byte_size' => 'integer',
             'requested_by' => 'integer',
             'expires_at' => 'datetime',

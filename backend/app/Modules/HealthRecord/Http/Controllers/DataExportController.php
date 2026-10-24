@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Modules\HealthRecord\Application\DataExportService;
 use App\Modules\HealthRecord\Domain\DataExportNotFoundException;
 use App\Modules\HealthRecord\Domain\ExportExpiredException;
+use App\Modules\HealthRecord\Domain\ExportNotPermittedException;
 use App\Modules\HealthRecord\Http\Resources\DataExportResource;
 use App\Modules\HealthRecord\Models\HealthProfile;
 use App\Modules\Workspace\Models\Workspace;
@@ -59,16 +60,22 @@ final class DataExportController extends Controller
     public function link(Request $request): JsonResponse
     {
         try {
+            $user = $request->user();
+
+            abort_unless($user instanceof User, 401);
+
             $link = $this->exports->link(
                 $this->workspace($request),
                 $this->profile($request),
                 (string) $request->route('export'),
+                $user,
             );
-        } catch (ExportExpiredException $exception) {
-            // The service records the `ready -> expired` transition before it
-            // throws. Returning the response (instead of letting the exception
-            // escape) keeps that state change inside this request's committed
-            // transaction; a thrown exception would roll it back.
+        } catch (ExportExpiredException|ExportNotPermittedException $exception) {
+            // The service records the `ready -> expired` or `ready -> revoked`
+            // transition before it throws. Returning the response (instead of
+            // letting the exception escape) keeps that state change inside
+            // this request's committed transaction; a thrown exception would
+            // roll it back.
             return $exception->toResponse($request);
         }
 

@@ -161,7 +161,11 @@ final class BuildDataExport implements ShouldQueue
                 throw new DataExportBuildFailure('access_revoked');
             }
 
-            $payload = TenantContext::run($this->tenantId, $this->workspaceId, function () use ($builder, $export): array {
+            $payload = TenantContext::run($this->tenantId, $this->workspaceId, function () use (
+                $builder,
+                $export,
+                $actor,
+            ): array {
                 $profile = HealthProfile::query()
                     ->where('tenant_id', $this->tenantId)
                     ->where('workspace_id', $this->workspaceId)
@@ -172,7 +176,7 @@ final class BuildDataExport implements ShouldQueue
                     throw new DataExportBuildFailure('profile_unavailable');
                 }
 
-                return $builder->build($export, $profile);
+                return $builder->build($export, $profile, $actor);
             });
 
             $json = $this->encode($payload);
@@ -186,6 +190,7 @@ final class BuildDataExport implements ShouldQueue
             $freshStatus = TenantContext::run($this->tenantId, $this->workspaceId, function () use (
                 $objectKey,
                 $json,
+                $payload,
             ): ?string {
                 $export = $this->lockExport();
 
@@ -203,6 +208,7 @@ final class BuildDataExport implements ShouldQueue
                     'status' => DataExport::STATUS_READY,
                     'object_key' => $objectKey,
                     'byte_size' => $byteSize,
+                    'included_sections' => $payload['meta']['included_sections'],
                     'completed_at' => now(),
                     'expires_at' => now()->addDays((int) config('exports.retention_days', 7)),
                     'error_code' => null,

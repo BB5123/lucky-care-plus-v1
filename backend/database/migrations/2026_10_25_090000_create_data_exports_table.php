@@ -30,6 +30,9 @@ return new class extends Migration
             $table->unsignedBigInteger('requested_by');
             $table->string('status', 16)->default('queued');
             $table->string('format', 16)->default('json');
+            // Section names the build actually included. The link endpoint
+            // re-checks exactly these before minting a signed URL (E7/F-08).
+            $table->jsonb('included_sections')->nullable();
             // Ciphertext at rest: the path is not useful without the app key.
             $table->text('object_key')->nullable();
             $table->unsignedBigInteger('byte_size')->nullable();
@@ -60,7 +63,7 @@ return new class extends Migration
 
         DB::statement(
             'alter table data_exports add constraint chk_data_exports_status '
-            ."check (status in ('queued', 'building', 'ready', 'failed', 'expired'))"
+            ."check (status in ('queued', 'building', 'ready', 'failed', 'expired', 'revoked'))"
         );
         DB::statement(
             'alter table data_exports add constraint chk_data_exports_format '

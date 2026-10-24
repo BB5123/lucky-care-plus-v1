@@ -2,10 +2,12 @@
 
 namespace App\Modules\HealthRecord\Application;
 
+use App\Models\User;
 use App\Modules\CareCrm\Models\Appointment;
 use App\Modules\CareCrm\Models\CareTask;
 use App\Modules\CareCrm\Models\TaskEvent;
 use App\Modules\Documents\Models\MedicalDocument;
+use App\Modules\HealthRecord\Domain\DataExportBuildFailure;
 use App\Modules\HealthRecord\Models\Allergy;
 use App\Modules\HealthRecord\Models\DataExport;
 use App\Modules\HealthRecord\Models\HealthCondition;
@@ -34,22 +36,37 @@ use Illuminate\Support\Collection;
  */
 final class DataExportBuilder
 {
+    public function __construct(private readonly DataExportSections $sections) {}
+
     /**
+     * Build the record copy for the sections the requester may read.
+     *
+     * E8 (`.ai/03-AUTHORIZATION.md`): a section is admitted only when the
+     * Authorizer permits its permission for this profile. Withheld sections
+     * are named in `meta.withheld` so a partial export is never mistaken for
+     * a complete record. No readable section at all fails the build closed.
+     *
      * @return array<string, mixed>
      */
-    public function build(DataExport $export, HealthProfile $profile): array
+    public function build(DataExport $export, HealthProfile $profile, User $actor): array
     {
-        $profile->loadMissing('person');
+        $access = $this->sections->decide($actor, $profile->workspace_id, $profile->id);
 
-        $tasks = CareTask::query()
-            ->where('profile_id', $profile->id)
-            ->orderBy('created_at')
-            ->orderBy('id')
-            ->get();
+        if ($access['included'] === []) {
+            throw new DataExportBuildFailure('export_not_permitted');
+        }
 
-        $taskIds = $tasks->pluck('id')->all();
+        $included = array_fill_keys($access['included'], true);
 
-        return [
+        $tasks = (isset($included['care_tasks']) || isset($included['task_events']))
+            ? CareTask::query()
+                ->where('profile_id', $profile->id)
+                ->orderBy('created_at')
+                ->orderBy('id')
+                ->get()
+            : collect();
+
+        $payload = [
             'meta' => [
                 'export_id' => $export->id,
                 'profile_id' => $profile->id,
@@ -57,18 +74,55 @@ final class DataExportBuilder
                 'format' => DataExport::FORMAT_JSON,
                 'format_version' => (int) config('exports.format_version', 1),
                 'notice' => 'ไฟล์นี้มีข้อมูลสุขภาพ โปรดเก็บรักษาและเปิดเผยตามที่กฎหมายอนุญาตเท่านั้น',
+                'included_sections' => $access['included'],
+                'section_count' => count($access['included']),
+                'withheld' => $access['withheld'],
+                'withheld_count' => count($access['withheld']),
             ],
-            'profile' => $this->profile($profile),
-            'conditions' => $this->conditions($profile),
-            'allergies' => $this->allergies($profile),
-            'measurements' => $this->measurements($profile),
-            'medication_plans' => $this->medicationPlans($profile),
-            'medication_records' => $this->medicationRecords($profile),
-            'appointments' => $this->appointments($profile),
-            'care_tasks' => $this->careTasks($tasks),
-            'task_events' => $this->taskEvents($taskIds),
-            'documents' => $this->documents($profile),
         ];
+
+        if (isset($included['profile'])) {
+            $profile->loadMissing('person');
+            $payload['profile'] = $this->profile($profile);
+        }
+
+        if (isset($included['conditions'])) {
+            $payload['conditions'] = $this->conditions($profile);
+        }
+
+        if (isset($included['allergies'])) {
+            $payload['allergies'] = $this->allergies($profile);
+        }
+
+        if (isset($included['measurements'])) {
+            $payload['measurements'] = $this->measurements($profile);
+        }
+
+        if (isset($included['medication_plans'])) {
+            $payload['medication_plans'] = $this->medicationPlans($profile);
+        }
+
+        if (isset($included['medication_records'])) {
+            $payload['medication_records'] = $this->medicationRecords($profile);
+        }
+
+        if (isset($included['appointments'])) {
+            $payload['appointments'] = $this->appointments($profile);
+        }
+
+        if (isset($included['care_tasks'])) {
+            $payload['care_tasks'] = $this->careTasks($tasks);
+        }
+
+        if (isset($included['task_events'])) {
+            $payload['task_events'] = $this->taskEvents($tasks->pluck('id')->all());
+        }
+
+        if (isset($included['documents'])) {
+            $payload['documents'] = $this->documents($profile);
+        }
+
+        return $payload;
     }
 
     /**

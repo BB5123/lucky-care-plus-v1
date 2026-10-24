@@ -9,6 +9,8 @@ use App\Modules\HealthRecord\Models\DataExport;
 use App\Modules\HealthRecord\Models\HealthCondition;
 use App\Modules\HealthRecord\Models\HealthMeasurement;
 use App\Modules\HealthRecord\Models\HealthProfile;
+use App\Modules\HealthRecord\Models\MedicationPlan;
+use App\Modules\HealthRecord\Models\MedicationRecord;
 use App\Modules\Workspace\Models\Workspace;
 use App\Support\Id\Uuid7;
 use Illuminate\Http\Request;
@@ -20,7 +22,7 @@ use Laravel\Sanctum\Sanctum;
 use Tests\Feature\Documents\DocumentTestCase;
 
 /**
- * PDPA data-export acceptance suite (EXP-T01 ... EXP-T10).
+ * PDPA data-export acceptance suite (EXP-T01 ... EXP-T15).
  *
  * The fixtures reuse the document suite so the export is exercised against a
  * realistic profile with a real private document object. Every test starts
@@ -37,8 +39,8 @@ final class DataExportTest extends DocumentTestCase
             'exports.disk' => 'local',
             'exports.retention_days' => 7,
             'exports.rate_limit_hours' => 24,
-            'exports.link_ttl_minutes' => 30,
-            'exports.max_link_ttl_minutes' => 30,
+            'exports.link_ttl_minutes' => 15,
+            'exports.max_link_ttl_minutes' => 15,
             'exports.format_version' => 1,
         ]);
     }
@@ -217,7 +219,7 @@ final class DataExportTest extends DocumentTestCase
         Queue::assertPushed(BuildDataExport::class, 2);
     }
 
-    public function test_exp_t05_the_link_requires_download_permission_and_expires_within_30_minutes(): void
+    public function test_exp_t05_the_link_requires_download_permission_and_expires_within_15_minutes(): void
     {
         $this->consent('data_export');
 
@@ -239,7 +241,18 @@ final class DataExportTest extends DocumentTestCase
             ->assertStatus(403)
             ->assertJsonPath('code', 'forbidden');
 
-        $this->grant($this->caregiver, ['profile.basic'], ['export']);
+        // Export authority alone is not enough either: the caller must be able to
+        // read every section the file contains (E8), so a caregiver whose grant
+        // only covers profile.basic is still refused - with a different code,
+        // because the reason is scope, not missing authority.
+        $this->grant($this->caregiver, ['profile.basic'], ['read', 'export']);
+
+        $this->postJson($this->linkPath($exportId))
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'export_not_permitted');
+
+        // The requester built it under their own grants, so they can download it.
+        Sanctum::actingAs($this->owner);
 
         $link = $this->postJson($this->linkPath($exportId))
             ->assertOk()
@@ -251,7 +264,7 @@ final class DataExportTest extends DocumentTestCase
         $expiresAt = Carbon::parse((string) $link->json('data.expires_at'));
 
         $this->assertTrue($expiresAt->greaterThan(now()));
-        $this->assertTrue($expiresAt->lessThanOrEqualTo(now()->addMinutes(30)));
+        $this->assertTrue($expiresAt->lessThanOrEqualTo(now()->addMinutes(15)));
 
         $route = app('router')->getRoutes()->match(
             Request::create($this->linkPath($exportId), 'POST'),
@@ -491,6 +504,269 @@ final class DataExportTest extends DocumentTestCase
         );
     }
 
+    public function test_exp_t11_a_vitals_only_requester_gets_measurements_and_no_medication_rows(): void
+    {
+        $this->consent('data_export');
+
+        // The export action reaches the route; only `vitals` is readable.
+        $this->grant($this->caregiver, ['profile.basic'], ['export']);
+        $this->grant($this->caregiver, ['vitals'], ['read']);
+
+        $measurement = $this->makeMeasurement('VITALS-ONLY-MARKER');
+        $plan = $this->makeMedicationPlan('MEDICATION-PLAN-MARKER');
+        $record = $this->makeMedicationRecord($plan, 'MEDICATION-RECORD-MARKER');
+
+        Sanctum::actingAs($this->caregiver);
+        Queue::fake();
+
+        $exportId = (string) $this->postJson($this->exportsPath(), ['format' => 'json'])
+            ->assertStatus(202)
+            ->json('data.id');
+
+        $this->runBuild($exportId);
+        $this->useWorkspace();
+
+        $export = DataExport::query()->findOrFail($exportId);
+
+        $this->assertSame(DataExport::STATUS_READY, $export->status);
+        $this->assertSame(['measurements'], $export->included_sections);
+
+        $json = Storage::disk('local')->get((string) $export->object_key);
+
+        /** @var array<string, mixed> $payload */
+        $payload = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertCount(1, $payload['measurements']);
+        $this->assertSame($measurement->id, $payload['measurements'][0]['id']);
+
+        // A withheld section is absent, not an empty array that could be
+        // mistaken for "this person has no medications".
+        $this->assertArrayNotHasKey('medication_plans', $payload);
+        $this->assertArrayNotHasKey('medication_records', $payload);
+        $this->assertArrayNotHasKey('appointments', $payload);
+
+        $withheld = collect($payload['meta']['withheld'])->keyBy('section');
+
+        $this->assertSame('not_permitted', $withheld['medication_plans']['reason']);
+        $this->assertSame('not_permitted', $withheld['medication_records']['reason']);
+        $this->assertSame('not_permitted', $withheld['appointments']['reason']);
+
+        $this->assertStringNotContainsString('MEDICATION-PLAN-MARKER', $json);
+        $this->assertStringNotContainsString('MEDICATION-RECORD-MARKER', $json);
+        $this->assertStringNotContainsString((string) $plan->id, $json);
+        $this->assertStringNotContainsString((string) $record->id, $json);
+    }
+
+    public function test_exp_t12_a_requester_with_no_readable_section_gets_403_and_creates_nothing(): void
+    {
+        $this->consent('data_export');
+
+        // Export authority without any read authority: every section is
+        // withheld, so the request must fail before a row exists.
+        $this->grant($this->caregiver, ['profile.basic'], ['export']);
+
+        $this->makeMeasurement('UNREADABLE-MEASUREMENT-MARKER');
+
+        Sanctum::actingAs($this->caregiver);
+        Queue::fake();
+
+        $this->postJson($this->exportsPath(), ['format' => 'json'])
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'export_not_permitted');
+
+        $this->useWorkspace();
+
+        $this->assertSame(0, DB::table('data_exports')->count());
+        $this->assertSame([], Storage::disk('local')->allFiles('exports'));
+        Queue::assertNotPushed(BuildDataExport::class);
+    }
+
+    public function test_exp_t13_revoking_a_grant_after_the_build_revokes_the_export_and_blocks_the_link(): void
+    {
+        $this->consent('data_export');
+
+        $this->grant($this->caregiver, ['profile.basic'], ['export']);
+        $vitalsGrant = $this->grant($this->caregiver, ['vitals'], ['read']);
+
+        $this->makeMeasurement('REVOCABLE-MEASUREMENT-MARKER');
+
+        Sanctum::actingAs($this->caregiver);
+        Queue::fake();
+
+        $exportId = (string) $this->postJson($this->exportsPath(), ['format' => 'json'])
+            ->assertStatus(202)
+            ->json('data.id');
+
+        $this->runBuild($exportId);
+        $this->useWorkspace();
+
+        $this->assertSame(
+            DataExport::STATUS_READY,
+            DataExport::query()->findOrFail($exportId)->status,
+        );
+
+        // Revoke only the section grant. The route's export permission survives,
+        // so the request reaches the service's E7/F-08 re-check.
+        $this->useWorkspace();
+        $vitalsGrant->forceFill([
+            'status' => 'revoked',
+            'revoked_at' => now(),
+            'revoked_by' => $this->owner->id,
+            'revocation_reason' => 'test revocation',
+        ])->save();
+
+        Sanctum::actingAs($this->caregiver);
+
+        $this->postJson($this->linkPath($exportId))
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'export_not_permitted');
+
+        $this->useWorkspace();
+
+        $export = DataExport::query()->findOrFail($exportId);
+
+        $this->assertSame(DataExport::STATUS_REVOKED, $export->status);
+        $this->assertSame('access_revoked', $export->error_code);
+        $this->assertSame(
+            1,
+            DB::table('security_audit_logs')->where('action', 'data_export.revoked')->count(),
+        );
+
+        // A second attempt stays revoked and does not write a second audit row.
+        Sanctum::actingAs($this->caregiver);
+
+        $this->postJson($this->linkPath($exportId))
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'export_not_permitted');
+
+        $this->useWorkspace();
+
+        $this->assertSame(
+            1,
+            DB::table('security_audit_logs')->where('action', 'data_export.revoked')->count(),
+        );
+    }
+
+    public function test_exp_t14_the_signed_link_lives_at_most_fifteen_minutes_even_if_config_asks_longer(): void
+    {
+        config([
+            'exports.link_ttl_minutes' => 60,
+            'exports.max_link_ttl_minutes' => 60,
+        ]);
+
+        $this->consent('data_export');
+
+        Sanctum::actingAs($this->owner);
+        Queue::fake();
+
+        $exportId = (string) $this->postJson($this->exportsPath(), ['format' => 'json'])
+            ->assertStatus(202)
+            ->json('data.id');
+
+        $this->runBuild($exportId);
+
+        Sanctum::actingAs($this->owner);
+
+        $link = $this->postJson($this->linkPath($exportId))
+            ->assertOk()
+            ->assertJsonStructure(['data' => ['url', 'expires_at']]);
+
+        $expiresAt = Carbon::parse((string) $link->json('data.expires_at'));
+
+        $this->assertTrue($expiresAt->greaterThan(now()));
+        $this->assertTrue($expiresAt->lessThanOrEqualTo(now()->addMinutes(15)));
+    }
+
+    public function test_exp_t15_meta_withheld_names_every_filtered_section(): void
+    {
+        $this->consent('data_export');
+
+        $this->grant($this->caregiver, ['profile.basic'], ['export']);
+        $this->grant($this->caregiver, ['vitals'], ['read']);
+
+        $this->makeMeasurement('WITHHELD-MARKER');
+
+        Sanctum::actingAs($this->caregiver);
+        Queue::fake();
+
+        $exportId = (string) $this->postJson($this->exportsPath(), ['format' => 'json'])
+            ->assertStatus(202)
+            ->json('data.id');
+
+        $this->runBuild($exportId);
+        $this->useWorkspace();
+
+        $export = DataExport::query()->findOrFail($exportId);
+        $json = Storage::disk('local')->get((string) $export->object_key);
+
+        /** @var array<string, mixed> $payload */
+        $payload = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
+
+        $expectedWithheld = [
+            'profile',
+            'conditions',
+            'allergies',
+            'medication_plans',
+            'medication_records',
+            'appointments',
+            'care_tasks',
+            'task_events',
+            'documents',
+        ];
+
+        $this->assertSame(['measurements'], $payload['meta']['included_sections']);
+        $this->assertSame(1, $payload['meta']['section_count']);
+        $this->assertSame($expectedWithheld, array_column($payload['meta']['withheld'], 'section'));
+        $this->assertSame(count($expectedWithheld), $payload['meta']['withheld_count']);
+
+        foreach ($payload['meta']['withheld'] as $entry) {
+            $this->assertSame('not_permitted', $entry['reason']);
+            $this->assertArrayNotHasKey($entry['section'], $payload);
+        }
+
+        $this->assertStringNotContainsString('WITHHELD-MARKER', json_encode(
+            array_diff_key($payload, ['measurements' => true]),
+            JSON_THROW_ON_ERROR,
+        ));
+    }
+
+    /**
+     * A third party probing the link must be refused WITHOUT destroying the
+     * requester's export: otherwise anyone with `data_export.download` could
+     * delete another person's data copy simply by trying to open it.
+     */
+    public function test_exp_t16_a_narrower_caller_is_refused_without_revoking_the_export(): void
+    {
+        $this->consent('data_export');
+
+        Sanctum::actingAs($this->owner);
+        Queue::fake();
+
+        $exportId = (string) $this->postJson($this->exportsPath(), ['format' => 'json'])
+            ->assertStatus(202)
+            ->json('data.id');
+
+        $this->runBuild($exportId);
+
+        Sanctum::actingAs($this->caregiver);
+        $this->grant($this->caregiver, ['profile.basic'], ['read', 'export']);
+
+        $this->postJson($this->linkPath($exportId))
+            ->assertStatus(403)
+            ->assertJsonPath('code', 'export_not_permitted');
+
+        // Still usable by the person who requested it.
+        Sanctum::actingAs($this->owner);
+
+        $status = $this->getJson($this->exportsPath().'/'.$exportId)
+            ->assertOk()
+            ->json('data.status');
+
+        $this->assertSame('ready', $status);
+
+        $this->postJson($this->linkPath($exportId))->assertOk();
+    }
+
     private function exportsPath(
         ?HealthProfile $profile = null,
         ?Workspace $workspace = null,
@@ -558,6 +834,52 @@ final class DataExportTest extends DocumentTestCase
             'recorded_at' => now()->subDay(),
             'recorded_by' => $this->owner->id,
             'source' => 'manual',
+            'version' => 1,
+        ]);
+    }
+
+    private function makeMedicationPlan(string $name): MedicationPlan
+    {
+        $this->useWorkspace();
+
+        return MedicationPlan::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'workspace_id' => $this->workspace->id,
+            'profile_id' => $this->profile->id,
+            'recorded_by' => $this->owner->id,
+            'source' => 'manual',
+            'name' => $name,
+            'dosage' => '5 mg',
+            'form' => 'tablet',
+            'route' => 'oral',
+            'doses_per_day' => 1,
+            'schedule_times' => ['08:00'],
+            'starts_on' => now()->subDay()->toDateString(),
+            'ends_on' => null,
+            'prescribed_by' => null,
+            'instructions' => 'MEDICATION-INSTRUCTION-MARKER',
+            'status' => MedicationPlan::STATUS_ACTIVE,
+            'discontinued_reason' => null,
+            'discontinued_at' => null,
+            'version' => 1,
+        ]);
+    }
+
+    private function makeMedicationRecord(MedicationPlan $plan, string $note): MedicationRecord
+    {
+        $this->useWorkspace();
+
+        return MedicationRecord::query()->create([
+            'tenant_id' => $this->tenant->id,
+            'workspace_id' => $this->workspace->id,
+            'profile_id' => $this->profile->id,
+            'plan_id' => $plan->id,
+            'recorded_by' => $this->owner->id,
+            'source' => 'manual',
+            'status' => MedicationRecord::STATUS_TAKEN,
+            'scheduled_for' => null,
+            'recorded_at' => now()->subHour(),
+            'note' => $note,
             'version' => 1,
         ]);
     }

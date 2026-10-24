@@ -7,6 +7,7 @@ use App\Modules\Audit\Services\SecurityAuditLogger;
 use App\Modules\HealthRecord\Domain\DataExportNotFoundException;
 use App\Modules\HealthRecord\Domain\DataExportStorageUnavailableException;
 use App\Modules\HealthRecord\Domain\ExportExpiredException;
+use App\Modules\HealthRecord\Domain\ExportNotPermittedException;
 use App\Modules\HealthRecord\Domain\ExportNotReadyException;
 use App\Modules\HealthRecord\Domain\ExportRateLimitedException;
 use App\Modules\HealthRecord\Jobs\BuildDataExport;
@@ -30,14 +31,30 @@ use Throwable;
  */
 final class DataExportService
 {
-    public function __construct(private readonly SecurityAuditLogger $audit) {}
+    /**
+     * Absolute cap for a signed export link (`.ai/03` E7: <= 15 minutes).
+     * Configuration may shorten it; it can never lengthen it.
+     */
+    private const MAX_LINK_TTL_MINUTES = 15;
+
+    public function __construct(
+        private readonly SecurityAuditLogger $audit,
+        private readonly DataExportSections $sections,
+    ) {}
 
     /**
      * Queue an export, or refuse with the remaining 24-hour window.
+     *
+     * E8: the request is refused before a row exists when the requester may
+     * not read any section, because such an export could only be empty.
      */
     public function request(Workspace $workspace, HealthProfile $profile, User $actor): DataExport
     {
         $this->assertProfileBelongsToWorkspace($workspace, $profile);
+
+        if ($this->sections->decide($actor, $workspace->id, $profile->id)['included'] === []) {
+            throw new ExportNotPermittedException;
+        }
 
         $hours = max(1, (int) config('exports.rate_limit_hours', 24));
 
@@ -116,17 +133,32 @@ final class DataExportService
     /**
      * Mint a signed object-store URL for a ready export.
      *
-     * The URL lifetime is the shorter of the configured 30-minute cap and the
+     * The URL lifetime is the shorter of the configured 15-minute cap and the
      * export's own remaining lifetime. The caller has already been authorized
      * for `data_export.download` and `data_export` consent by the route.
      *
+     * E7/F-08: the sections the export actually contains are re-authorized twice
+     * before any capability is minted - once for the export's requester (whose
+     * grants decided the contents) and once for the caller of this endpoint (who
+     * must not receive a copy of data they could not read themselves). A grant
+     * revoked after the build turns the row `revoked`; a narrower caller is
+     * refused without destroying the requester's export.
+     *
      * @return array{url: string, expires_at: Carbon}
      */
-    public function link(Workspace $workspace, HealthProfile $profile, string $exportId): array
-    {
+    public function link(
+        Workspace $workspace,
+        HealthProfile $profile,
+        string $exportId,
+        User $caller,
+    ): array {
         $export = $this->find($workspace, $profile, $exportId);
 
         $this->expireIfNeeded($export);
+
+        if ($export->status === DataExport::STATUS_REVOKED) {
+            throw new ExportNotPermittedException;
+        }
 
         if ($export->status === DataExport::STATUS_EXPIRED || $export->status === DataExport::STATUS_FAILED) {
             throw new ExportExpiredException;
@@ -135,6 +167,8 @@ final class DataExportService
         if ($export->status !== DataExport::STATUS_READY) {
             throw new ExportNotReadyException;
         }
+
+        $this->assertSectionsStillReadable($export, $profile, $workspace, $caller);
 
         $objectKey = $export->object_key;
         $diskName = (string) config('exports.disk', 'local');
@@ -161,8 +195,9 @@ final class DataExportService
         }
 
         $minutes = max(1, min(
-            (int) config('exports.link_ttl_minutes', 30),
-            (int) config('exports.max_link_ttl_minutes', 30),
+            self::MAX_LINK_TTL_MINUTES,
+            (int) config('exports.link_ttl_minutes', self::MAX_LINK_TTL_MINUTES),
+            (int) config('exports.max_link_ttl_minutes', self::MAX_LINK_TTL_MINUTES),
         ));
 
         $expiresAt = now()->addMinutes($minutes);
@@ -243,6 +278,94 @@ final class DataExportService
                 'metadata' => [
                     'reason' => $reason,
                     'status' => DataExport::STATUS_EXPIRED,
+                ],
+            ]);
+        });
+
+        $export->refresh();
+    }
+
+    /**
+     * Re-run the build-time section decision against the current grants.
+     *
+     * The requester is the actor who asked for the export, not necessarily the
+     * caller of the link endpoint: an export is that person's record copy, and
+     * the route has already authorized whoever is downloading.
+     */
+    private function assertSectionsStillReadable(
+        DataExport $export,
+        HealthProfile $profile,
+        Workspace $workspace,
+        User $caller,
+    ): void {
+        $sections = is_array($export->included_sections) ? $export->included_sections : [];
+
+        if ($sections === []) {
+            // A ready row without a section list cannot be re-authorized. Fail
+            // closed rather than guessing that it is safe (F-09).
+            $this->revoke($export, 'sections_missing');
+
+            throw new ExportNotPermittedException;
+        }
+
+        $requester = User::query()->whereKey($export->requested_by)->first();
+
+        if (! $requester instanceof User) {
+            $this->revoke($export, 'requester_unavailable');
+
+            throw new ExportNotPermittedException;
+        }
+
+        $access = $this->sections->decide($requester, $workspace->id, $profile->id, $sections);
+
+        if ($access['withheld'] !== []) {
+            $this->revoke($export, 'access_revoked');
+
+            throw new ExportNotPermittedException;
+        }
+
+        // The caller must also be able to read everything the file contains:
+        // `data_export.download` is authority to download, not authority to
+        // read a section. A narrower caller is refused WITHOUT revoking, so a
+        // third party cannot destroy the requester's export by probing it.
+        if ($caller->id !== $requester->id) {
+            $callerAccess = $this->sections->decide($caller, $workspace->id, $profile->id, $sections);
+
+            if ($callerAccess['withheld'] !== []) {
+                throw new ExportNotPermittedException;
+            }
+        }
+    }
+
+    private function revoke(DataExport $export, string $reason): void
+    {
+        DB::transaction(function () use ($export, $reason): void {
+            $fresh = DataExport::query()
+                ->whereKey($export->id)
+                ->lockForUpdate()
+                ->first();
+
+            // Only one caller may record the transition. A concurrent request
+            // that already revoked the row is a no-op, not a second audit row.
+            if (! $fresh instanceof DataExport || $fresh->status !== DataExport::STATUS_READY) {
+                return;
+            }
+
+            $fresh->forceFill([
+                'status' => DataExport::STATUS_REVOKED,
+                'error_code' => 'access_revoked',
+            ])->save();
+
+            $this->audit->record([
+                'actor_id' => null,
+                'actor_type' => 'system',
+                'action' => 'data_export.revoked',
+                'target_type' => 'data_export',
+                'target_id' => $fresh->id,
+                'result' => 'allow',
+                'metadata' => [
+                    'reason' => $reason,
+                    'status' => DataExport::STATUS_REVOKED,
                 ],
             ]);
         });

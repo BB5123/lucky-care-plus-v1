@@ -11,9 +11,8 @@
  * signed URL is the delivery path: an app-level envelope would hand the user
  * ciphertext instead of their data.
  *
- * `link_ttl_minutes` is capped at 30 minutes to mirror the Doctor Brief share
- * window (DB-003). `retention_days` is the export lifetime, not the record
- * retention policy.
+ * `link_ttl_minutes` is capped at 15 minutes by `.ai/03-AUTHORIZATION.md` E7.
+ * `retention_days` is the export lifetime, not the record retention policy.
  */
 return [
 
@@ -27,8 +26,8 @@ return [
     // One request per profile per 24 hours (privacy control, not politeness).
     'rate_limit_hours' => (int) env('EXPORTS_RATE_LIMIT_HOURS', 24),
 
-    // Short-lived signed link. The blueprint caps a share at 30 minutes.
-    'link_ttl_minutes' => (int) env('EXPORTS_LINK_TTL_MINUTES', 30),
-    'max_link_ttl_minutes' => 30,
+    // Short-lived signed link. The blueprint caps a share at 15 minutes.
+    'link_ttl_minutes' => (int) env('EXPORTS_LINK_TTL_MINUTES', 15),
+    'max_link_ttl_minutes' => 15,
 
 ];
