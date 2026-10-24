@@ -6,9 +6,11 @@ import '../../design_system/state_views.dart';
 import '../../design_system/tokens.dart';
 import 'appointment_models.dart';
 import 'appointments_controller.dart';
+import 'widgets/appointment_form_sheet.dart';
 import 'widgets/appointment_tile.dart';
 
-/// `/appointments` — read-only list, upcoming first.
+/// `/appointments` — upcoming first, with create/edit/cancel when the session
+/// is allowed to manage the profile's appointments.
 class AppointmentsPage extends ConsumerWidget {
   const AppointmentsPage({super.key});
 
@@ -19,9 +21,20 @@ class AppointmentsPage extends ConsumerWidget {
     final AsyncValue<AppointmentsData> state = ref.watch(
       appointmentsControllerProvider,
     );
+    final bool canManage = state.value?.canManage ?? false;
 
     return Scaffold(
       key: const Key('appointments-page'),
+      floatingActionButton: canManage
+          ? FloatingActionButton.extended(
+              key: const Key('appointment-create-action'),
+              onPressed: () => AppointmentFormSheet.show(context),
+              backgroundColor: AppColors.info,
+              foregroundColor: AppColors.textOnAccent,
+              icon: const Icon(Icons.add),
+              label: const Text('นัดหมายใหม่'),
+            )
+          : null,
       body: state.when(
         loading: () => const LoadingState(key: Key('appointments-loading')),
         error: (Object error, StackTrace stackTrace) {
@@ -57,19 +70,20 @@ class AppointmentsPage extends ConsumerWidget {
 
           return Column(
             children: <Widget>[
-              const Padding(
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.lg,
-                  AppSpacing.sm,
+              if (!value.canManage)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                  ),
+                  child: Text(
+                    'การสร้างหรือแก้ไขนัดหมายจะมาในรุ่นถัดไป',
+                    key: Key('appointments-read-only-note'),
+                    style: AppType.caption,
+                  ),
                 ),
-                child: Text(
-                  'การสร้างหรือแก้ไขนัดหมายจะมาในรุ่นถัดไป',
-                  key: Key('appointments-read-only-note'),
-                  style: AppType.caption,
-                ),
-              ),
               Expanded(
                 child: value.isEmpty
                     ? const EmptyState(
@@ -92,6 +106,12 @@ class AppointmentsPage extends ConsumerWidget {
                           return AppointmentTile(
                             key: Key('appointment-${appointment.id}'),
                             appointment: appointment,
+                            onTap: value.canManage
+                                ? () => AppointmentFormSheet.show(
+                                    context,
+                                    appointment: appointment,
+                                  )
+                                : null,
                           );
                         },
                       ),
