@@ -4,6 +4,7 @@ use App\Http\Controllers\WorkspacePingController;
 use App\Modules\Accounts\Http\Controllers\AuthController;
 use App\Modules\Accounts\Http\Controllers\OtpController;
 use App\Modules\Accounts\Http\Controllers\PinController;
+use App\Modules\AiGateway\Http\Controllers\AiSummaryController;
 use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskController;
@@ -286,6 +287,19 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/{appointment}/documents', [AppointmentController::class, 'documents'])
                 ->middleware('authorize.permission:appointment.update');
         });
+
+    // -- AI summaries (Phase 3, TASK P-1) -----------------------------------
+    // The route declares the frozen permission `ai.report.create`. The
+    // gateway then re-checks `ai.health_context.use` plus `ai_processing`
+    // consent (step 1) before any section is fetched. `ai_disabled` is a 503
+    // from the controller, not a route-level bypass.
+    Route::post('/workspaces/{workspace}/profiles/{profile}/ai/summaries', AiSummaryController::class)
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,ai-summaries',
+            'workspace.context',
+            'authorize.permission:ai.report.create',
+        ]);
 
     // -- Doctor Brief snapshots (Phase 2.3) ---------------------------------
     // Read, create and export are distinct frozen permissions (F-06). The
