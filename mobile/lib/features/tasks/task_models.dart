@@ -66,6 +66,7 @@ class CareTask {
     required this.title,
     required this.tier,
     required this.status,
+    this.profileId = '',
     this.type = '',
     this.priority = 'normal',
     this.dueAt,
@@ -80,6 +81,11 @@ class CareTask {
   final String title;
   final String tier;
   final String status;
+
+  /// The health profile this task belongs to. Documents and evidence are
+  /// profile-scoped, so the upload must address the task's own profile, not
+  /// whichever profile happens to be selected in another tab.
+  final String profileId;
   final String type;
   final String priority;
   final String? dueAt;
@@ -108,12 +114,19 @@ class CareTask {
 
   bool get isClinical => tier == 'clinical';
 
+  /// `photo` and `both` require a photo before completion; the server enforces
+  /// the same rule (`assertRequiredEvidence`). `value`/`none` are not
+  /// attachable from this sheet.
+  bool get requiresPhotoEvidence =>
+      evidencePolicy == 'photo' || evidencePolicy == 'both';
+
   factory CareTask.fromJson(Map<String, dynamic> json) {
     return CareTask(
       id: readString(json['id']),
       title: readString(json['title']),
       tier: readString(json['tier'], fallback: 'routine'),
       status: readString(json['status'], fallback: 'open'),
+      profileId: readString(json['profile_id']),
       type: readString(json['type']),
       priority: readString(json['priority'], fallback: 'normal'),
       dueAt: readNullableString(json['due_at']),
@@ -122,6 +135,26 @@ class CareTask {
       evidencePolicy: readString(json['evidence_policy']),
       verification: readString(json['verification']),
       blockedReason: readNullableString(json['blocked_reason']),
+    );
+  }
+}
+
+/// One evidence row from `POST .../care-tasks/{task}/evidence`.
+///
+/// A photo row is only meaningful with a [documentId]; the server refuses to
+/// count a bare `photo` label as evidence (CT-005).
+class TaskEvidence {
+  const TaskEvidence({required this.id, required this.type, this.documentId});
+
+  final String id;
+  final String type;
+  final String? documentId;
+
+  factory TaskEvidence.fromJson(Map<String, dynamic> json) {
+    return TaskEvidence(
+      id: readString(json['id']),
+      type: readString(json['type']),
+      documentId: readNullableString(json['document_id']),
     );
   }
 }

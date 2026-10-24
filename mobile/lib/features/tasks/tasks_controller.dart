@@ -6,6 +6,21 @@ import 'tasks_repository.dart';
 
 /// Loads the workspace's care tasks and applies one transition at a time.
 class TasksController extends AsyncNotifier<TasksData> {
+  /// `taskId -> documentId` for photo evidence attached in this session.
+  ///
+  /// The task list resource does not carry an evidence summary (reading
+  /// evidence needs a separate, full-access permission), so the sheet mirrors
+  /// only what this session proved. A fresh session stays fail-closed until
+  /// the server accepts a new attachment; the complete transition is always
+  /// re-checked server-side.
+  final Map<String, String> _photoDocuments = <String, String>{};
+
+  String? photoDocumentId(String taskId) => _photoDocuments[taskId];
+
+  void markPhotoEvidence(String taskId, String documentId) {
+    _photoDocuments[taskId] = documentId;
+  }
+
   @override
   Future<TasksData> build() async {
     final TasksRepository repository = ref.watch(tasksRepositoryProvider);
@@ -75,6 +90,8 @@ class TasksController extends AsyncNotifier<TasksData> {
       if (index >= 0) {
         next.removeAt(index);
       }
+
+      _photoDocuments.remove(updated.id);
     } else if (index >= 0) {
       next[index] = updated;
     } else {
