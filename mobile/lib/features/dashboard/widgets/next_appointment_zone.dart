@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/format/thai_date.dart';
 import '../../../design_system/tokens.dart';
 import '../../../design_system/zone_card.dart';
 import '../dashboard_models.dart';
-import '../thai_date.dart';
 
 /// Zone 5 — the next appointment, or an explicit empty sentence.
 class NextAppointmentZoneWidget extends StatelessWidget {

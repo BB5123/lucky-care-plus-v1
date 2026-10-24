@@ -28,6 +28,7 @@ class DashboardPage extends ConsumerWidget {
     );
 
     return Scaffold(
+      key: const Key('dashboard-page'),
       appBar: AppBar(
         backgroundColor: AppColors.surface,
         surfaceTintColor: AppColors.surface,
@@ -114,7 +115,8 @@ class _DashboardBody extends StatelessWidget {
         key: Key('dashboard-empty-state'),
         icon: Icons.visibility_off_outlined,
         title: 'ยังไม่มีข้อมูลที่แสดงได้',
-        message: 'เมื่อได้รับสิทธิ์จากเจ้าของข้อมูล พื้นที่นี้จะแสดงข้อมูลให้คุณ',
+        message:
+            'เมื่อได้รับสิทธิ์จากเจ้าของข้อมูล พื้นที่นี้จะแสดงข้อมูลให้คุณ',
       );
     }
 
