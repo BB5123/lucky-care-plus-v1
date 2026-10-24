@@ -21,6 +21,7 @@ use Throwable;
  *  - resolves a provider from configuration per purpose (`summary`, `draft`,
  *    `ocr`), falling back to NullProvider when AI is disabled, when the
  *    configured provider is unknown, or when the HTTP adapter has no endpoint;
+ *    `okmd`/`kku` are accepted aliases for the OpenAI-compatible adapter;
  *  - keeps a rolling window of provider outcomes in the cache and opens the
  *    circuit once the error rate crosses the configured threshold;
  *  - allows exactly one half-open probe after the cooldown, closing the
@@ -111,7 +112,10 @@ final class ProviderRouter implements LlmProvider
             return $this->nullProvider;
         }
 
-        if ($normalised === 'openai_compatible') {
+        // The OKMD / KKU IntelliSphere gateway speaks the same protocol, so the
+        // vendor name is accepted as an alias: `AI_PROVIDER=OKMD` in `.env`
+        // must behave exactly like `openai_compatible`.
+        if (in_array($normalised, ['openai_compatible', 'okmd', 'kku'], true)) {
             if (! $this->openAiProvider->isConfigured()) {
                 return $this->nullProvider;
             }

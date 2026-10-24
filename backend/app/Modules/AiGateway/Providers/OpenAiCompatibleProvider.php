@@ -57,7 +57,7 @@ final class OpenAiCompatibleProvider implements LlmProvider
             }
 
             if ($response->successful()) {
-                return $this->mapResponse($response);
+                return $this->mapResponse($response, $envelope);
             }
 
             if ($response->status() === 429 || $response->serverError()) {
@@ -95,7 +95,7 @@ final class OpenAiCompatibleProvider implements LlmProvider
             ->asJson()
             ->timeout($this->timeoutSeconds())
             ->post($this->baseUrl().'/chat/completions', [
-                'model' => $this->model(),
+                'model' => $this->resolveModel($envelope),
                 'messages' => [
                     [
                         'role' => 'system',
@@ -157,7 +157,7 @@ final class OpenAiCompatibleProvider implements LlmProvider
         );
     }
 
-    private function mapResponse(Response $response): LlmResponse
+    private function mapResponse(Response $response, PromptEnvelope $envelope): LlmResponse
     {
         try {
             $data = json_decode($response->body(), true, 512, JSON_THROW_ON_ERROR);
@@ -196,7 +196,9 @@ final class OpenAiCompatibleProvider implements LlmProvider
             content: $content,
             inputTokens: $this->tokenCount($data, 'prompt_tokens'),
             outputTokens: $this->tokenCount($data, 'completion_tokens'),
-            model: is_string($model) && trim($model) !== '' ? $model : $this->model(),
+            model: is_string($model) && trim($model) !== ''
+                ? $model
+                : ($this->resolveModel($envelope) ?? $this->model()),
             finishReason: is_string($finishReason) && trim($finishReason) !== '' ? $finishReason : null,
         );
     }
@@ -236,6 +238,16 @@ final class OpenAiCompatibleProvider implements LlmProvider
     private function model(): ?string
     {
         return $this->nonEmptyString(config('ai.openai_compatible.model'));
+    }
+
+    /**
+     * The envelope carries the model for its purpose (summary vs vision).
+     * `isConfigured()` only guarantees a default model exists; the envelope
+     * value wins because it was resolved by `ModelResolver`.
+     */
+    private function resolveModel(PromptEnvelope $envelope): ?string
+    {
+        return $this->nonEmptyString($envelope->model) ?? $this->model();
     }
 
     private function timeoutSeconds(): int

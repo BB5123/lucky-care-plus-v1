@@ -23,6 +23,11 @@ final class PromptEnvelope
         public readonly int $maxTokens,
         public readonly float $temperature,
         public readonly ?PromptImage $image = null,
+        // The model this prompt must be sent to. `null` means "the adapter's
+        // configured default". It is deliberately not part of `hash()`: the
+        // audit hash covers the context that was sent, while the model is
+        // recorded in its own `ai_requests` column.
+        public readonly ?string $model = null,
     ) {}
 
     /**

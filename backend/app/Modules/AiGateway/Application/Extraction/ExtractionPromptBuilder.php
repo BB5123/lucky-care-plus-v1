@@ -2,8 +2,10 @@
 
 namespace App\Modules\AiGateway\Application\Extraction;
 
+use App\Modules\AiGateway\Application\ModelResolver;
 use App\Modules\AiGateway\Domain\PromptEnvelope;
 use App\Modules\AiGateway\Domain\PromptImage;
+use App\Modules\AiGateway\Models\AiRequest;
 use App\Modules\HealthRecord\Domain\MeasurementType;
 use InvalidArgumentException;
 
@@ -25,6 +27,8 @@ final class ExtractionPromptBuilder
     /** @var list<string> */
     public const KINDS = [self::KIND_MEDICATION, self::KIND_DEVICE];
 
+    public function __construct(private readonly ModelResolver $models) {}
+
     public function build(string $kind, string $locale, PromptImage $image): PromptEnvelope
     {
         if (! in_array($kind, self::KINDS, true)) {
@@ -45,6 +49,9 @@ final class ExtractionPromptBuilder
             // Structured extraction must be reproducible; no creative sampling.
             temperature: 0.0,
             image: $image,
+            // The vision model, not the summary model: the adapter reads it
+            // from the envelope (`.ai/08-AI-GATEWAY.md` section 5).
+            model: $this->models->forPurpose(AiRequest::PURPOSE_OCR),
         );
     }
 

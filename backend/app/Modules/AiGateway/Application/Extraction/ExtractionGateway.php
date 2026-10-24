@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Modules\AiGateway\Application\AiQuotaService;
 use App\Modules\AiGateway\Application\AiRequestRecorder;
 use App\Modules\AiGateway\Application\CostAccountant;
+use App\Modules\AiGateway\Application\ModelResolver;
 use App\Modules\AiGateway\Application\PolicyAndConsentVerifier;
 use App\Modules\AiGateway\Application\ProviderRouter;
 use App\Modules\AiGateway\Contracts\LlmProvider;
@@ -48,6 +49,7 @@ final class ExtractionGateway
     public function __construct(
         private readonly PolicyAndConsentVerifier $policy,
         private readonly AiQuotaService $quota,
+        private readonly ModelResolver $models,
         private readonly ExtractionPromptBuilder $prompts,
         private readonly ExtractionValidator $validator,
         private readonly AiRequestRecorder $recorder,
@@ -81,7 +83,7 @@ final class ExtractionGateway
             return ExtractionResult::failed('ai_disabled', 503);
         }
 
-        $model = $this->configuredModel();
+        $model = $this->models->forPurpose(AiRequest::PURPOSE_OCR) ?? '';
 
         // Fail closed before any document read or provider call. A text-only
         // model must never receive an image.
@@ -350,25 +352,6 @@ final class ExtractionGateway
         ));
 
         return in_array($model, array_map(static fn (string $id): string => trim($id), $models), true);
-    }
-
-    /**
-     * The exact model the adapter will send: a purpose-specific override wins,
-     * then the OpenAI-compatible model, then the generic `ai.model`.
-     */
-    private function configuredModel(): string
-    {
-        foreach ([
-            config('ai.purposes.ocr.model'),
-            config('ai.openai_compatible.model'),
-            config('ai.model'),
-        ] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
-            }
-        }
-
-        return '';
     }
 
     private function recordProviderFailure(
