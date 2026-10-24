@@ -28,6 +28,35 @@ as the other AI features.
 - `review_status` is `unreviewed` for the current corpus; the answer appends a warning until a
   clinician/ops reviewer marks the source `reviewed`.
 
+### Current corpus — 15 documents / 181 chunks (2026-10-25)
+
+Thirteen DDC disease pages plus two ThaiHealth PM2.5 articles. The diseases were chosen for what Thai
+families actually ask about, not for what the site happens to expose:
+
+| Id | Topic |
+|---|---|
+| `ddc-disease-10` | อาหารเป็นพิษ (food poisoning) |
+| `ddc-disease-11` | มือเท้าปาก (HFMD) |
+| `ddc-disease-13` | ไข้หวัดใหญ่ (influenza) |
+| `ddc-disease-16` | เลปโตสไปโรซิส / ฉี่หนู (leptospirosis) |
+| `ddc-disease-17` | มาลาเรีย (malaria) |
+| `ddc-disease-21` | ปอดบวม, ปอดอักเสบ (pneumonia) |
+| `ddc-disease-23` | วัณโรค (tuberculosis) — thin page, 2k characters |
+| `ddc-disease-25` | พิษสุนัขบ้า (rabies) |
+| `ddc-disease-44` | ไข้เด็งกี่ (dengue) |
+| `ddc-disease-67` | ทางเดินอาหารอักเสบเฉียบพลันจากไวรัส (viral gastroenteritis) |
+| `ddc-disease-73` | การบาดเจ็บจากการจราจรทางถนน (road traffic injury) |
+| `ddc-disease-74` | อหิวาตกโรค (cholera) |
+| `ddc-disease-75` | โรคหัด (measles) |
+| `thaihealth-pm25-symptoms` | PM2.5 — symptom relief |
+| `thaihealth-pm25-heart` | PM2.5 — heart and blood-vessel risk |
+
+Found by scanning DDC pages 1–90 for body keywords and reading each candidate's first heading, because the
+site's `<title>` is generic on every page ("Home | กรมควบคุมโรค") — a title-based crawl finds nothing.
+
+Still missing and worth adding: ไข้เลือดออก has only the dengue page, โรคเรื้อน (id 47) is identified but not
+ingested, and there is no PM2.5 **air-quality index** source (only health advice).
+
 ## Corpus format
 
 `backend/database/knowledge/sources/*.json`:
