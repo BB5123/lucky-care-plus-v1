@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/ai/ai_models.dart';
 import '../../../core/medication/medication_models.dart';
 import '../../../core/network/api_failure.dart';
 import '../../../design_system/state_views.dart';
@@ -8,6 +9,7 @@ import '../../../design_system/tokens.dart';
 import '../medication_controller.dart';
 import 'adherence_card.dart';
 import 'medication_plan_card.dart';
+import 'ocr_scan_sheet.dart';
 import 'record_dose_sheet.dart';
 
 /// The ยา segment of the health tab: plans, the daily record action and the
@@ -53,50 +55,75 @@ class MedicationView extends ConsumerWidget {
           );
         }
 
-        if (value.isEmpty) {
-          return const EmptyState(
-            key: Key('medication-empty-state'),
-            icon: Icons.medication_outlined,
-            title: 'ยังไม่มีแผนยา',
-            message: 'เมื่อมีแผนยาที่บันทึกไว้ รายการยาและความสม่ำเสมอจะแสดงที่นี่',
-          );
-        }
+        final Widget content = value.isEmpty
+            ? const EmptyState(
+                key: Key('medication-empty-state'),
+                icon: Icons.medication_outlined,
+                title: 'ยังไม่มีแผนยา',
+                message:
+                    'เมื่อมีแผนยาที่บันทึกไว้ รายการยาและความสม่ำเสมอจะแสดงที่นี่',
+              )
+            : ListView(
+                key: const Key('medication-list'),
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                children: <Widget>[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: AppColors.infoSurface,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
+                    ),
+                    child: const Text(
+                      'การบันทึกการทานยาเป็นการรายงานด้วยตนเอง '
+                      'ไม่ใช่หลักฐานทางการแพทย์',
+                      key: Key('medication-self-reported-note'),
+                      style: AppType.caption,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  for (final MedicationPlan plan in value.plans) ...<Widget>[
+                    MedicationPlanCard(
+                      plan: plan,
+                      onRecord: plan.isActive
+                          ? () => RecordDoseSheet.show(context, plan)
+                          : null,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  if (value.adherence.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: AppSpacing.sm),
+                    for (final MedicationAdherence adherence
+                        in value.adherence)
+                      ...<Widget>[
+                        AdherenceCard(adherence: adherence),
+                        const SizedBox(height: AppSpacing.md),
+                      ],
+                  ],
+                ],
+              );
 
-        return ListView(
-          key: const Key('medication-list'),
-          padding: const EdgeInsets.all(AppSpacing.lg),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.infoSurface,
-                borderRadius: BorderRadius.circular(AppRadius.md),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.lg,
+                AppSpacing.lg,
+                0,
               ),
-              child: const Text(
-                'การบันทึกการทานยาเป็นการรายงานด้วยตนเอง ไม่ใช่หลักฐานทางการแพทย์',
-                key: Key('medication-self-reported-note'),
-                style: AppType.caption,
+              child: OutlinedButton.icon(
+                key: const Key('medication-scan-label'),
+                onPressed: () => OcrScanSheet.show(
+                  context,
+                  AiExtractionKind.medicationLabel,
+                ),
+                icon: const Icon(Icons.document_scanner_outlined),
+                label: const Text('สแกนซองยา'),
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
-            for (final MedicationPlan plan in value.plans) ...<Widget>[
-              MedicationPlanCard(
-                plan: plan,
-                onRecord: plan.isActive
-                    ? () => RecordDoseSheet.show(context, plan)
-                    : null,
-              ),
-              const SizedBox(height: AppSpacing.md),
-            ],
-            if (value.adherence.isNotEmpty) ...<Widget>[
-              const SizedBox(height: AppSpacing.sm),
-              for (final MedicationAdherence adherence in value.adherence)
-                ...<Widget>[
-                  AdherenceCard(adherence: adherence),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-            ],
+            Expanded(child: content),
           ],
         );
       },

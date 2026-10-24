@@ -35,6 +35,28 @@ class MedicationController extends AsyncNotifier<MedicationData> {
     ref.invalidateSelf();
   }
 
+  /// Saves a plan through the normal medication endpoint and prepends it to the
+  /// current list. Used by the OCR review sheet after a human confirms a draft:
+  /// the AI itself never writes (AIG-007).
+  Future<void> createPlan(CreateMedicationPlanInput input) async {
+    final WorkspaceContext context = await ref.read(
+      currentWorkspaceProvider.future,
+    );
+    final MedicationRepository repository = ref.read(
+      medicationRepositoryProvider,
+    );
+    final MedicationPlan created = await repository.createPlan(context, input);
+    final MedicationData? current = state.value;
+
+    state = AsyncData<MedicationData>(
+      MedicationData(
+        hasProfile: current?.hasProfile ?? true,
+        plans: <MedicationPlan>[created, ...?current?.plans],
+        adherence: current?.adherence ?? const <MedicationAdherence>[],
+      ),
+    );
+  }
+
   /// Reports one dose. A skipped dose without a note never reaches the
   /// repository: that is the same rule the server enforces.
   Future<void> recordDose(
