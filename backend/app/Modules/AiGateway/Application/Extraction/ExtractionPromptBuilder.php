@@ -45,7 +45,7 @@ final class ExtractionPromptBuilder
                 'allowed_measurement_types' => MeasurementType::values(),
             ],
             locale: $locale,
-            maxTokens: max(128, (int) config('ai.max_tokens', 700)),
+            maxTokens: max(128, (int) config('ai.max_tokens', 1500)),
             // Structured extraction must be reproducible; no creative sampling.
             temperature: 0.0,
             image: $image,

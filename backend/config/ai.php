@@ -183,9 +183,14 @@ return [
     |--------------------------------------------------------------------------
     | Prompt envelope defaults
     |--------------------------------------------------------------------------
+    |
+    | 1500 leaves room for the Thai summary, the mandatory disclaimer and the
+    | model's own reasoning tokens. The G4 live evaluation found that 700 was
+    | truncated by the provider (the answer stopped before the disclaimer).
+    |
     */
 
-    'max_tokens' => (int) env('AI_MAX_TOKENS', 700),
+    'max_tokens' => (int) env('AI_MAX_TOKENS', 1500),
 
     'temperature' => (float) env('AI_TEMPERATURE', 0.2),
 
@@ -347,14 +352,15 @@ return [
     |--------------------------------------------------------------------------
     |
     | Every number in an answer must exist in the scrubbed structured context
-    | the provider received. `allowed_tokens` is intentionally empty: adding a
-    | number here weakens the hallucination check, so it should be a reviewed
-    | decision, not a convenience.
+    | the provider received. The allow-list is reviewed, not a convenience:
+    | only the emergency hotline numbers the safety prompt encourages belong
+    | here. They are constants, not health values, and rejecting them would
+    | fail a summary that tells the user how to get help.
     |
     */
 
     'grounding' => [
-        'allowed_tokens' => [],
+        'allowed_tokens' => ['1669', '191', '112'],
     ],
 
     /*

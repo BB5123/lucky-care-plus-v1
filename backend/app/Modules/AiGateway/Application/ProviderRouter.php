@@ -155,6 +155,22 @@ final class ProviderRouter implements LlmProvider
     }
 
     /**
+     * Forget the rolling window and any open state for one provider.
+     *
+     * The live evaluation calls this so one transient failure cannot turn the
+     * rest of a measurement run into circuit-open failures. Normal traffic
+     * never calls it: the breaker is the production guard, not a test toggle.
+     */
+    public function resetCircuit(?string $provider = null): void
+    {
+        $name = $provider ?? ($this->activeProviderName !== '' ? $this->activeProviderName : 'openai_compatible');
+
+        Cache::forget($this->key($name, 'open_until'));
+        Cache::forget($this->key($name, 'probe'));
+        Cache::forget($this->key($name, 'outcomes'));
+    }
+
+    /**
      * @return 'closed'|'open'|'probe'
      */
     private function circuitMode(string $provider): string

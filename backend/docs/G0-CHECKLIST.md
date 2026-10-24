@@ -9,6 +9,15 @@ required, so the ADR-019 override ended.
 > `EXPORT-*` tests exist and `php artisan ai:evaluate` passes all six §6 suites. This does **not**
 > pass G4: **live-provider evaluation is still pending (P-2)** and **AI remains disabled**
 > (`AI_ENABLED=false`). See §2.1.
+>
+> **Update 2026-10-24 (G4 live run):** the live-provider evaluation now exists —
+> `php artisan ai:evaluate --live` sends the injection, grounding and safety suites to the configured
+> provider and passed 20/20, 10/10 and 7/7 against OKMD (`llama-4-maverick`; the intended
+> `deepseek-v4-flash` hit its daily cap mid-run). The run also found and fixed a production bug:
+> `TenantContext::run()` outside a transaction made **every workspace-scoped route answer 404** on a
+> real server. Evidence and limitations: [`G4-LIVE-EVALUATION.md`](G4-LIVE-EVALUATION.md).
+> **G4 is still not signed off** — the DPA/provider-approval item is an owner decision and the run has
+> to be repeated with the production model after its quota resets. `AI_ENABLED` remains `false`.
 
 - Repository: `lucky-care-plus-v1`
 - Baseline commit: `466d6e4` (Phase 0.1–0.5) plus the guard tests and CI workflow of this task.
@@ -62,7 +71,7 @@ baseline §7 checklist is complete. `.ai/12-ROADMAP.md` adds two Phase 0 exit cr
 |---|---|---|---|
 | G0-a | Authorization Unit + Feature tests pass 100% | `php artisan test` → **69 passed / 823 assertions**. Authorization-focused suites: `AuthorizerTest` 11/488, `GrantAndConsentTest` 9/21, `PermissionCatalogTest` 2/24, `WorkspaceContextMiddlewareTest` 4/16 → 26 tests, 0 failures. | ✅ |
 | G0-b | `TEN-*` passes | `php artisan test --filter=TenantIsolationTest` → **5 passed / 35 assertions** (`TEN-T01..T05`). RLS is `ENABLE` + `FORCE` in `database/migrations/2026_10_22_150700_enable_row_level_security.php`; tests run as non-superuser `luckycare_app`. | ✅ |
-| G0-c | Baseline §7 readiness checklist complete (10 items) | Section 2 below: **9 ✅ / 1 ✅ gateway level (item 8; the full G4 gate is still open, see §2.1)**. No item is open at the gateway level; live-provider evaluation remains P-2 and AI stays disabled. | ✅ |
+| G0-c | Baseline §7 readiness checklist complete (10 items) | Section 2 below: **9 ✅ / 1 ✅ gateway level (item 8; the full G4 gate is still open, see §2.1)**. No item is open at the gateway level; the live-provider evaluation is recorded in §2.2 and AI stays disabled. | ✅ |
 | G0-d | (Roadmap) No endpoint without a permission annotation | `php artisan test --filter=RoutePermissionCoverageTest` → **4 passed / 34 assertions**. All 14 `api/v1` route entries are either permission-guarded (4) or explicitly allowlisted with a written reason (10); every declared permission ID exists in the 99-ID catalog. | ✅ |
 | G0-e | (Roadmap) PHI leak scan passes | `php artisan test --filter=PhiLeakTest` → **3 passed / 6 assertions**. Scans every `app/**/*.php` `Log::*()` call for PHI/credential tokens; empty allowlist; scanner has a planted-leak self-test. Scope: log calls only. | ✅ |
 
@@ -70,7 +79,7 @@ baseline §7 checklist is complete. `.ai/12-ROADMAP.md` adds two Phase 0 exit cr
 
 Legend: ✅ = proven by a test/command listed in the row · ⏭ = deferred to a later gate by an ADR
 · ⬜ = not done or not proven · **✅ gateway level** = the gateway/export surfaces are proven, but the
-full G4 gate is still open (live provider and P-2 pending).
+full G4 gate is still open (DPA/provider approval and the production-model repeat).
 
 | # | Item | Evidence (command/file) | Status |
 |---|---|---|---|
@@ -81,7 +90,7 @@ full G4 gate is still open (live provider and P-2 pending).
 | 5 | Every endpoint has an authorization policy and declares its scope | `RoutePermissionCoverageTest AP-001..004` (4/34): 14 `api/v1` entries = 4 guarded + 10 allowlisted; guarded routes must carry `EnsureAuthorized` and a catalog ID. Scope/action is declared centrally per permission in `Authorizer::PERMISSION_MAP` and checked by `AUTH-005`. | ✅ |
 | 6 | Negative tests for every risky action | For every endpoint that exists in Phase 0: AUTH-003/004, ISO-T02, WS-T02, MEM-T01 (viewer + caregiver denied), MEM-T02, INV-T01, plus auth negatives (wrong password, OTP exhausted/expired, PIN lockout/weak PIN). Future health endpoints must add their own negative test in the same change (`.ai/10-TESTING.md` §1). | ✅ |
 | 7 | IDOR tests for APIs that accept a resource ID | The only enumerable resource ID exposed today is the workspace UUID. `WS-T02`, `MEM-T02`, `ISO-T02`, and `AUTH-003` prove non-members get 404 with no existence leak. Invitation links use an unguessable bearer token, not an ID. Profile-scoped routes do not exist yet, so a profile-ID cross-workspace IDOR test is deferred to the Phase 1 endpoints. | ✅ |
-| 8 | AI Context and Export authorization tests before enabling those features | **Satisfied at the gateway level (2026-10-24); G4 itself is not passed.** `AI-*`: `ContextGatewayTest` (15 tests / 144 assertions) proves disabled → 503 with no fetch, consent refusal, scope containment, scrubbing, audit shape and quota, and adds a diagnosis-question refusal that is recorded without touching a health table. `EXPORT-*`: `ExportGateTest` (4 tests / 59 assertions) proves the document link and the Doctor Brief share require `.export` (not `.read`), the 30-minute share TTL, the absence of any `data_export.*` route, and exactly one PHI-free audit row per export path. `php artisan ai:evaluate` passes all six §6 suites (§2.1). **Live-provider evaluation is still pending (P-2)** and `AI_ENABLED` remains `false`. | ✅ gateway level |
+| 8 | AI Context and Export authorization tests before enabling those features | **Satisfied at the gateway level (2026-10-24); G4 itself is not passed.** `AI-*`: `ContextGatewayTest` (15 tests / 144 assertions) proves disabled → 503 with no fetch, consent refusal, scope containment, scrubbing, audit shape and quota, and adds a diagnosis-question refusal that is recorded without touching a health table. `EXPORT-*`: `ExportGateTest` (4 tests / 59 assertions) proves the document link and the Doctor Brief share require `.export` (not `.read`), the 30-minute share TTL, the absence of any `data_export.*` route, and exactly one PHI-free audit row per export path. `php artisan ai:evaluate` passes all six §6 suites (§2.1). **Live-provider evaluation now exists too:** `php artisan ai:evaluate --live` passed injection 20/20, grounding 10/10 and safety 7/7 against OKMD on 2026-10-24, and the run exposed a production bug (`TenantContext::run()` outside a transaction made every workspace route 404) that is now fixed and regression-tested (§2.2). **G4 is still not signed off** (DPA/provider approval is an owner decision and the production model must repeat the run after its quota resets); `AI_ENABLED` remains `false`. | ✅ gateway level |
 | 9 | Audit policy for health-data access and permission changes | `SecurityAuditLogger` (hash chain, append-only, PHI-key rejection) with AUDIT-T01/T02/T03; every allow/deny decision writes exactly one row (AUDIT-T03); login denial is audited (`LoginTest`); retention purge batches are audited (RET-T06). Policy: `.ai/09-SECURITY-PRIVACY.md` (N-02) and `.ai/06-DATA-MODEL.md` §5. Note: grant/consent mutation endpoints do not exist yet; their mutation audit must land with those endpoints. | ✅ |
 | 10 | CI enforces authorization tests and they must pass before merge | `.github/workflows/ci.yml` runs on push-to-main and on `pull_request`: Pint + full `php artisan test` against PostgreSQL 16 with the **non-superuser** role, plus the frontend build and `flutter analyze`. Green on every push since run #1 (`4cee485` → `6bbfa9c`). **Enforcement is now active:** the repository ruleset `Allow AI Push` on `main` requires a pull request and the three status checks — `Backend (PHP 8.4, PostgreSQL 16)`, `Frontend (Angular 22)`, `Mobile (Flutter stable)` — and still forbids force-push. Verified against the GitHub ruleset API on 2026-10-23. | ✅ |
 
@@ -120,7 +129,31 @@ Commands and results:
 - `grep -rn "AI_ENABLED" backend/config/ai.php` → `'enabled' => env('AI_ENABLED', false)`.
 
 **What this does not prove:** a live provider's behaviour, cost/latency, or its DPA/AIG-010 review.
-That is the remaining half of G4 and belongs to **P-2**; until then **AI remains disabled**.
+The live half is now recorded in **§2.2** and [`G4-LIVE-EVALUATION.md`](G4-LIVE-EVALUATION.md);
+the DPA review remains the owner decision, so **AI remains disabled**.
+
+### 2.2 Live-provider evaluation (2026-10-24)
+
+`php artisan ai:evaluate --live --max-calls=50` against OKMD through the OpenAI-compatible adapter
+(model `llama-4-maverick`; the intended `deepseek-v4-flash` exhausted its daily quota mid-run):
+
+| Suite | Mode | Cases | Rate | Threshold | Result |
+|---|---|---|---|---|---|
+| leakage | offline | 20 | 100.0% | 100% | PASS |
+| scope | offline | 20 | 100.0% | 100% | PASS |
+| refusal | offline | 20 | 100.0% | ≥95% | PASS |
+| injection | live | 20 | 100.0% | ≥95% | PASS |
+| grounding | live | 10 | 100.0% | ≥90% | PASS |
+| safety | live | 7 | 100.0% | 100% | PASS |
+
+37 provider calls, 17,688 input / 3,569 output tokens, avg 8,029 ms, 0 retries. An end-to-end HTTP
+run (summary + vision extraction) also returned 200, recorded `ai_requests` rows with document/record
+refs only, and created **no** medication row (AIG-007).
+
+The run found and fixed: the `TenantContext::run()` transaction bug (every workspace route 404 on a
+real server; regression test `TenantContextTest`), Markdown-formatted disclaimers being rejected,
+legitimate period/hotline numbers failing grounding, and 700-token truncation. Full detail, provider
+quotas and the remaining G4 blockers: [`G4-LIVE-EVALUATION.md`](G4-LIVE-EVALUATION.md).
 
 ## 3. What was left — now closed (2026-10-23)
 
@@ -135,7 +168,7 @@ The last open item was a repository setting, not code, and it is now done:
 
 Closed items:
 - ~~Item 2 — Matrix conformance~~ ✅ `MatrixConformanceTest` (47 rows / 590 assertions).
-- ~~Item 8 — AI/export~~ ⏭ deferred to **G4** by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น); `.ai/10-TESTING.md` G4 requires `AI-*` and `EXPORT-*`. **Update 2026-10-24 (P-4):** `AI-*`/`EXPORT-*` and all six evaluation suites now exist and pass at the gateway level (§2.1). The G4 gate is **not** passed: live-provider evaluation is still pending (**P-2**) and `AI_ENABLED=false`.
+- ~~Item 8 — AI/export~~ ⏭ deferred to **G4** by [ADR-018](../../.ai/DECISIONS.md#adr-018--g0-scoping--capability-dependent-checklist-ย้ายไป-gate-ของ-feature-นั้น); `.ai/10-TESTING.md` G4 requires `AI-*` and `EXPORT-*`. **Update 2026-10-24 (P-4):** `AI-*`/`EXPORT-*` and all six evaluation suites now exist and pass at the gateway level (§2.1). **Update 2026-10-24 (G4 live run):** the live suites also pass against OKMD (§2.2). The G4 gate is **not** passed: the DPA/provider approval is an owner decision and the production model must repeat the run after its quota resets; `AI_ENABLED=false`.
 - ~~Item 10 — CI enforcement~~ ✅ required checks active on `main`.
 
 **G0 verdict: ✅ PASSED** — 9 items proven, 1 explicitly deferred to its own gate. Phase 1 may proceed.
