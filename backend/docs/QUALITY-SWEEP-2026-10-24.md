@@ -109,11 +109,17 @@ the tests expect.
    (503) if it is set without a scanner. Wire ClamAV before production.
 2. **Retention still runs dry.** `retention.dry_run` is true (ADR-016); the numbers need legal sign-off
    (Q-12) before it deletes anything.
-3. **No automated restore test.** The drill above is manual; a scheduled job that restores the latest dump
-   into a scratch database and runs the three RLS probes would make it continuous.
+3. ~~**No automated restore test.**~~ **Closed the same day.** `backend/scripts/restore-drill.sh` plus
+   `.github/workflows/restore-drill.yml` (weekly Sunday 03:00 UTC, plus manual dispatch) dump, restore with
+   ownership preserved, compare every table's row count and run the three RLS probes. The first CI dispatch
+   passed on 2026-10-24 (run `40074656709`, conclusion `success`). Two real defects were found while
+   automating it: the workflow had not set `DB_USERNAME`/`DB_PASSWORD` as real environment variables (so
+   Laravel read `.env.example` and authentication failed), and the script was committed without the
+   executable bit.
 4. **Load behaviour is unmeasured.** No load test has been run against the dashboard aggregate or the
    timeline endpoint.
-5. **Backups are not scheduled.** Nothing currently produces a nightly dump.
+5. **Backups are not scheduled.** The drill proves a dump can be restored, but nothing produces a nightly
+   dump yet; that belongs to the deployment target, not this repository.
 
 ---
 
