@@ -55,16 +55,20 @@ final class KnowledgeSearchCommand extends Command
 
         foreach ($results as $index => $result) {
             $excerpt = preg_replace('/\s+/u', ' ', $result['text']) ?? $result['text'];
+            $matchedBy = ($result['matched_by'] ?? 'query') === 'alias'
+                ? 'alias: '.($result['matched_term'] ?? '')
+                : 'query';
             $rows[] = [
                 $index + 1,
                 $result['document_id'],
                 $result['title'],
+                $matchedBy,
                 number_format($result['score'], 6),
                 mb_substr($excerpt, 0, 70).'…',
             ];
         }
 
-        $this->table(['#', 'Document', 'Title', 'Score', 'Excerpt'], $rows);
+        $this->table(['#', 'Document', 'Title', 'Matched by', 'Score', 'Excerpt'], $rows);
 
         return self::SUCCESS;
     }

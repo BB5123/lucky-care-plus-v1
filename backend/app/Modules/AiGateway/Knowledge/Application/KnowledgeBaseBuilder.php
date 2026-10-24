@@ -2,6 +2,7 @@
 
 namespace App\Modules\AiGateway\Knowledge\Application;
 
+use App\Modules\AiGateway\Knowledge\Domain\ThaiText;
 use PDO;
 use PDOException;
 use RuntimeException;
@@ -15,12 +16,15 @@ use RuntimeException;
  * installation can rebuild or restore the `.sqlite` file.
  *
  * SQLite FTS5 with the trigram tokenizer is used for retrieval: it handles Thai
- * substrings without an embedding model. The interface is deliberately narrow
- * so a Qdrant/pgvector retriever can replace it later.
+ * substrings without an embedding model. The FTS row holds the document title
+ * next to the chunk body so a disease name that appears only in the title is
+ * findable, and both are passed through `ThaiText::normalise()` so a spaced
+ * spelling and an unspaced query meet in the same token stream. The interface
+ * is deliberately narrow so a Qdrant/pgvector retriever can replace it later.
  */
 final class KnowledgeBaseBuilder
 {
-    private const SCHEMA_VERSION = 1;
+    private const SCHEMA_VERSION = 2;
 
     private readonly int $chunkChars;
 
@@ -94,7 +98,9 @@ final class KnowledgeBaseBuilder
             )
             SQL);
 
-        $pdo->exec("create virtual table chunks_fts using fts5(text, tokenize='trigram')");
+        // The title is a separate FTS column so the retriever can boost it:
+        // a title-only hit must rank at least as high as a body hit.
+        $pdo->exec("create virtual table chunks_fts using fts5(title, text, tokenize='trigram')");
 
         $pdo->exec(<<<'SQL'
             create table keywords (
@@ -126,7 +132,7 @@ final class KnowledgeBaseBuilder
             $insertChunk = $pdo->prepare(
                 'insert into chunks (document_id, ordinal, text, char_count) values (?, ?, ?, ?)',
             );
-            $insertFts = $pdo->prepare('insert into chunks_fts (rowid, text) values (?, ?)');
+            $insertFts = $pdo->prepare('insert into chunks_fts (rowid, title, text) values (?, ?, ?)');
             $insertKeyword = $pdo->prepare(
                 'insert or ignore into keywords (term, document_id, weight) values (?, ?, ?)',
             );
@@ -166,7 +172,11 @@ final class KnowledgeBaseBuilder
                 foreach ($chunks as $ordinal => $chunk) {
                     $insertChunk->execute([$source['id'], $ordinal, $chunk, mb_strlen($chunk)]);
                     $chunkId = (int) $pdo->lastInsertId();
-                    $insertFts->execute([$chunkId, $chunk]);
+                    $insertFts->execute([
+                        $chunkId,
+                        ThaiText::normalise((string) $source['title']),
+                        ThaiText::normalise($chunk),
+                    ]);
                     $chunkCount++;
                 }
 
@@ -432,7 +442,7 @@ final class KnowledgeBaseBuilder
 
     private function normaliseTerm(string $term): string
     {
-        $term = preg_replace('/\s+/u', ' ', $term) ?? $term;
+        $term = ThaiText::normalise(preg_replace('/\s+/u', ' ', $term) ?? $term);
         $term = trim($term, " \t\n\r\0\x0B.,;:!?()[]{}<>\"'");
 
         if (mb_strlen($term) < 2 || mb_strlen($term) > 80) {
