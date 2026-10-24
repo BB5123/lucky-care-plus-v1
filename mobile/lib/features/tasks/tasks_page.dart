@@ -21,11 +21,6 @@ class TasksPage extends ConsumerWidget {
 
     return Scaffold(
       key: const Key('tasks-page'),
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        surfaceTintColor: AppColors.surface,
-        title: const Text('งาน'),
-      ),
       body: state.when(
         loading: () => const LoadingState(key: Key('tasks-loading')),
         error: (Object error, StackTrace stackTrace) {

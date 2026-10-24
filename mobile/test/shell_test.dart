@@ -10,6 +10,8 @@ import 'package:lucky_care/features/family/family_controller.dart';
 import 'package:lucky_care/features/family/family_models.dart';
 import 'package:lucky_care/features/health/health_controller.dart';
 import 'package:lucky_care/features/health/health_models.dart';
+import 'package:lucky_care/features/notifications/notifications_controller.dart';
+import 'package:lucky_care/core/notifications/notification_models.dart';
 import 'package:lucky_care/features/tasks/task_models.dart';
 import 'package:lucky_care/features/tasks/tasks_controller.dart';
 import 'package:lucky_care/main.dart';
@@ -57,6 +59,11 @@ void main() {
                   hasWorkspace: true,
                   members: const <FamilyMembership>[],
                 ),
+              ),
+            ),
+            notificationDeliveriesControllerProvider.overrideWith(
+              () => StubNotificationDeliveriesController(
+                const <NotificationDelivery>[],
               ),
             ),
           ],

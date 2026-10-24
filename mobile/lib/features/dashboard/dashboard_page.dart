@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/auth/auth_controller.dart';
 import '../../core/network/api_failure.dart';
 import '../../design_system/tokens.dart';
 import 'dashboard_controller.dart';
@@ -29,21 +28,6 @@ class DashboardPage extends ConsumerWidget {
 
     return Scaffold(
       key: const Key('dashboard-page'),
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        surfaceTintColor: AppColors.surface,
-        title: const Text('LuckyCare+'),
-        actions: <Widget>[
-          IconButton(
-            key: const Key('logout-button'),
-            tooltip: 'ออกจากระบบ',
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              ref.read(authControllerProvider.notifier).signOut();
-            },
-          ),
-        ],
-      ),
       body: state.when(
         loading: () => const _DashboardSkeleton(),
         error: (Object error, StackTrace stackTrace) {

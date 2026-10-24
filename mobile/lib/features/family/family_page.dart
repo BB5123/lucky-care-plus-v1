@@ -20,11 +20,6 @@ class FamilyPage extends ConsumerWidget {
 
     return Scaffold(
       key: const Key('family-page'),
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        surfaceTintColor: AppColors.surface,
-        title: const Text('ครอบครัว'),
-      ),
       body: state.when(
         loading: () => const LoadingState(key: Key('family-loading')),
         error: (Object error, StackTrace stackTrace) {

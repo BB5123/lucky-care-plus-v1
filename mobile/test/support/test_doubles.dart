@@ -99,6 +99,13 @@ class StubApiClient extends ApiClient {
   ApiFailure? failure;
   final List<String> requestedPaths = <String>[];
 
+  /// Optional per-method envelopes and a record of what was sent.
+  Map<String, dynamic>? postResponse;
+  Map<String, dynamic>? patchResponse;
+  Object? lastPostData;
+  Object? lastPatchData;
+  Map<String, String>? lastHeaders;
+
   @override
   Future<Map<String, dynamic>> get(
     String path, {
@@ -114,6 +121,45 @@ class StubApiClient extends ApiClient {
     }
 
     return response ?? const <String, dynamic>{};
+  }
+
+  @override
+  Future<Map<String, dynamic>> post(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+    ProgressCallback? onSendProgress,
+  }) async {
+    requestedPaths.add(path);
+    lastPostData = data;
+    lastHeaders = headers;
+
+    final ApiFailure? failure = this.failure;
+
+    if (failure != null) {
+      throw failure;
+    }
+
+    return postResponse ?? response ?? const <String, dynamic>{};
+  }
+
+  @override
+  Future<Map<String, dynamic>> patch(
+    String path, {
+    Object? data,
+    Map<String, String>? headers,
+  }) async {
+    requestedPaths.add(path);
+    lastPatchData = data;
+    lastHeaders = headers;
+
+    final ApiFailure? failure = this.failure;
+
+    if (failure != null) {
+      throw failure;
+    }
+
+    return patchResponse ?? response ?? const <String, dynamic>{};
   }
 }
 

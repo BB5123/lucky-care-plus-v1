@@ -22,11 +22,6 @@ class AppointmentsPage extends ConsumerWidget {
 
     return Scaffold(
       key: const Key('appointments-page'),
-      appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        surfaceTintColor: AppColors.surface,
-        title: const Text('นัดหมาย'),
-      ),
       body: state.when(
         loading: () => const LoadingState(key: Key('appointments-loading')),
         error: (Object error, StackTrace stackTrace) {

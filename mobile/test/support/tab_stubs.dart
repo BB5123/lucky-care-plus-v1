@@ -1,5 +1,7 @@
 import 'package:lucky_care/core/auth/auth_controller.dart';
 import 'package:lucky_care/core/auth/auth_state.dart';
+import 'package:lucky_care/core/medication/medication_models.dart';
+import 'package:lucky_care/core/notifications/notification_models.dart';
 import 'package:lucky_care/features/appointments/appointment_models.dart';
 import 'package:lucky_care/features/appointments/appointments_controller.dart';
 import 'package:lucky_care/features/dashboard/dashboard_controller.dart';
@@ -8,6 +10,8 @@ import 'package:lucky_care/features/family/family_controller.dart';
 import 'package:lucky_care/features/family/family_models.dart';
 import 'package:lucky_care/features/health/health_controller.dart';
 import 'package:lucky_care/features/health/health_models.dart';
+import 'package:lucky_care/features/health/medication_controller.dart';
+import 'package:lucky_care/features/notifications/notifications_controller.dart';
 import 'package:lucky_care/features/tasks/task_models.dart';
 import 'package:lucky_care/features/tasks/tasks_controller.dart';
 
@@ -68,4 +72,33 @@ class StubFamilyController extends FamilyController {
 
   @override
   Future<FamilyData> build() async => data;
+}
+
+class StubMedicationController extends MedicationController {
+  StubMedicationController(this.data);
+
+  final MedicationData data;
+
+  @override
+  Future<MedicationData> build() async => data;
+}
+
+class StubNotificationDeliveriesController
+    extends NotificationDeliveriesController {
+  StubNotificationDeliveriesController(this.deliveries);
+
+  final List<NotificationDelivery> deliveries;
+
+  @override
+  Future<List<NotificationDelivery>> build() async => deliveries;
+}
+
+class StubNotificationPreferencesController
+    extends NotificationPreferencesController {
+  StubNotificationPreferencesController(this.preferences);
+
+  final NotificationPreferences preferences;
+
+  @override
+  Future<NotificationPreferences> build() async => preferences;
 }
