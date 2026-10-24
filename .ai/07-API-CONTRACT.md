@@ -90,6 +90,7 @@
 | GET/POST | `/workspaces/{w}/persons` | `person.read` / `person.create` |
 | GET/PATCH | `/workspaces/{w}/persons/{p}` | `person.read` / `person.update` |
 | POST | `/workspaces/{w}/persons/{p}/merge` | `person.merge` |
+| GET | `/workspaces/{w}/profiles` | `health_profile.read` |
 | GET | `/workspaces/{w}/profiles/{profile}` | `health_profile.read` |
 | GET/POST | `.../profiles/{profile}/conditions` | `health_condition.read` / `health_condition.create` |
 | PATCH | `.../conditions/{c}` | `health_condition.correct` |

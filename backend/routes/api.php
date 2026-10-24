@@ -21,6 +21,7 @@ use App\Modules\HealthRecord\Http\Controllers\MeasurementController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationAdherenceController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationPlanController;
 use App\Modules\HealthRecord\Http\Controllers\MedicationRecordController;
+use App\Modules\HealthRecord\Http\Controllers\ProfileController;
 use App\Modules\HealthRecord\Http\Controllers\ReportShareController;
 use App\Modules\Notifications\Http\Controllers\NotificationDeliveryController;
 use App\Modules\Notifications\Http\Controllers\NotificationPreferenceController;
@@ -117,6 +118,22 @@ Route::prefix('v1')->group(function (): void {
             'throttle:30,1,workspace-invitations',
             'workspace.context',
             'authorize.permission:workspace.member.invite',
+        ]);
+
+    // -- Profile picker (foundation for the health/appointment screens) ------
+    // A profile id is required by every health endpoint, but the only list the
+    // client had was the dashboard family card, gated by `person.read`. This
+    // route lets an actor who holds a `profile.basic` grant enter the profile
+    // they are entitled to without reading the family card. The route guard
+    // proves membership + the role gate; `ProfileController` delegates the
+    // per-profile decision to `Authorizer::authorizeBatch` (never a role
+    // comparison in the controller). An empty list is a legitimate 200.
+    Route::get('/workspaces/{workspace}/profiles', [ProfileController::class, 'index'])
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,profiles',
+            'workspace.context',
+            'authorize.permission:health_profile.read',
         ]);
 
     // -- Health Vault (Phase 1) ---------------------------------------------
