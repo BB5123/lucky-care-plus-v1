@@ -6,13 +6,15 @@ import '../../../design_system/state_views.dart';
 import '../../../design_system/tokens.dart';
 import 'health_controller.dart';
 import 'health_models.dart';
+import 'ai_view.dart';
 import 'widgets/measurement_tile.dart';
 import 'widgets/medication_view.dart';
 import 'widgets/record_measurement_sheet.dart';
 
-/// The two sections inside the health tab. Measurements stay the default so
-/// the existing reading loop is unchanged.
-enum HealthSection { measurements, medication }
+/// The sections inside the health tab. Measurements stay the default so the
+/// existing reading loop is unchanged; AI is an explicit third section so the
+/// summary/knowledge calls only run when the user opens it.
+enum HealthSection { measurements, medication, ai }
 
 /// `/health` — readings and medication for the current profile.
 class HealthPage extends ConsumerStatefulWidget {
@@ -70,6 +72,10 @@ class _HealthPageState extends ConsumerState<HealthPage> {
                   value: HealthSection.medication,
                   label: Text('ยา', key: Key('health-section-medication')),
                 ),
+                ButtonSegment<HealthSection>(
+                  value: HealthSection.ai,
+                  label: Text('AI', key: Key('health-section-ai')),
+                ),
               ],
               selected: <HealthSection>{_section},
               onSelectionChanged: (Set<HealthSection> selection) {
@@ -80,9 +86,11 @@ class _HealthPageState extends ConsumerState<HealthPage> {
             ),
           ),
           Expanded(
-            child: _section == HealthSection.measurements
-                ? _measurements(state)
-                : const MedicationView(),
+            child: switch (_section) {
+              HealthSection.measurements => _measurements(state),
+              HealthSection.medication => const MedicationView(),
+              HealthSection.ai => const AiView(),
+            },
           ),
         ],
       ),
