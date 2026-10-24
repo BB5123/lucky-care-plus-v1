@@ -11,6 +11,8 @@ use App\Modules\CareCrm\Http\Controllers\CareTaskTemplateController;
 use App\Modules\CareCrm\Http\Controllers\EscalationPolicyController;
 use App\Modules\CareCrm\Http\Controllers\TaskEvidenceController;
 use App\Modules\Dashboard\Http\Controllers\DashboardController;
+use App\Modules\Documents\Http\Controllers\DocumentController;
+use App\Modules\Documents\Http\Controllers\DocumentDownloadController;
 use App\Modules\HealthRecord\Http\Controllers\AllergyController;
 use App\Modules\HealthRecord\Http\Controllers\BriefController;
 use App\Modules\HealthRecord\Http\Controllers\ConditionController;
@@ -209,6 +211,41 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/{task}/evidence', [TaskEvidenceController::class, 'index'])
                 ->middleware('authorize.permission:care_task.evidence.read');
         });
+
+    // -- Medical documents (ADR-014) ---------------------------------------
+    // Read, upload, export and delete are separate frozen permissions (F-06).
+    // The URL endpoint issues a short-lived signed URL; the signed route below
+    // re-runs the Authorizer at delivery time so a revoked grant cannot be
+    // bypassed with an old link (ABD-014 / F-08). `medical_document.export`
+    // (not `.read`) gates URL issuance and delivery because the baseline says
+    // "Read an authorized document" is not "Export/download a document".
+    Route::prefix('/workspaces/{workspace}/profiles/{profile}/documents')
+        ->middleware(['auth:sanctum', 'throttle:60,1,documents', 'workspace.context'])
+        ->group(function (): void {
+            Route::get('/', [DocumentController::class, 'index'])
+                ->middleware('authorize.permission:medical_document.read');
+            Route::post('/', [DocumentController::class, 'store'])
+                ->middleware('authorize.permission:medical_document.upload');
+            Route::get('/{document}', [DocumentController::class, 'show'])
+                ->middleware('authorize.permission:medical_document.read');
+            Route::post('/{document}/url', [DocumentController::class, 'url'])
+                ->middleware('authorize.permission:medical_document.export');
+            Route::delete('/{document}', [DocumentController::class, 'destroy'])
+                ->middleware('authorize.permission:medical_document.delete');
+        });
+
+    // Signed delivery. The signature binds the document id. The route still
+    // requires authentication and runs the normal Authorizer pipeline for the
+    // document's profile.
+    Route::get('/documents/{document}/download', DocumentDownloadController::class)
+        ->middleware([
+            'auth:sanctum',
+            'throttle:60,1,document-download',
+            'signed:relative',
+            'documents.download.context',
+            'authorize.permission:medical_document.export',
+        ])
+        ->name('documents.download');
 
     // -- Appointments (Phase 1.4) -------------------------------------------
     // A profile-scoped coordination surface (APT-001). Every route declares
