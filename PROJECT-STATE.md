@@ -8,7 +8,7 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 02:15 (Asia/Bangkok) on `main`
+**Last verified:** 2026-10-25 02:56 (Asia/Bangkok) on `main`
 
 ---
 
@@ -37,7 +37,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **340 passed / 3,532 assertions** |
+| backend `php artisan test` | **347 passed / 3,663 assertions** |
 | web `npm test` | **111 passed / 40 files** |
 | mobile `flutter test` | **74 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
@@ -52,7 +52,8 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 340
+php artisan test                 # 347
+php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
 ./vendor/bin/pint --test
@@ -107,7 +108,14 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    pure symptom question that shares no vocabulary with the corpus (benchmark Q-08).
 2. **All 15 sources are `unreviewed`** - every answer carries the "not yet reviewed" warning until a
    clinician marks them with `knowledge:review`.
-3. **No load test** on the dashboard aggregate or the timeline endpoint.
+3. **Load behaviour is measured by an in-process harness, not by concurrent load.** `php artisan perf:smoke`
+   seeds a dedicated `perf-smoke` tenant (500 measurements over 24 months, 120 care tasks, 60 medication
+   records, 12 appointments), drives the real HTTP kernel for the dashboard aggregate, the timeline and the
+   care-task list, and reports p50/p95/p99 plus queries per request. Xdebug-off baseline on this machine
+   (10 iterations): dashboard p95 156 ms / 36 queries, timeline p95 137 ms / 48 queries, care-tasks p95
+   150 ms / 40 queries, all inside the 800/800/300 ms budgets. See `backend/docs/PERFORMANCE.md`. It is
+   single-process and sequential; a real concurrent load test against the deployed stack is still a
+   pre-launch task and the numbers are not capacity evidence.
 4. **Backups**: the nightly producer (`.github/workflows/backup.yml`) and the weekly restore drill exist and
    both run in CI, but a 7-day workflow artifact is a safety net, not a production backup - encrypted
    off-site storage, RPO/RTO and key management stay with the deployment target.

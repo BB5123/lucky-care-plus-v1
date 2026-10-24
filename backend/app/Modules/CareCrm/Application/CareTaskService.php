@@ -42,6 +42,9 @@ final class CareTaskService
 
     /**
      * @param  array<string, mixed>  $filters
+     * @param  list<string>|null  $fullProfileIds  Precomputed visibility set
+     *                                             (the list endpoint also uses it to choose the DTO per task, so
+     *                                             it does not re-run the owner/grant lookup once per row)
      */
     public function paginate(
         Workspace $workspace,
@@ -49,8 +52,9 @@ final class CareTaskService
         array $filters,
         int $limit,
         ?string $cursor,
+        ?array $fullProfileIds = null,
     ): CursorPaginator {
-        $fullProfileIds = $this->access->fullProfileIds($actor, $workspace);
+        $fullProfileIds ??= $this->access->fullProfileIds($actor, $workspace);
 
         $query = CareTask::query()
             ->where('tenant_id', $workspace->tenant_id)
@@ -403,6 +407,21 @@ final class CareTaskService
     public function canReadFull(User $actor, CareTask $task): bool
     {
         return $this->access->canReadFull($actor, $task->profile);
+    }
+
+    /**
+     * Profiles whose full task record this actor may read.
+     *
+     * Exposed so a list endpoint can compute the set once and use it both for
+     * the visibility predicate and for presentation (CRM-006). Calling
+     * {@see canReadFull()} per row would repeat the same owner/grant lookup 20
+     * times for a page.
+     *
+     * @return list<string>
+     */
+    public function fullProfileIds(Workspace $workspace, User $actor): array
+    {
+        return $this->access->fullProfileIds($actor, $workspace);
     }
 
     public function assertVisible(CareTask $task, User $actor): void

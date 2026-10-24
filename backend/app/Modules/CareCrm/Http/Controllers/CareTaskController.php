@@ -20,10 +20,15 @@ final class CareTaskController extends CareCrmController
     public function index(ListCareTasksRequest $request): JsonResponse
     {
         $data = $request->validated();
+        $workspace = $this->workspace($request);
+        $actor = $this->actor($request);
+
+        // One authority lookup for the whole page, not one per task row.
+        $fullProfileIds = $this->tasks->fullProfileIds($workspace, $actor);
 
         $page = $this->tasks->paginate(
-            $this->workspace($request),
-            $this->actor($request),
+            $workspace,
+            $actor,
             [
                 'status' => $data['status'] ?? null,
                 'tier' => $data['tier'] ?? null,
@@ -34,11 +39,12 @@ final class CareTaskController extends CareCrmController
             ],
             (int) ($data['limit'] ?? 20),
             $data['cursor'] ?? null,
+            $fullProfileIds,
         );
 
         return response()->json([
             'data' => array_map(
-                fn ($task): array => $this->present($request, $task, $this->tasks),
+                fn ($task): array => $this->present($request, $task, $this->tasks, $fullProfileIds),
                 $page->items(),
             ),
             'meta' => $this->paginationMeta($page),
