@@ -106,6 +106,10 @@ jobs:
       # Same role as CI: RLS is only enforced for non-superusers, and the
       # application role must own the schema for a restore to preserve
       # privileges (see restore-drill.yml and the 2026-10-24 sweep).
+      #
+      # One `-c` per statement instead of a heredoc: an earlier revision used
+      # `<<'SQL'` and the runner fed YAML into psql ("syntax error at or near
+      # ':'"), so this form removes the delimiter from the equation entirely.
       - name: Create non-superuser runtime role
         working-directory: .
         env:
@@ -113,15 +117,12 @@ jobs:
         run: |
           set -euo pipefail
           psql -v ON_ERROR_STOP=1 \
-            --host=127.0.0.1 --port=5432 --username=postgres --dbname=lucky_care_plus <<'SQL'
-          CREATE ROLE luckycare_app
-            LOGIN PASSWORD 'luckycare_app_ci'
-            NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
-          GRANT ALL PRIVILEGES ON DATABASE lucky_care_plus TO luckycare_app;
-          ALTER SCHEMA public OWNER TO luckycare_app;
-          GRANT ALL ON SCHEMA public TO luckycare_app;
-          ALTER DATABASE lucky_care_plus OWNER TO luckycare_app;
-          SQL
+            --host=127.0.0.1 --port=5432 --username=postgres --dbname=lucky_care_plus \
+            -c "CREATE ROLE luckycare_app LOGIN PASSWORD 'luckycare_app_ci' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;" \
+            -c "GRANT ALL PRIVILEGES ON DATABASE lucky_care_plus TO luckycare_app;" \
+            -c "ALTER SCHEMA public OWNER TO luckycare_app;" \
+            -c "GRANT ALL ON SCHEMA public TO luckycare_app;" \
+            -c "ALTER DATABASE lucky_care_plus OWNER TO luckycare_app;"
 
       # A dump of an empty schema still restores cleanly, so seed first: this
       # makes the restored copy carry real rows and real RLS policies.
