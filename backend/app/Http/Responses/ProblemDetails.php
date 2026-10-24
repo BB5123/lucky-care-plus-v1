@@ -18,6 +18,7 @@ final class ProblemDetails
     /**
      * @param  array<string, mixed>  $headers
      * @param  array<string, list<string>>  $errors  field => messages, for 422 responses
+     * @param  array<string, mixed>  $extra  additional problem members (e.g. a retry window)
      */
     public static function make(
         Request $request,
@@ -27,6 +28,7 @@ final class ProblemDetails
         string $detail,
         array $headers = [],
         array $errors = [],
+        array $extra = [],
     ): JsonResponse {
         $body = [
             'type' => 'https://api.luckycare.example/problems/'.str_replace('_', '-', $code),
@@ -42,6 +44,12 @@ final class ProblemDetails
         // client input, never health data, so they are safe to echo.
         if ($errors !== []) {
             $body['errors'] = $errors;
+        }
+
+        // Endpoint-specific members (for example `retry_after_seconds`) are
+        // additive and never replace the standard problem fields.
+        if ($extra !== []) {
+            $body = array_merge($body, $extra);
         }
 
         return response()->json(
