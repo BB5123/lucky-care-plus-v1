@@ -5,6 +5,7 @@ namespace App\Modules\Documents\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Documents\Application\DocumentService;
+use App\Modules\Documents\Domain\DocumentInfectedException;
 use App\Modules\Documents\Domain\DocumentNotFoundException;
 use App\Modules\Documents\Http\Requests\StoreDocumentRequest;
 use App\Modules\Documents\Http\Resources\MedicalDocumentResource;
@@ -55,13 +56,21 @@ final class DocumentController extends Controller
 
     public function store(StoreDocumentRequest $request): JsonResponse
     {
-        $document = $this->documents->upload(
-            $this->workspace($request),
-            $this->profile($request),
-            $this->actor($request),
-            $request->file('file'),
-            $request->validated(),
-        );
+        try {
+            $document = $this->documents->upload(
+                $this->workspace($request),
+                $this->profile($request),
+                $this->actor($request),
+                $request->file('file'),
+                $request->validated(),
+            );
+        } catch (DocumentInfectedException $exception) {
+            // The service already wrote the security audit row inside this
+            // request transaction. Returning the response keeps that
+            // transaction (and the row) instead of rolling it back with the
+            // exception; no object or metadata row exists either way.
+            return $exception->toResponse($request);
+        }
 
         // Upload permission does not imply read permission, so the filename is
         // deliberately omitted from the acknowledgement.

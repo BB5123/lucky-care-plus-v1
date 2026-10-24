@@ -51,11 +51,12 @@ documents/{tenant_uuid}/{document_uuid}
 - Allowed types: PDF, JPEG, PNG, HEIC (`config/documents.php`).
 - Maximum size: 10 MiB by default. An over-limit upload returns 422 with a Thai
   message that names the configured byte ceiling.
-- There is **no scanner in this deployment**. `scan_status` is therefore
-  `skipped` for accepted uploads. `documents.scan_required` is a fail-closed
-  switch: when true, upload returns `503 scan_unavailable` and writes neither
-  an object nor a metadata row. Once a scanner exists, only a clean scan should
-  be persisted as `scan_status = clean` and `status = available`.
+- A malware scanner is configured through `documents.scanner` (`null` or `clamav`); the default is
+  fail-closed `UnavailableScanner`. With `documents.scan_required = false` (today's default) an accepted
+  upload is stored with `scan_status = skipped` and a warning is logged. With it `true`, the scan runs
+  before any object or row is written: `clean` stores `scan_status = clean`, `infected:*` returns
+  `422 document_infected` and writes one sanitised security-audit row, and `error:*` keeps the existing
+  `503 scan_unavailable` contract. See [`backend/docs/MALWARE-SCANNING.md`](../../../docs/MALWARE-SCANNING.md).
 
 ## Deletion and retention
 

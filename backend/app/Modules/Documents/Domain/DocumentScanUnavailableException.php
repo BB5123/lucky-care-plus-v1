@@ -6,11 +6,13 @@ use App\Http\Responses\ProblemDetails;
 use Illuminate\Contracts\Support\Responsable;
 
 /**
- * No scanner is configured while the deployment requires one.
+ * A required scan could not be completed.
  *
- * This is a fail-closed outcome (F-09): the upload is refused before any bytes
- * are written and before a metadata row is created. It is not a validation
- * error, because retrying with a different file would not help.
+ * Either no scanner is configured, or the configured scanner returned an
+ * `error:<reason>` verdict (timeout, closed socket, protocol failure). Both are
+ * the same safe outcome: the upload is refused before any bytes are written or
+ * any metadata row is created. It is not a validation error, because retrying
+ * with a different file would not help.
  */
 final class DocumentScanUnavailableException extends \RuntimeException implements Responsable
 {

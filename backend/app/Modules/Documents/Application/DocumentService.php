@@ -4,9 +4,12 @@ namespace App\Modules\Documents\Application;
 
 use App\Models\User;
 use App\Modules\Audit\Services\BusinessAuditLogger;
+use App\Modules\Audit\Services\SecurityAuditLogger;
+use App\Modules\Documents\Domain\DocumentInfectedException;
 use App\Modules\Documents\Domain\DocumentNotFoundException;
 use App\Modules\Documents\Domain\DocumentScanUnavailableException;
 use App\Modules\Documents\Domain\DocumentStorageUnavailableException;
+use App\Modules\Documents\Infrastructure\Scanning\MalwareScanner;
 use App\Modules\Documents\Jobs\DeleteDocumentObject;
 use App\Modules\Documents\Models\MedicalDocument;
 use App\Modules\HealthRecord\Models\HealthProfile;
@@ -16,6 +19,7 @@ use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
@@ -31,7 +35,11 @@ use Throwable;
  */
 final class DocumentService
 {
-    public function __construct(private readonly BusinessAuditLogger $audit) {}
+    public function __construct(
+        private readonly BusinessAuditLogger $audit,
+        private readonly SecurityAuditLogger $securityAudit,
+        private readonly MalwareScanner $scanner,
+    ) {}
 
     public function paginate(
         Workspace $workspace,
@@ -114,11 +122,57 @@ final class DocumentService
             ]);
         }
 
-        // Fail closed before touching the object store or the database. This
-        // deployment has no scanner, so a required scan can never be satisfied
-        // here (F-09).
-        if ((bool) config('documents.scan_required', false)) {
-            throw new DocumentScanUnavailableException;
+        $documentId = Uuid7::generate();
+
+        // The scan gate runs before the object store or the database is
+        // touched. A scanner error is fail-closed (503); an infected verdict
+        // is a 422 plus one sanitised security-audit row; when the gate is on,
+        // a clean verdict is the only path that may persist bytes (F-09).
+        $scanRequired = (bool) config('documents.scan_required', false);
+
+        if ($scanRequired) {
+            $verdict = $this->scanner->scan($realPath);
+
+            if ($verdict->isError()) {
+                throw new DocumentScanUnavailableException;
+            }
+
+            if ($verdict->isInfected()) {
+                // No filename, no bytes, and no signature: the audit row says
+                // what happened and to which id, never what the file was.
+                $this->securityAudit->record([
+                    'actor_id' => $actor->id,
+                    'actor_type' => 'user',
+                    'action' => 'document.scan_infected',
+                    'target_type' => 'medical_document',
+                    'target_id' => $documentId,
+                    'result' => 'deny',
+                    'reason_code' => 'malware_detected',
+                    'metadata' => [
+                        'kind' => $input['kind'],
+                        'mime_type' => $detectedMime,
+                        'size_bytes' => $size,
+                        'scanner' => $verdict->name,
+                    ],
+                ]);
+
+                throw new DocumentInfectedException;
+            }
+
+            $scanStatus = MedicalDocument::SCAN_CLEAN;
+        } else {
+            $scanStatus = MedicalDocument::SCAN_SKIPPED;
+
+            // A missing scan is visible in the deployment log, not silently
+            // treated as clean. Only ids, never a filename or bytes (N-02).
+            Log::warning(
+                'Document upload accepted without malware scanning because documents.scan_required is false.',
+                [
+                    'tenant_id' => $workspace->tenant_id,
+                    'workspace_id' => $workspace->id,
+                    'document_id' => $documentId,
+                ],
+            );
         }
 
         $checksum = hash_file('sha256', $realPath);
@@ -127,7 +181,6 @@ final class DocumentService
             throw new DocumentStorageUnavailableException;
         }
 
-        $documentId = Uuid7::generate();
         $disk = (string) config('documents.disk', 'local');
         // Exactly `documents/{tenant_uuid}/{document_uuid}`: no profile id, no
         // user filename, no extension, and no health data (N-02).
@@ -156,6 +209,7 @@ final class DocumentService
                 $checksum,
                 $documentId,
                 $file,
+                $scanStatus,
             ): MedicalDocument {
                 // The primary key is not mass-assignable, so it must be
                 // forced; the storage path above was built from this exact id
@@ -174,7 +228,7 @@ final class DocumentService
                     'storage_path' => $storagePath,
                     'original_name' => $file->getClientOriginalName(),
                     'captured_at' => $input['captured_at'] ?? null,
-                    'scan_status' => MedicalDocument::SCAN_SKIPPED,
+                    'scan_status' => $scanStatus,
                     'status' => MedicalDocument::STATUS_AVAILABLE,
                     'version' => 1,
                 ]);
@@ -190,6 +244,7 @@ final class DocumentService
                         'kind' => $document->kind,
                         'mime_type' => $document->mime_type,
                         'size_bytes' => $document->size_bytes,
+                        'scan_status' => $document->scan_status,
                     ],
                 ]);
 

@@ -7,10 +7,12 @@
  * are stored under `documents/{tenant_uuid}/{document_uuid}` with no user
  * filename, no extension and no PHI in the key (N-02).
  *
- * `scan_required` defaults to false because no scanner is deployed. It is a
- * fail-closed switch: setting it to true makes upload return 503 and store
- * nothing, rather than accepting an unscanned object. When a scanner exists,
- * wire it in `DocumentService` and only persist a document after a clean scan.
+ * `scan_required` defaults to false because no scanner is deployed by default.
+ * It is a fail-closed switch: setting it to true while no scanner is reachable
+ * makes an upload return 503 and store nothing, rather than accepting an
+ * unscanned object. `scanner` selects the implementation (`null` = unavailable,
+ * `clamav` = unix-socket adapter); a document is only persisted after a clean
+ * scan when the gate is on.
  */
 return [
 
@@ -34,13 +36,22 @@ return [
     'url_ttl_minutes' => 5,
     'url_max_ttl_minutes' => 15,
 
-    // No scanner is configured in this deployment. Keep the fail-closed
-    // behaviour explicit rather than silently treating documents as clean.
+    // No scanner is configured by default. Keep the fail-closed behaviour
+    // explicit rather than silently treating documents as clean.
     'scan_required' => filter_var(env('DOCUMENTS_SCAN_REQUIRED', false), FILTER_VALIDATE_BOOLEAN),
 
-    // Placeholder for a future antivirus/CDR implementation. A null value is
-    // why a scan-required upload cannot succeed today.
-    'scanner' => null,
+    // `null` keeps the fail-closed UnavailableScanner; `clamav` selects the
+    // unix-socket adapter. An unknown value also falls back to unavailable.
+    'scanner' => env('DOCUMENTS_SCANNER'),
+
+    'clamav' => [
+        // The adapter speaks INSTREAM over this unix socket; it never shells
+        // out to `clamdscan`. A native Linux install uses the path below. A
+        // container deployment must share the socket path with the backend
+        // (see backend/docs/MALWARE-SCANNING.md).
+        'socket' => env('DOCUMENTS_CLAMAV_SOCKET', '/var/run/clamav/clamd.ctl'),
+        'timeout_seconds' => (float) env('DOCUMENTS_CLAMAV_TIMEOUT', 10),
+    ],
 
     'kinds' => [
         'lab_result',
