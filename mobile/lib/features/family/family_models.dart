@@ -219,6 +219,8 @@ class FamilyData {
     required List<FamilyMembership> members,
     List<FamilyInvitation> invitations = const <FamilyInvitation>[],
     this.canInvite = false,
+    this.canReadMembers = true,
+    this.profileId,
   }) : members = List<FamilyMembership>.unmodifiable(members),
        invitations = List<FamilyInvitation>.unmodifiable(invitations);
 
@@ -227,9 +229,20 @@ class FamilyData {
     required this.members,
     required this.invitations,
     required this.canInvite,
+    required this.canReadMembers,
+    required this.profileId,
   });
 
   final bool hasWorkspace;
+
+  /// Matrix A denies the member list to viewers and caregivers. That denial is
+  /// a decision, not a page failure: the export card still renders because the
+  /// two permissions are independent.
+  final bool canReadMembers;
+
+  /// The profile the export card addresses. `null` when the resolved workspace
+  /// has no readable profile or in a test double that does not provide one.
+  final String? profileId;
 
   /// Matrix A: only the owner, the legal guardian and the workspace admin may
   /// invite. A denied actor never sees the action; a direct 403 is still
@@ -247,6 +260,8 @@ class FamilyData {
     return FamilyData(
       hasWorkspace: hasWorkspace,
       canInvite: canInvite,
+      canReadMembers: canReadMembers,
+      profileId: profileId,
       members: members,
       invitations: next,
     );
@@ -257,5 +272,7 @@ class FamilyData {
     members: <FamilyMembership>[],
     invitations: <FamilyInvitation>[],
     canInvite: false,
+    canReadMembers: false,
+    profileId: null,
   );
 }

@@ -7,6 +7,7 @@ import '../../design_system/tokens.dart';
 import 'family_controller.dart';
 import 'family_models.dart';
 import 'invite_clipboard.dart';
+import 'widgets/data_export_card.dart';
 import 'widgets/invitation_tile.dart';
 import 'widgets/invite_sheet.dart';
 import 'widgets/member_tile.dart';
@@ -33,6 +34,18 @@ class _FamilyPageState extends ConsumerState<FamilyPage> {
     message: 'เมื่อมีสมาชิกเข้าร่วมครอบครัว รายชื่อจะแสดงที่นี่',
   );
 
+  /// Matrix A: viewers and caregivers cannot read the member list. That is a
+  /// deliberate decision, so this is an explanation state with no retry button
+  /// — retrying would just repeat the denial.
+  static const EmptyState _permissionState = EmptyState(
+    key: Key('family-permission-state'),
+    icon: Icons.lock_outline,
+    title: 'ยังไม่สามารถดูรายชื่อสมาชิกได้',
+    message:
+        'บทบาทผู้ชมหรือผู้ดูแลรายวันยังไม่ได้รับสิทธิ์ดูรายชื่อสมาชิก '
+        'ตามการตั้งค่าปัจจุบัน หากต้องการดูรายชื่อ โปรดขอสิทธิ์จากเจ้าของข้อมูล',
+  );
+
   @override
   Widget build(BuildContext context) {
     final AsyncValue<FamilyData> state = ref.watch(familyControllerProvider);
@@ -56,17 +69,7 @@ class _FamilyPageState extends ConsumerState<FamilyPage> {
         loading: () => const LoadingState(key: Key('family-loading')),
         error: (Object error, StackTrace stackTrace) {
           if (error is ApiFailure && error.isPermissionDenied) {
-            // Matrix A: viewers and caregivers cannot read the member list.
-            // That is a deliberate decision, so this is an explanation state
-            // with no retry button — retrying would just repeat the denial.
-            return const EmptyState(
-              key: Key('family-permission-state'),
-              icon: Icons.lock_outline,
-              title: 'ยังไม่สามารถดูรายชื่อสมาชิกได้',
-              message:
-                  'บทบาทผู้ชมหรือผู้ดูแลรายวันยังไม่ได้รับสิทธิ์ดูรายชื่อสมาชิก '
-                  'ตามการตั้งค่าปัจจุบัน หากต้องการดูรายชื่อ โปรดขอสิทธิ์จากเจ้าของข้อมูล',
-            );
+            return _permissionState;
           }
 
           return ErrorState(
@@ -96,17 +99,46 @@ class _FamilyPageState extends ConsumerState<FamilyPage> {
   }
 
   Widget _body(FamilyData value) {
-    if (value.isEmpty && !value.hasInvitations) {
-      return _emptyMembers;
-    }
-
+    final String? profileId = value.profileId;
+    final Widget? exportCard = profileId == null
+        ? null
+        : DataExportCard(profileId: profileId);
     final double bottomInset = value.canInvite
         ? AppSpacing.xxxl * 2
         : AppSpacing.lg;
 
+    // Export is its own permission. A viewer/caregiver who cannot read the
+    // member list still gets the card, exactly like the web family page.
+    if (!value.canReadMembers) {
+      return CustomScrollView(
+        key: const Key('family-list'),
+        slivers: <Widget>[
+          if (exportCard != null) _exportSliver(exportCard),
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: _permissionState,
+          ),
+        ],
+      );
+    }
+
+    if (value.isEmpty && !value.hasInvitations) {
+      return CustomScrollView(
+        key: const Key('family-list'),
+        slivers: <Widget>[
+          if (exportCard != null) _exportSliver(exportCard),
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: _emptyMembers,
+          ),
+        ],
+      );
+    }
+
     return CustomScrollView(
       key: const Key('family-list'),
       slivers: <Widget>[
+        if (exportCard != null) _exportSliver(exportCard),
         if (value.hasInvitations)
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(
@@ -165,6 +197,18 @@ class _FamilyPageState extends ConsumerState<FamilyPage> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _exportSliver(Widget card) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.lg,
+        AppSpacing.lg,
+        0,
+      ),
+      sliver: SliverToBoxAdapter(child: card),
     );
   }
 

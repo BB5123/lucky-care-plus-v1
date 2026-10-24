@@ -13,6 +13,7 @@ class ApiFailure implements Exception {
     required this.code,
     required this.message,
     this.fieldErrors = const <String, String>{},
+    this.retryAfterSeconds,
   });
 
   /// HTTP status, or `0` when the request never reached the server.
@@ -27,6 +28,10 @@ class ApiFailure implements Exception {
 
   /// `errors{field: [sentence]}` from a 422, reduced to the first safe sentence.
   final Map<String, String> fieldErrors;
+
+  /// Remaining seconds from a `429` (`retry_after_seconds` in the problem body,
+  /// then the standard `Retry-After` header). `null` when the server sent none.
+  final int? retryAfterSeconds;
 
   static const String networkMessage =
       'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่';
@@ -66,9 +71,24 @@ class ApiFailure implements Exception {
       return network;
     }
 
-    return ApiFailure.fromResponse(
+    final ApiFailure failure = ApiFailure.fromResponse(
       response.statusCode ?? 0,
       response.data,
+    );
+    final int? headerSeconds = _readRetryAfterHeader(
+      response.headers.value('retry-after'),
+    );
+
+    if (failure.retryAfterSeconds != null || headerSeconds == null) {
+      return failure;
+    }
+
+    return ApiFailure(
+      status: failure.status,
+      code: failure.code,
+      message: failure.message,
+      fieldErrors: failure.fieldErrors,
+      retryAfterSeconds: headerSeconds,
     );
   }
 
@@ -83,7 +103,34 @@ class ApiFailure implements Exception {
       code: code ?? _fallbackCode(status),
       message: detail ?? message ?? genericMessage,
       fieldErrors: _readFieldErrors(payload['errors']),
+      retryAfterSeconds: _readRetryAfterSeconds(payload['retry_after_seconds']),
     );
+  }
+
+  /// The body value wins over the header; both are untrusted, so only a
+  /// non-negative whole number is accepted.
+  static int? _readRetryAfterSeconds(Object? value) {
+    if (value is num) {
+      final int seconds = value.toInt();
+
+      return seconds < 0 ? null : seconds;
+    }
+
+    if (value is String) {
+      final int? seconds = int.tryParse(value.trim());
+
+      return seconds == null || seconds < 0 ? null : seconds;
+    }
+
+    return null;
+  }
+
+  static int? _readRetryAfterHeader(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return null;
+    }
+
+    return _readRetryAfterSeconds(value);
   }
 
   /// Prefers `detail`, then `message`; never a stack trace or framework path.
