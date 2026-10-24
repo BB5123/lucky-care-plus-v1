@@ -58,6 +58,7 @@ final class OutputValidator
 
     /**
      * @param  list<array{type: string, id: string}>  $recordRefs
+     * @param  array{input_tokens?: ?int, output_tokens?: ?int, cost_minor?: ?int}  $usage
      */
     public function recordSuccess(
         GatewayRequest $request,
@@ -66,6 +67,8 @@ final class OutputValidator
         string $contextHash,
         int $latencyMs,
         ?string $errorCode = null,
+        array $usage = [],
+        ?string $provider = null,
     ): AiRequest {
         return $this->recorder->record(
             request: $request,
@@ -77,7 +80,9 @@ final class OutputValidator
             usage: [
                 'input_tokens' => $response->inputTokens,
                 'output_tokens' => $response->outputTokens,
+                'cost_minor' => $usage['cost_minor'] ?? null,
             ],
+            provider: $provider,
             model: $response->model,
         );
     }

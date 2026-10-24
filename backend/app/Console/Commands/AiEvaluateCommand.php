@@ -85,7 +85,7 @@ final class AiEvaluateCommand extends Command
             $this->error('At least one suite is below its threshold.');
         }
 
-        $this->line('Scope: gateway guards with synthetic fixtures. Live-provider evaluation is still pending (P-2); AI remains disabled.');
+        $this->line('Scope: gateway guards with synthetic fixtures. No live provider is configured; AI remains disabled.');
 
         return $ok ? self::SUCCESS : self::FAILURE;
     }
