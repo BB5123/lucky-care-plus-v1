@@ -98,6 +98,12 @@ export class TaskDetail {
   protected readonly reasonError = signal<string | null>(null);
   protected readonly reviewAtError = signal<string | null>(null);
 
+  /**
+   * Document id attached in this session, used together with the server's
+   * `has_photo_evidence` flag to gate clinical completion (F-06).
+   */
+  protected readonly attachedDocumentId = signal<string | null>(null);
+
   protected readonly reasonForm = this.formBuilder.group({
     reason: [''],
     review_at: [''],
@@ -131,7 +137,9 @@ export class TaskDetail {
   protected readonly missingEvidence = computed(() => {
     const task = this.task();
 
-    return task === null ? null : missingEvidenceMessage(task, this.evidence());
+    return task === null
+      ? null
+      : missingEvidenceMessage(task, this.evidence(), this.attachedDocumentId());
   });
 
   protected readonly outcomes = computed<readonly CareTaskOutcome[]>(() => {
@@ -300,7 +308,11 @@ export class TaskDetail {
     this.announce('มอบหมายงานแล้ว');
   }
 
-  protected onEvidenceSaved(): void {
+  protected onEvidenceSaved(evidence: TaskEvidence): void {
+    if (evidence.type === 'photo' && evidence.document_id !== null) {
+      this.attachedDocumentId.set(evidence.document_id);
+    }
+
     this.announce('เพิ่มหลักฐานแล้ว');
   }
 

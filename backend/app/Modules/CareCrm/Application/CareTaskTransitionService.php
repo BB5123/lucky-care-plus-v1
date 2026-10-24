@@ -86,7 +86,7 @@ final class CareTaskTransitionService
                 default => throw new DomainRuleException,
             };
 
-            return $task->fresh(['profile.person', 'assignments.user']);
+            return $task->fresh(['profile.person', 'assignments.user'])->loadPhotoEvidenceFlag();
         });
     }
 
@@ -167,7 +167,7 @@ final class CareTaskTransitionService
                 'system' => true,
             ] + $metadata);
 
-            return $task->fresh(['profile.person', 'assignments.user']);
+            return $task->fresh(['profile.person', 'assignments.user'])->loadPhotoEvidenceFlag();
         });
     }
 

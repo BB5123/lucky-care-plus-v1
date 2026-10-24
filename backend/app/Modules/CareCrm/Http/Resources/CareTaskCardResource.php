@@ -9,9 +9,10 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * Need-to-know card (AS-004 / CRM-006).
  *
- * Deliberately limited to the six safe fields plus the profile display name
- * and the optimistic-locking `version`. It never includes `description`,
- * evidence, free-text reasons, or any health value, even though the reader may
+ * Deliberately limited to the six safe fields plus the profile display name,
+ * the derived `has_photo_evidence` flag and the optimistic-locking `version`.
+ * It never includes `description`, evidence content, free-text reasons, the
+ * document id/filename/note, or any health value, even though the reader may
  * hold `care_task.read`. `version` is transport metadata, not health data, and
  * is required so a grant-less assignee can send `If-Match` on the next step.
  *
@@ -32,6 +33,7 @@ class CareTaskCardResource extends JsonResource
             'status' => $this->status,
             'priority' => $this->priority,
             'profile_display_name' => $this->profile?->person?->display_name,
+            'has_photo_evidence' => (bool) ($this->has_photo_evidence ?? false),
             'version' => $this->version,
         ];
     }

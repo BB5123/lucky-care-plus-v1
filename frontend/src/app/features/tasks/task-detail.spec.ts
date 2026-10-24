@@ -274,6 +274,56 @@ describe('TaskDetail', () => {
     httpMock.expectNone((item) => item.url.endsWith('/care-tasks/task-1/complete'));
   });
 
+  it('FLG-T08 a server photo flag enables completion without the evidence list', async () => {
+    const fixture = TestBed.createComponent(TaskDetail);
+
+    fixture.componentRef.setInput('taskId', 'task-1');
+    fixture.detectChanges();
+
+    httpMock
+      .expectOne((item) => item.url.endsWith('/care-tasks/task-1'))
+      .flush({
+        data: baseTask({
+          tier: 'clinical',
+          status: 'in_progress',
+          evidence_policy: 'photo',
+          has_photo_evidence: true,
+          version: 2,
+        }),
+      });
+
+    await nextTick();
+
+    // Reading evidence is a *different* authority (F-06). The flag alone must
+    // still unlock completion when the evidence list is not readable.
+    httpMock
+      .expectOne((item) => item.url.endsWith('/care-tasks/task-1/evidence'))
+      .flush(
+        {
+          type: 'https://api.luckycare.example/problems/forbidden',
+          code: 'forbidden',
+          status: 403,
+          detail: 'ไม่มีสิทธิ์เข้าถึงข้อมูลนี้',
+        },
+        { status: 403, statusText: 'Forbidden' },
+      );
+
+    await nextTick();
+    fixture.detectChanges();
+
+    click(fixture, '[data-testid="task-action-complete"]');
+
+    const submit = fixture.nativeElement.querySelector(
+      '[data-testid="task-complete-submit"]',
+    ) as HTMLButtonElement | null;
+
+    expect(submit?.disabled).toBe(false);
+    expect(
+      fixture.nativeElement.querySelector('[data-testid="task-evidence-required"]'),
+    ).toBeNull();
+    httpMock.expectNone((item) => item.url.endsWith('/care-tasks/task-1/complete'));
+  });
+
   it('FE7-T06 the completion button becomes enabled once a photo evidence row exists (policy photo)', async () => {
     const fixture = await render(
       baseTask({

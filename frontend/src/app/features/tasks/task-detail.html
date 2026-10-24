@@ -409,7 +409,7 @@
             [taskId]="detail.id"
             [profileId]="detail.profile_id"
             [version]="detail.version"
-            (saved)="onEvidenceSaved()"
+            (saved)="onEvidenceSaved($event)"
             (reloadRequested)="reload()"
           />
         </section>
