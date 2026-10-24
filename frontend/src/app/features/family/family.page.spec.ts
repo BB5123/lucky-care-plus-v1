@@ -26,6 +26,14 @@ const MEMBER = {
   status: 'active',
 };
 
+const PROFILE = {
+  id: 'profile-1',
+  person_id: 'person-1',
+  display_name: 'สมาชิกปัจจุบัน',
+  relationship: 'self',
+  kind: 'dependent',
+};
+
 function authStub(userId: string): Partial<AuthService> {
   const user = signal<AuthUser | null>({
     id: userId,
@@ -54,6 +62,10 @@ function membersRequest(): string {
 
 function invitationsRequest(): string {
   return '/api/v1/workspaces/ws-1/invitations';
+}
+
+function profilesRequest(): string {
+  return '/api/v1/workspaces/ws-1/profiles';
 }
 
 async function nextTick(): Promise<void> {
@@ -154,6 +166,10 @@ describe('FamilyPage', () => {
     httpMock.expectOne(membersRequest()).flush({ data: rows });
 
     await nextTick();
+
+    httpMock.expectOne(profilesRequest()).flush({ data: [PROFILE] });
+
+    await nextTick();
     fixture.detectChanges();
 
     return fixture;
@@ -171,6 +187,10 @@ describe('FamilyPage', () => {
         { code: 'forbidden', detail: 'คุณไม่มีสิทธิ์เข้าถึงรายการนี้' },
         { status: 403, statusText: 'Forbidden' },
       );
+
+    await nextTick();
+
+    httpMock.expectOne(profilesRequest()).flush({ data: [PROFILE] });
 
     await nextTick();
     fixture.detectChanges();

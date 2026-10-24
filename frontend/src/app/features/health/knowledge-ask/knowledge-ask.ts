@@ -13,7 +13,11 @@ import { KnowledgeAnswer } from '../../../core/knowledge/knowledge.models';
 import { KnowledgeService } from '../../../core/knowledge/knowledge.service';
 
 function problemCode(error: unknown): string | null {
-  if (!(error instanceof HttpErrorResponse) || typeof error.error !== 'object' || error.error === null) {
+  if (
+    !(error instanceof HttpErrorResponse) ||
+    typeof error.error !== 'object' ||
+    error.error === null
+  ) {
     return null;
   }
 

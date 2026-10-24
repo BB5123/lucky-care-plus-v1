@@ -1,0 +1,124 @@
+<section class="card mt-4" aria-labelledby="data-export-title" data-testid="data-export-card">
+  <header>
+    <h2 id="data-export-title" class="text-xl">ขอสำเนาข้อมูลของฉัน</h2>
+    <p class="mt-1 text-sm text-ink-muted" data-testid="data-export-explanation">
+      ไฟล์นี้รวมข้อมูลสุขภาพที่บันทึกไว้ในโปรไฟล์นี้ และไม่รวมรูปภาพเอกสาร
+      (เก็บเฉพาะข้อมูลเมตาของเอกสาร)
+    </p>
+  </header>
+
+  @if (permissionDenied()) {
+    <div
+      class="mt-3 rounded-md border border-line bg-surface-muted p-4"
+      role="status"
+      data-testid="export-permission"
+    >
+      <p class="text-sm font-medium text-ink">สิทธิ์การเข้าถึงปัจจุบันยังไม่รวมการขอสำเนาข้อมูล</p>
+      <p class="mt-1 text-sm text-ink-muted">
+        หากต้องการสำเนาข้อมูล กรุณาติดต่อเจ้าของครอบครัวหรือผู้ดูแลพื้นที่ทำงานเพื่อขอสิทธิ์
+      </p>
+    </div>
+  } @else if (isReady()) {
+    <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+      <div>
+        <dt class="text-ink-muted">ขนาดไฟล์</dt>
+        <dd class="numeric-tabular font-medium text-ink" data-testid="export-size">
+          {{ sizeLabel() }}
+        </dd>
+      </div>
+      <div>
+        <dt class="text-ink-muted">ใช้ได้ถึง</dt>
+        <dd class="numeric-tabular font-medium text-ink" data-testid="export-expiry">
+          {{ expiryLabel() }}
+        </dd>
+      </div>
+    </dl>
+
+    <p class="mt-2 text-xs text-ink-muted">ลิงก์ดาวน์โหลดมีอายุสั้น กรุณาดาวน์โหลดทันที</p>
+
+    <button
+      class="btn btn-primary mt-4"
+      type="button"
+      data-testid="export-download"
+      [disabled]="downloading()"
+      (click)="download()"
+    >
+      @if (downloading()) {
+        <span class="spinner" aria-hidden="true"></span>
+        <span>กำลังเปิดไฟล์...</span>
+      } @else {
+        <span>ดาวน์โหลด</span>
+      }
+    </button>
+
+    @if (errorMessage(); as message) {
+      <div class="alert alert-error mt-3" role="alert" data-testid="export-error">
+        {{ message }}
+      </div>
+    }
+  } @else if (isPending()) {
+    <p
+      class="mt-3 flex items-center gap-2 text-sm text-ink-muted"
+      role="status"
+      data-testid="export-status"
+    >
+      <span class="spinner" aria-hidden="true"></span>
+      <span>{{ statusMessage() }}</span>
+    </p>
+
+    <button
+      class="btn btn-secondary mt-3"
+      type="button"
+      data-testid="export-refresh"
+      [disabled]="refreshing()"
+      (click)="refreshStatus()"
+    >
+      {{ refreshing() ? 'กำลังตรวจสอบ...' : 'ตรวจสอบสถานะ' }}
+    </button>
+
+    @if (errorMessage(); as message) {
+      <div class="alert alert-error mt-3" role="alert" data-testid="export-error">
+        {{ message }}
+      </div>
+    }
+  } @else {
+    @if (status() === 'expired') {
+      <p class="mt-2 text-sm text-ink-muted" role="status" data-testid="export-expired">
+        สำเนาข้อมูลนี้หมดอายุแล้ว กรุณาขอข้อมูลใหม่
+      </p>
+    }
+
+    @if (status() === 'failed') {
+      <p class="mt-2 text-sm text-ink-muted" role="status" data-testid="export-failed">
+        การจัดเตรียมสำเนาข้อมูลไม่สำเร็จ กรุณาขอใหม่
+      </p>
+    }
+
+    @if (errorMessage(); as message) {
+      <div class="alert alert-error mt-3" role="alert" data-testid="export-error">
+        {{ message }}
+      </div>
+    }
+
+    @if (rateLimitedSeconds(); as seconds) {
+      <p class="mt-2 text-sm text-ink-muted" role="status" data-testid="export-rate-limit">
+        สามารถขอข้อมูลใหม่ได้ในอีก {{ retryWaitLabel(seconds) }}
+      </p>
+    }
+
+    <button
+      class="btn btn-primary mt-4"
+      type="button"
+      data-testid="export-request"
+      [disabled]="requesting() || rateLimitedSeconds() !== null"
+      (click)="requestExport()"
+    >
+      @if (requesting()) {
+        <span class="spinner" aria-hidden="true"></span>
+        <span>กำลังส่งคำขอ...</span>
+      } @else {
+        <span>{{ requestLabel() }}</span>
+      }
+    </button>
+  }
+</section>

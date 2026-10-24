@@ -39,7 +39,9 @@ function createFixture(
 }
 
 function typeQuestion(fixture: ComponentFixture<KnowledgeAsk>, value: string): void {
-  const textarea = fixture.nativeElement.querySelector('#knowledge-question') as HTMLTextAreaElement;
+  const textarea = fixture.nativeElement.querySelector(
+    '#knowledge-question',
+  ) as HTMLTextAreaElement;
 
   textarea.value = value;
   textarea.dispatchEvent(new Event('input'));

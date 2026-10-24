@@ -23,7 +23,9 @@ import {
   roleLabel,
   statusLabel,
 } from '../../core/family/member.models';
+import { ProfilesService } from '../../core/profiles/profiles.service';
 import { WorkspaceService } from '../../core/workspace/workspace.service';
+import { DataExportCard } from './data-export-card';
 
 interface InviteLinkView {
   readonly email: string;
@@ -41,7 +43,7 @@ interface InviteLinkView {
  */
 @Component({
   selector: 'app-family-page',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, DataExportCard],
   templateUrl: './family.page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -49,6 +51,7 @@ export class FamilyPage {
   private readonly workspace = inject(WorkspaceService);
   private readonly family = inject(FamilyService);
   private readonly auth = inject(AuthService);
+  private readonly profilesService = inject(ProfilesService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly formBuilder = inject(NonNullableFormBuilder);
 
@@ -60,6 +63,15 @@ export class FamilyPage {
   protected readonly loading = this.family.loading;
   protected readonly error = this.family.error;
   protected readonly errorStatus = this.family.errorStatus;
+
+  /**
+   * The export card is profile-scoped. The profile picker is authorized per
+   * profile (`health_profile.read`) and prefers the actor's own profile, so
+   * "ขอสำเนาข้อมูลของฉัน" addresses the same record the rest of the app opens.
+   */
+  protected readonly exportProfileId = computed(
+    () => this.profilesService.currentProfile()?.id ?? null,
+  );
 
   protected readonly pageLoading = signal(true);
   protected readonly pageError = signal<string | null>(null);
@@ -139,6 +151,11 @@ export class FamilyPage {
 
     if (workspaceId !== null) {
       await this.family.loadMembers(workspaceId);
+
+      // The export card needs the same per-profile decision as the rest of
+      // the app. A 403/404 leaves the list empty and simply hides the card;
+      // it must not turn the whole family page into an error state.
+      void this.profilesService.load();
     }
   }
 

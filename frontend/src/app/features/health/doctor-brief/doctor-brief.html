@@ -54,14 +54,18 @@
       }
 
       @if (share(); as link) {
-        <div class="mt-3 rounded-lg border border-line bg-surface-muted p-3" data-testid="doctor-brief-link">
+        <div
+          class="mt-3 rounded-lg border border-line bg-surface-muted p-3"
+          data-testid="doctor-brief-link"
+        >
           <p class="text-xs text-ink-muted">ลิงก์สำหรับแพทย์ · หมดอายุ {{ link.expiresAt }}</p>
           <a
             class="mt-1 block break-all text-xs text-info underline"
             [href]="link.url"
             target="_blank"
             rel="noopener noreferrer"
-          >{{ link.url }}</a>
+            >{{ link.url }}</a
+          >
           <button class="btn btn-secondary mt-2" type="button" (click)="copy()">
             {{ copied() ? 'คัดลอกแล้ว' : 'คัดลอกลิงก์' }}
           </button>

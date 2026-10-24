@@ -16,9 +16,15 @@ export interface HealthReportPayload {
   readonly periodTo: string | null;
   readonly sections: readonly string[];
   readonly profile: HealthReportProfile | null;
-  readonly conditions: ReadonlyArray<{ readonly name: string; readonly diagnosedYear: number | null }>;
+  readonly conditions: ReadonlyArray<{
+    readonly name: string;
+    readonly diagnosedYear: number | null;
+  }>;
   readonly allergies: ReadonlyArray<{ readonly substance: string; readonly severity: string }>;
-  readonly medications: ReadonlyArray<{ readonly name: string; readonly schedule: readonly string[] }>;
+  readonly medications: ReadonlyArray<{
+    readonly name: string;
+    readonly schedule: readonly string[];
+  }>;
   readonly vitals: ReadonlyArray<{ readonly type: string; readonly count: number }>;
   readonly appointments: ReadonlyArray<{ readonly status: string }>;
   readonly careTasksOpen: number | null;
@@ -98,7 +104,9 @@ function parseBriefPayload(value: unknown): HealthReportPayload | null {
     appointments: readArray(value['appointments']).map((item) => ({
       status: readString(item['status']) ?? '',
     })),
-    careTasksOpen: isRecord(value['care_tasks']) ? readNumber(value['care_tasks']['total_open']) : null,
+    careTasksOpen: isRecord(value['care_tasks'])
+      ? readNumber(value['care_tasks']['total_open'])
+      : null,
   };
 }
 
