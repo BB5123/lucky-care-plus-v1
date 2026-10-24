@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/network/api_failure.dart';
+import '../../core/preferences/elder_mode.dart';
 import '../../design_system/tokens.dart';
 import 'dashboard_controller.dart';
 import 'dashboard_models.dart';
+import 'elder_focus.dart';
 import 'widgets/alerts_banner.dart';
+import 'widgets/elder_focus_card.dart';
 import 'widgets/family_zone.dart';
 import 'widgets/next_appointment_zone.dart';
 import 'widgets/tasks_today_zone.dart';
@@ -25,6 +29,7 @@ class DashboardPage extends ConsumerWidget {
     final AsyncValue<DashboardData> state = ref.watch(
       dashboardControllerProvider,
     );
+    final bool elderMode = ref.watch(elderModeControllerProvider);
 
     return Scaffold(
       key: const Key('dashboard-page'),
@@ -46,16 +51,18 @@ class DashboardPage extends ConsumerWidget {
             },
           );
         },
-        data: (DashboardData data) => _DashboardBody(data: data),
+        data: (DashboardData data) =>
+            _DashboardBody(data: data, elderMode: elderMode),
       ),
     );
   }
 }
 
 class _DashboardBody extends StatelessWidget {
-  const _DashboardBody({required this.data});
+  const _DashboardBody({required this.data, required this.elderMode});
 
   final DashboardData data;
+  final bool elderMode;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +76,23 @@ class _DashboardBody extends StatelessWidget {
     }
 
     final DashboardPayload payload = data.payload;
+
+    if (elderMode) {
+      // One focus card replaces the five-zone stack. Vitals (and therefore the
+      // chart/grid band), the member chips and the secondary zones are never
+      // built, so nothing can leak past the simplified view.
+      return ListView(
+        key: const Key('dashboard-elder-mode'),
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        children: <Widget>[
+          ElderFocusCard(
+            payload: payload,
+            onAction: (ElderFocusAction action) => context.go(action.route),
+          ),
+        ],
+      );
+    }
+
     final List<Widget> zones = <Widget>[
       if (payload.family.visible)
         FamilyZoneWidget(

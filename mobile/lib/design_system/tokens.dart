@@ -134,4 +134,88 @@ abstract final class AppType {
     fontWeight: FontWeight.w600,
     height: 1.2,
   );
+
+  /// Elder mode (`.ai/MOBILE_DESIGN.md` §6): one step up the token scale.
+  ///
+  /// These styles never invent a size — they reuse the scale above, so a
+  /// redesign changes one place. Body text is 20 (the next step after 16) and
+  /// every elder-mode screen stays at or above that size.
+  static const TextStyle elderBody = TextStyle(
+    fontSize: titleSize,
+    height: 1.5,
+    color: AppColors.textPrimary,
+  );
+
+  static const TextStyle elderBodySecondary = TextStyle(
+    fontSize: titleSize,
+    height: 1.5,
+    color: AppColors.textSecondary,
+  );
+
+  static const TextStyle elderTitle = TextStyle(
+    fontSize: headlineSize,
+    fontWeight: FontWeight.w700,
+    height: 1.3,
+    color: AppColors.textPrimary,
+  );
+
+  static const TextStyle elderButton = TextStyle(
+    fontSize: titleSize,
+    fontWeight: FontWeight.w700,
+    height: 1.2,
+  );
+
+  /// Maps a token size to the next step on the scale. Anything already at the
+  /// top stays there, so callers never need a literal.
+  static double bump(double? size) {
+    if (size == null || size <= captionSize) {
+      return labelSize;
+    }
+    if (size <= labelSize) {
+      return bodySize;
+    }
+    if (size <= bodySize) {
+      return titleSize;
+    }
+    if (size <= titleSize) {
+      return headlineSize;
+    }
+    return displaySize;
+  }
+
+  /// The elder-mode version of a token style without hard-coded sizes.
+  static TextStyle elder(TextStyle style) {
+    return style.copyWith(fontSize: bump(style.fontSize));
+  }
+}
+
+/// Applies the token scale one step to body text below 20sp, so every screen
+/// grows without editing it. Text already at [AppType.titleSize] or above is
+/// left unchanged, which keeps the elder-mode styles from being scaled twice.
+class ElderModeTextScaler extends TextScaler {
+  const ElderModeTextScaler(this.base);
+
+  final TextScaler base;
+
+  @override
+  double scale(double fontSize) {
+    if (fontSize >= AppType.titleSize) {
+      return base.scale(fontSize);
+    }
+
+    return base.scale(AppType.bump(fontSize));
+  }
+
+  @override
+  double get textScaleFactor =>
+      // ignore: deprecated_member_use
+      base.textScaleFactor;
+
+  @override
+  bool operator ==(Object other) {
+    return other is ElderModeTextScaler && other.base == base;
+  }
+
+  @override
+  int get hashCode => base.hashCode;
 }
