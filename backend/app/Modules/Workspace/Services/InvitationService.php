@@ -3,7 +3,9 @@
 namespace App\Modules\Workspace\Services;
 
 use App\Models\User;
+use App\Modules\Audit\Services\BusinessAuditLogger;
 use App\Modules\Workspace\Exceptions\AlreadyMemberException;
+use App\Modules\Workspace\Exceptions\InvitationNotFoundException;
 use App\Modules\Workspace\Exceptions\InvitationUnavailableException;
 use App\Modules\Workspace\Models\Invitation;
 use App\Modules\Workspace\Models\Tenant;
@@ -21,7 +23,10 @@ use InvalidArgumentException;
  * The plaintext token exists only in the HTTP response that creates it. The
  * database stores `sha256(token)`, lookup is by hash with `hash_equals`
  * semantics through the unique index, and the token is single use
- * (`accepted_at`) with a seven-day default lifetime.
+ * (`accepted_at`) with a seven-day default lifetime. An invitation cancelled
+ * by its inviter is marked `revoked_at`; the row is kept (soft state) so a
+ * revoked token still resolves and is refused, and so the audit trail of the
+ * issued token survives.
  */
 class InvitationService
 {
@@ -35,6 +40,8 @@ class InvitationService
         'legal_guardian',
         'viewer',
     ];
+
+    public function __construct(private readonly BusinessAuditLogger $audit) {}
 
     /**
      * @return array{invitation: Invitation, token: string}
@@ -59,6 +66,97 @@ class InvitationService
         ]);
 
         return ['invitation' => $invitation, 'token' => $token];
+    }
+
+    /**
+     * Pending, unexpired invitations of one workspace.
+     *
+     * Expired, accepted and revoked rows are excluded here (not filtered by
+     * the client). The RLS workspace context opened by `workspace.context`
+     * already scopes the query; the explicit predicates are defence in depth
+     * and make the intent readable.
+     *
+     * The audit row carries only the count: a list of invitee addresses in an
+     * append-only log would be exactly the harvestable email list N-02 forbids.
+     *
+     * @return Collection<int, Invitation>
+     */
+    public function listPending(Workspace $workspace, User $actor): Collection
+    {
+        $invitations = Invitation::query()
+            ->with('creator')
+            ->where('tenant_id', $workspace->tenant_id)
+            ->where('workspace_id', $workspace->id)
+            ->whereNull('accepted_at')
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $this->audit->record([
+            'actor_id' => $actor->id,
+            'actor_type' => 'user',
+            'action' => 'workspace.invitation.list',
+            'target_type' => 'workspace',
+            'target_id' => $workspace->id,
+            'result' => 'allow',
+            'metadata' => ['pending_count' => $invitations->count()],
+        ]);
+
+        return $invitations;
+    }
+
+    /**
+     * Revoke a pending invitation. Idempotent: revoking an already revoked or
+     * expired invitation is a successful no-op (a double tap cannot error).
+     *
+     * The invitation is found by id *and* by workspace, so a foreign id is
+     * indistinguishable from a missing one ({@see InvitationNotFoundException}
+     * -> 404, never 403).
+     *
+     * Exactly one business audit row is written for every existing invitation,
+     * including an idempotent repeat. The invitee address is stored only as a
+     * keyed digest (`email_hash`), never in clear text.
+     *
+     * @return bool true when this call changed the row to revoked
+     *
+     * @throws InvitationNotFoundException
+     */
+    public function revoke(Workspace $workspace, string $invitationId, User $actor): bool
+    {
+        $invitation = Invitation::query()
+            ->where('tenant_id', $workspace->tenant_id)
+            ->where('workspace_id', $workspace->id)
+            ->whereKey($invitationId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $invitation instanceof Invitation) {
+            throw InvitationNotFoundException::make();
+        }
+
+        $changed = false;
+
+        if ($invitation->revoked_at === null) {
+            $invitation->forceFill(['revoked_at' => now()])->save();
+            $changed = true;
+        }
+
+        $this->audit->record([
+            'actor_id' => $actor->id,
+            'actor_type' => 'user',
+            'action' => 'workspace.invitation.revoke',
+            'target_type' => 'workspace_invitation',
+            'target_id' => $invitation->id,
+            'result' => 'allow',
+            'metadata' => [
+                'email_hash' => self::hashEmail($invitation->email),
+                'changed' => $changed,
+            ],
+        ]);
+
+        return $changed;
     }
 
     /**
@@ -140,21 +238,33 @@ class InvitationService
                     throw AlreadyMemberException::make();
                 }
 
-                if ($invitation->accepted_at !== null) {
+                // Lock the invitation so a concurrent revoke and accept cannot
+                // both succeed: whichever waits sees the other's committed
+                // state (F-08 revocation takes effect on every path).
+                $locked = Invitation::query()
+                    ->whereKey($invitation->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $locked instanceof Invitation
+                    || $locked->accepted_at !== null
+                    || $locked->revoked_at !== null
+                    || $locked->expires_at === null
+                    || $locked->expires_at->isPast()) {
                     throw InvitationUnavailableException::make();
                 }
 
                 $membership = WorkspaceMembership::query()->forceCreate([
                     'id' => Uuid7::generate(),
-                    'tenant_id' => $invitation->tenant_id,
-                    'workspace_id' => $invitation->workspace_id,
+                    'tenant_id' => $locked->tenant_id,
+                    'workspace_id' => $locked->workspace_id,
                     'user_id' => $user->id,
-                    'role' => $invitation->role,
+                    'role' => $locked->role,
                     'status' => 'active',
                 ]);
 
-                $invitation->accepted_at = now();
-                $invitation->save();
+                $locked->accepted_at = now();
+                $locked->save();
 
                 return ['workspace' => $workspace, 'membership' => $membership];
             } finally {
@@ -166,5 +276,18 @@ class InvitationService
     public static function hashToken(string $token): string
     {
         return hash('sha256', $token);
+    }
+
+    /**
+     * Pseudonymous invitee reference for the audit trail.
+     *
+     * Keyed with the application key so the log value is not a plain SHA-256
+     * of an address that could be recovered with a dictionary of likely
+     * emails. The same address always hashes to the same value, which is what
+     * an investigator needs; the address itself is never written (N-02).
+     */
+    public static function hashEmail(?string $email): string
+    {
+        return hash_hmac('sha256', strtolower(trim((string) $email)), (string) config('app.key'));
     }
 }

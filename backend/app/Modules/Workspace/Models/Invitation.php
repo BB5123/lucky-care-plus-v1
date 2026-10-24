@@ -21,6 +21,7 @@ class Invitation extends Model
         'token',
         'expires_at',
         'accepted_at',
+        'revoked_at',
         'created_by',
     ];
 
@@ -29,6 +30,7 @@ class Invitation extends Model
         return [
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',
+            'revoked_at' => 'datetime',
             'created_by' => 'integer',
         ];
     }

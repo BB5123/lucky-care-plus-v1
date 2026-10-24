@@ -5,23 +5,78 @@ namespace App\Modules\Workspace\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Http\Responses\ProblemDetails;
 use App\Modules\Workspace\Exceptions\AlreadyMemberException;
+use App\Modules\Workspace\Exceptions\InvitationNotFoundException;
 use App\Modules\Workspace\Exceptions\InvitationUnavailableException;
+use App\Modules\Workspace\Models\Invitation;
 use App\Modules\Workspace\Models\Workspace;
 use App\Modules\Workspace\Services\InvitationService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Invitation creation and acceptance.
+ * Invitations: issue, list pending, revoke, accept.
  *
  * The token returned by `store` is the only copy of the secret: only its
- * SHA-256 hash is persisted. Acceptance is single use; an expired or unknown
- * token is indistinguishable from a missing one (404).
+ * SHA-256 hash is persisted. Acceptance is single use; an expired, revoked or
+ * unknown token is indistinguishable from a missing one (404).
+ *
+ * Listing and revoking are gated by `workspace.member.invite` on the route,
+ * not by `workspace.member.read`: cancelling an invitation is the inverse of
+ * issuing it, and the pending-invitee list is the same artefact (addresses the
+ * actor supplied) that the invite permission already grants control over.
+ * `.read` is the weaker "view the member list" permission and is not reused
+ * here. The baseline has no dedicated revoke-invitation permission, and
+ * inventing one is forbidden.
  */
 final class InvitationController extends Controller
 {
+    public function index(Request $request, InvitationService $invitations): JsonResponse
+    {
+        /** @var Workspace $workspace */
+        $workspace = $request->attributes->get('workspace');
+
+        $pending = $invitations->listPending($workspace, $request->user());
+
+        return response()->json([
+            'data' => $pending
+                ->map(fn (Invitation $invitation): array => [
+                    'id' => $invitation->id,
+                    'email' => $invitation->email,
+                    'role' => $invitation->role,
+                    'expires_at' => $invitation->expires_at?->toIso8601String(),
+                    'created_at' => $invitation->created_at?->toIso8601String(),
+                    // A display name, never the inviter's id.
+                    'invited_by' => $invitation->creator?->name,
+                ])
+                ->values()
+                ->all(),
+        ]);
+    }
+
+    public function destroy(Request $request, InvitationService $invitations): Response
+    {
+        /** @var Workspace $workspace */
+        $workspace = $request->attributes->get('workspace');
+
+        // Route parameters are read from the request (project convention),
+        // not through a positional controller argument: with two route
+        // parameters a primitive argument would bind by position, not by name.
+        $invitationId = (string) $request->route('invitation');
+
+        try {
+            $invitations->revoke($workspace, $invitationId, $request->user());
+        } catch (InvitationNotFoundException) {
+            return $this->notFound($request);
+        }
+
+        // 204 for a real revoke and for an idempotent repeat alike: a double
+        // tap must not surface an error.
+        return response()->noContent();
+    }
+
     public function store(Request $request, InvitationService $invitations): JsonResponse
     {
         $validated = $request->validate([
