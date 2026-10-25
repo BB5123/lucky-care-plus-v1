@@ -218,7 +218,9 @@ final class NotificationDispatcher
                         'recipient_user_id' => $recipientId,
                         'channel' => $channel,
                         'template_key' => $templateKey,
-                        'params' => $params,
+                        // The column is `jsonb` with an "object only" check; an
+                        // empty PHP array would be encoded as `[]` and fail it.
+                        'params' => $params === [] ? (object) [] : $params,
                         'status' => NotificationDelivery::STATUS_QUEUED,
                         'attempts' => 0,
                         'scheduled_for' => $queueUntil,

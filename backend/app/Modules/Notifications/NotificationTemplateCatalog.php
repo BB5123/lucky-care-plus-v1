@@ -70,6 +70,12 @@ final class NotificationTemplateCatalog
             'required' => ['days_left'],
             'optional' => [],
         ],
+        // P3b: offered when the account enters read_only. No placeholder at all;
+        // the message is account-level, never about the data inside it.
+        'retention.export_offer' => [
+            'required' => [],
+            'optional' => [],
+        ],
     ];
 
     /**

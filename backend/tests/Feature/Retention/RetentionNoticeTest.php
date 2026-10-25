@@ -180,6 +180,34 @@ class RetentionNoticeTest extends TestCase
         Mail::assertNothingSent();
     }
 
+    public function test_ret_n08_a_lapse_offers_the_export_in_app(): void
+    {
+        Mail::fake();
+
+        $this->artisan('retention:lapse', [
+            'workspace' => $this->workspace->id,
+            '--reason' => 'payment_failed',
+        ])->assertSuccessful();
+
+        $rows = $this->deliveries('retention.export_offer');
+
+        $this->assertCount(1, $rows, 'The lapse must offer the export once.');
+        $offer = $rows->first();
+        $this->assertSame(NotificationDelivery::CHANNEL_IN_APP, $offer->channel);
+        $this->assertSame(NotificationDelivery::STATUS_SENT, $offer->status);
+        $this->assertSame([], $offer->params);
+        $this->assertSame($this->workspace->id, $offer->subject_id);
+
+        // A second lapse is a no-op, so the offer is not repeated.
+        $this->artisan('retention:lapse', [
+            'workspace' => $this->workspace->id,
+            '--reason' => 'payment_failed',
+        ])->assertSuccessful();
+
+        $this->assertCount(1, $this->deliveries('retention.export_offer'));
+        Mail::assertNothingSent();
+    }
+
     /**
      * The ledger's RLS policy hides rows from everyone but their owner or the
      * dispatcher's system window; a scheduled command reads it the same way.

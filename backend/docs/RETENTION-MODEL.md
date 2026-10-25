@@ -113,7 +113,9 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | **Hard delete / compaction** | **yes since 2026-10-25** - `retention:compact` physically removes rows soft-deleted past the grace period (28 days, R8), audited and rehearsed on the live stack (`RET-C01..C08`) |
 | **The five states above** | **yes since 2026-10-25** - `workspaces.retention_state` + `WorkspaceLifecycle`; the state is enforced on every workspace route (`RET-S01..S08`, `RET-G01..G07`) |
 | Lapse trigger | **manual, audited (2026-10-25)** - `retention:lapse` is the support entry point and `retention:advance` moves due accounts nightly. Billing (D5) does not exist yet, so nothing lapses automatically |
-| **Notices (30/7/1 day)** | **yes since 2026-10-25 (P3a)** - `retention:notices` sends in-app + email at day 30/7/1, idempotent through the delivery ledger; the export push and the cancellation screen are still P3b/P3c |
+| **Notices (30/7/1 day)** | **yes since 2026-10-25 (P3a)** - `retention:notices` sends in-app + email at day 30/7/1, idempotent through the delivery ledger |
+| **Export offer at lapse** | **yes since 2026-10-25 (P3b)** - `retention.export_offer` in-app when the account enters `read_only` |
+| **Cancellation choice screen** | **no** - needs a permission ID ("cancel my account") that the baseline does not have; waits for an owner-approved change record |
 | **Archive store** | **no** |
 
 So until 2026-10-25 the product *hid* expired rows forever - the gap P1 closed. Rows are now removed from the
@@ -125,7 +127,7 @@ database, but they still live in backups for up to the backup window (the privac
 |---|---|---|---|
 | **P1** | `retention:compact --older-than=<grace>` : physical delete of rows already soft-deleted, audit row, legal hold respected, idempotent - **built and signed 2026-10-25 (R8: grace 28 days)** | ~1 day | "we actually delete" |
 | **P2** | `retention_state` column + the five states + the lapse trigger - **built 2026-10-25 (P2a; plan windows wait for D5)** | ~2 days | plan windows |
-| **P3** | Notices (email + in-app), export push, the cancellation choice screen - **notices built 2026-10-25 (P3a); export push and the choice screen remain** | ~2 days | the notices and the choice |
+| **P3** | Notices (email + in-app), export push, the cancellation choice screen - **notices + export push built 2026-10-25 (P3a/P3b); the choice screen waits for a permission change record** | ~2 days | the notices and the choice |
 | **P4** | Archive store + restore action + access audit | ~3 days | the long windows |
 
 P1 is the honest minimum: without it, no wording of the privacy notice is true. **Do P1 before publishing the
@@ -243,13 +245,26 @@ member through the normal pipeline:
   sends nothing. One notice per workspace per run: a missed night does not replay three mails at once.
 - **no PHI and no name**: the only placeholder is `days_left`; the email body says "บัญชีของท่าน" and the deadline.
 
-Tests: `RET-N01..N07` (`RetentionNoticeTest`): 30/7/1-day selection, in-app + email, idempotency, active workspace
-excluded, dry run writes nothing, a disabled preference is overridden, and a missing address marks only the email
-delivery failed (in-app still sent).
+Tests: `RET-N01..N08` (`RetentionNoticeTest`): 30/7/1-day selection, in-app + email, idempotency, active workspace
+excluded, dry run writes nothing, a disabled preference is overridden, a missing address marks only the email
+delivery failed (in-app still sent), and the lapse offer is sent once.
 
-**Still open for P3:** the export push (offering the export at lapse) and the cancellation choice screen (P3b/P3c).
 The email transport itself is deployment configuration (`MAIL_*`); with the default `log` mailer the notice is
 rendered and written to the log, which is why the test asserts the Mailable rather than an SMTP handshake.
+
+### P3b: the lapse export offer (as built, 2026-10-25)
+
+`WorkspaceLifecycle::lapse()` dispatches a `WorkspaceLapsed` domain event after the transition. The listener
+`SendLapseExportOffer` sends `retention.export_offer` to every active member, **in-app only** (email is reserved for
+the legal notices), with `reachLapsedAccounts: true` and `channels: ['in_app']` - the account is `read_only` by the
+time the job runs, so the P2b guard would otherwise drop it, and forcing in-app avoids pointless failed push rows.
+
+The event fires only on a real transition: a second lapse is a no-op and sends nothing (`RET-N08`). This is the
+"export offered on day 1" promise of §4 case 1; the 30-day notice then repeats the offer by email.
+
+**Still open for P3:** the cancellation choice screen (P3c). It needs a permission ID for "cancel my account" that the
+baseline catalog does not contain - `workspace.update` is configuration, not cancellation - so it waits for an
+owner-approved change record; inventing a permission ID is forbidden.
 
 ## 9. Notice copy (Thai, for the privacy notice)
 

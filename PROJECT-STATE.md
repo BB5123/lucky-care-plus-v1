@@ -8,7 +8,7 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after P3a (the 30/7/1-day retention notices);
+**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after P3b (the lapse export offer);
 web/mobile counts are from the previous verification
 
 ---
@@ -38,14 +38,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **461 passed / 2 skipped / 4,655 assertions** (463 tests) |
+| backend `php artisan test` | **462 passed / 2 skipped / 4,664 assertions** (464 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 52 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **92 merged PRs**, no open PRs.
+8 mobile feature folders, **93 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 463 (461 passed, 2 skipped)
+php artisan test                 # 464 (462 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -140,7 +140,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    defaults to true; clamd is reached over `tcp://clamav:3310` (sharing the unix socket does not work with the
    clamav image). The gate is proven with EICAR, and a deployment that forgets `--profile scan` fails closed
    with 503 rather than storing unscanned bytes - see `backend/docs/MALWARE-SCANNING.md`.
-6. **Retention P1/P2/P2b/P3a are built; P3b/P3c and P4 are not.** `retention:compact` physically deletes rows
+6. **Retention P1/P2/P2b/P3a/P3b are built; P3c and P4 are not.** `retention:compact` physically deletes rows
    soft-deleted longer than the 28-day grace (R8), audited, with holds respected and objects removed before their
    metadata row (`RETENTION-TURN-ON.md`). The five account states exist on `workspaces.retention_state`, with audited
    transitions (`retention:lapse` / `restore` / nightly `advance`) and an HTTP gate: read_only refuses writes,
@@ -148,10 +148,11 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    **P2b:** scheduled work starts from `Workspace::acceptingBackgroundWork()`, and a queued notification re-checks the
    state at delivery. **P3a:** `retention:notices` sends the 30/7/1-day notices in-app **and by email**, overrides
    channel preferences (legal notice), reaches the lapsed account through the documented job exception, and is
-   idempotent through the delivery ledger. `RETENTION_DRY_RUN` is still `true` here on purpose
-   (`RetentionDecisionPackTest` fails if it is flipped). **Still open:** plan-specific windows (D5), the export push
-   and the cancellation choice screen (P3b/P3c), the final `scheduled_deletion -> deleted` arrow (P4), the separate
-   archive store (P4) and the self-service restore/export screens.
+   idempotent through the delivery ledger. **P3b:** a lapse sends an in-app export offer on day 1. `RETENTION_DRY_RUN`
+   is still `true` here on purpose (`RetentionDecisionPackTest` fails if it is flipped). **Still open:** plan-specific
+   windows (D5), the cancellation choice screen (P3c - blocked on a permission change record), the final
+   `scheduled_deletion -> deleted` arrow (P4), the separate archive store (P4) and the self-service restore/export
+   screens.
 7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
    works**: the measurements list is cursor-paginated with an idempotent loadMore, dedupe by id and a
    footer that keeps the rows when a page fails.
@@ -204,28 +205,26 @@ sitting through `/admin/knowledge`, then regenerate the pack with `php artisan k
 
 ---
 
-## Start here (next session, 2026-10-26 00:00)
+## Start here (next session, 2026-10-26 00:05)
 
-**Where the work stopped:** **P3a (the 30/7/1-day notices) is built.** `retention:notices` runs nightly at 04:20 UTC,
-picks the most urgent due notice for a `scheduled_deletion` account, and delivers it in-app **and by email** to every
-active member - overriding channel preferences because it is a legal notice, reaching the lapsed account through the
-one documented exception to the P2b delivery guard, and staying idempotent through the delivery ledger. The email
-channel is new in the ledger (`EmailSender`, retention templates only). P2/P2b (states + job filter) are the
-foundation.
+**Where the work stopped:** **P3a + P3b are built.** `retention:notices` sends the 30/7/1-day notices in-app **and by
+email** (legal override of preferences, reaches the lapsed account, idempotent through the ledger), and a lapse now
+sends `retention.export_offer` in-app on day 1 via the `WorkspaceLapsed` event. The email channel is new in the ledger
+(`EmailSender`, retention templates only). P2/P2b (states + job filter) are the foundation.
 
 **Do this first, in order:**
 
-1. **P3b** - the export push: at lapse/scheduled_deletion, offer the export in the notice and from the app (the
-   delivery already exists; this is the product surface plus the link/prompt).
-2. **P3c** - the cancellation choice screen: "export my data" preselected, archive, delete now (R7/§5).
-3. Then **P4** - the separate archive store + restore action + access audit; only then does the final
+1. **P3c is blocked on a permission change record.** The cancellation choice screen needs a "cancel my account"
+   permission ID; the baseline catalog has no such ID (`workspace.update` is configuration, not cancellation) and
+   inventing one is forbidden. Open an owner-approved change record first, then build the screen.
+2. **P4** - the separate archive store + restore action + access audit; only then does the final
    `scheduled_deletion -> deleted` arrow become honest.
-4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
+3. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 461 passed / 2 skipped / 4,655 assertions · web 135 · mobile 125 · 92 merged PRs ·
+**Verified at hand-off:** backend 462 passed / 2 skipped / 4,664 assertions · web 135 · mobile 125 · 93 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
-tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a notices tested (RET-N01..N07) · D2 `ai:ping` proven against
-the real gateway · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy` profile.
+tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · D2 `ai:ping`
+proven against the real gateway · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy` profile.
 
 **Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
 second slice in the same context - that is what forced the hand-off this time.
