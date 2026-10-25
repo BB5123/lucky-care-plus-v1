@@ -1,0 +1,24 @@
+# Build context hygiene for backend/Dockerfile.
+# Docker picks this up because its name is the Dockerfile name plus .dockerignore.
+
+.git
+.gitignore
+
+# Secrets and environment files are injected at runtime (backend/.env).
+.env
+.env.*
+!.env.example
+
+# Developer state and dependencies.
+vendor
+node_modules
+storage
+bootstrap/cache
+*.log
+.phpunit.result.cache
+.phpunit.cache
+
+# Not needed at runtime.
+tests
+docs
+database/database.sqlite
