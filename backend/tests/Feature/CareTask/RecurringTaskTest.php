@@ -9,11 +9,13 @@ use App\Modules\CareCrm\Models\CareTask;
 use App\Modules\CareCrm\Models\CareTaskTemplate;
 use App\Modules\CareCrm\Models\TaskAssignment;
 use App\Modules\CareCrm\Models\TaskEvent;
+use App\Modules\Retention\Domain\RetentionState;
 use App\Modules\Workspace\Models\Workspace;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\SetsWorkspaceState;
 
 /**
  * P2.1 acceptance suite — REC-T01 ... REC-T13.
@@ -23,6 +25,8 @@ use Laravel\Sanctum\Sanctum;
  */
 class RecurringTaskTest extends CareTaskTestCase
 {
+    use SetsWorkspaceState;
+
     private const TZ = 'Asia/Bangkok';
 
     protected function setUp(): void
@@ -344,6 +348,31 @@ class RecurringTaskTest extends CareTaskTestCase
         $this->assertCount(0, $this->tasksFor($template['id']));
 
         Artisan::call('tasks:materialise', ['--days' => 3]);
+        $this->assertCount(3, $this->tasksFor($template['id']));
+    }
+
+    // -- REC-T14 ------------------------------------------------------------
+
+    public function test_rec_t14_a_read_only_workspace_is_not_materialised(): void
+    {
+        $template = $this->createTemplate([
+            'starts_on' => '2026-03-02',
+            'ends_on' => '2026-03-04',
+            'times_of_day' => ['08:00'],
+        ]);
+
+        $this->setWorkspaceState(RetentionState::ReadOnly);
+
+        $this->materialise(3);
+
+        $this->assertCount(0, $this->tasksFor($template['id']));
+
+        // The same template materialises once the account is active again, so
+        // the filter - not a broken fixture - is what suppressed it.
+        $this->setWorkspaceState(RetentionState::Active);
+
+        $this->materialise(3);
+
         $this->assertCount(3, $this->tasksFor($template['id']));
     }
 

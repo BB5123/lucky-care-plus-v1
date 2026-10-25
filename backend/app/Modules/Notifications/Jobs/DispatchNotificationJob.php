@@ -3,6 +3,7 @@
 namespace App\Modules\Notifications\Jobs;
 
 use App\Modules\Notifications\NotificationDispatcher;
+use App\Modules\Workspace\Models\Workspace;
 use App\Support\Database\TenantContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -57,6 +58,27 @@ final class DispatchNotificationJob implements ShouldQueue
         try {
             DB::transaction(function () use ($dispatcher): void {
                 TenantContext::run($this->tenantId, $this->workspaceId, function () use ($dispatcher): void {
+                    $workspace = Workspace::query()->whereKey($this->workspaceId)->first();
+
+                    // Re-check at delivery time, not only at dispatch time: the
+                    // job may have been queued before the account lapsed, and a
+                    // read_only/archived account must not receive it (P2b). The
+                    // job is dropped, not retried - retrying could never succeed.
+                    $stateValue = $workspace instanceof Workspace
+                        ? $workspace->retentionState()->value
+                        : 'unknown';
+
+                    if (! $workspace instanceof Workspace
+                        || ! $workspace->retentionState()->acceptsBackgroundWork()) {
+                        Log::info('notification.dispatch.skipped_workspace_state', [
+                            'template_key' => $this->templateKey,
+                            'subject_type' => $this->subjectType,
+                            'retention_state' => $stateValue,
+                        ]);
+
+                        return;
+                    }
+
                     $dispatcher->dispatch(
                         $this->templateKey,
                         $this->recipientUserIds,

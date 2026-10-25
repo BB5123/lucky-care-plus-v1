@@ -11,6 +11,7 @@ use App\Modules\Notifications\Jobs\DispatchNotificationJob;
 use App\Modules\Notifications\Models\CommunicationPreference;
 use App\Modules\Notifications\Models\NotificationDelivery;
 use App\Modules\Notifications\NotificationDispatcher;
+use App\Modules\Retention\Domain\RetentionState;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Log;
 use Laravel\Sanctum\Sanctum;
 use ReflectionClass;
 use RuntimeException;
+use Tests\Concerns\SetsWorkspaceState;
 use Tests\Feature\CareTask\CareTaskTestCase;
 use Throwable;
 
@@ -31,6 +33,8 @@ use Throwable;
  */
 class NotificationWiringTest extends CareTaskTestCase
 {
+    use SetsWorkspaceState;
+
     protected function tearDown(): void
     {
         Carbon::setTestNow();
@@ -343,6 +347,77 @@ class NotificationWiringTest extends CareTaskTestCase
                     && ! array_key_exists('recipients', $context);
             })
             ->once();
+    }
+
+    // -- WIRE-T12 -----------------------------------------------------------
+
+    public function test_wire_t12_due_soon_reminders_skip_a_read_only_workspace(): void
+    {
+        $this->setChannels($this->caregiver, ['in_app' => true, 'push' => false, 'line' => false]);
+
+        Sanctum::actingAs($this->owner);
+
+        $task = $this->createTaskViaApi([
+            'assignee_user_id' => $this->caregiver->id,
+            'due_at' => now()->addHours(12)->toIso8601String(),
+        ]);
+
+        $this->setWorkspaceState(RetentionState::ReadOnly);
+
+        $this->artisan('notifications:send-due')->assertSuccessful();
+
+        $this->assertCount(0, $this->deliveriesFor($this->caregiver, 'task.due_soon'));
+
+        // Restoring the account makes the same reminder go out, so the state -
+        // not a missing fixture - is what suppressed it.
+        $this->setWorkspaceState(RetentionState::Active);
+
+        $this->artisan('notifications:send-due')->assertSuccessful();
+
+        $deliveries = $this->deliveriesFor($this->caregiver, 'task.due_soon');
+        $this->assertCount(1, $deliveries);
+        $this->assertSame($task['id'], $deliveries->first()->subject_id);
+    }
+
+    // -- WIRE-T13 -----------------------------------------------------------
+
+    public function test_wire_t13_a_queued_notification_is_dropped_for_a_read_only_workspace(): void
+    {
+        $this->setChannels($this->caregiver, ['in_app' => true, 'push' => false, 'line' => false]);
+
+        Sanctum::actingAs($this->owner);
+
+        $task = $this->createTaskViaApi([
+            'assignee_user_id' => $this->caregiver->id,
+            'due_at' => now()->addHours(12)->toIso8601String(),
+        ]);
+
+        // The job was queued while the account was active, then the account
+        // lapsed: delivery must be dropped, not retried.
+        $job = new DispatchNotificationJob(
+            tenantId: $this->tenant->id,
+            workspaceId: $this->workspace->id,
+            templateKey: 'task.due_soon',
+            recipientUserIds: [$this->caregiver->id],
+            params: [
+                'task_id' => $task['id'],
+                'due_at' => now()->addHours(12)->toIso8601String(),
+            ],
+            subjectType: 'care_task',
+            subjectId: $task['id'],
+        );
+
+        $this->setWorkspaceState(RetentionState::ReadOnly);
+
+        $job->handle(app(NotificationDispatcher::class));
+
+        $this->assertCount(0, $this->deliveriesFor($this->caregiver, 'task.due_soon'));
+
+        $this->setWorkspaceState(RetentionState::Active);
+
+        $job->handle(app(NotificationDispatcher::class));
+
+        $this->assertCount(1, $this->deliveriesFor($this->caregiver, 'task.due_soon'));
     }
 
     // -- Helpers ------------------------------------------------------------

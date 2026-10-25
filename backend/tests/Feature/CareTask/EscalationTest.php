@@ -11,14 +11,16 @@ use App\Modules\CareCrm\Models\TaskAssignment;
 use App\Modules\CareCrm\Models\TaskEvent;
 use App\Modules\Notifications\Models\CommunicationPreference;
 use App\Modules\Notifications\Models\NotificationDelivery;
+use App\Modules\Retention\Domain\RetentionState;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\SetsWorkspaceState;
 
 /**
- * P2.2 acceptance suite — ESC-T01 ... ESC-T12.
+ * P2.2 acceptance suite — ESC-T01 ... ESC-T13.
  *
  * The clock is pinned so "31 minutes overdue" is deterministic. Each test
  * builds its own policy rows; nothing seeds a ladder by default (a workspace
@@ -26,6 +28,8 @@ use Laravel\Sanctum\Sanctum;
  */
 class EscalationTest extends CareTaskTestCase
 {
+    use SetsWorkspaceState;
+
     private User $admin;
 
     private User $viewer;
@@ -436,6 +440,34 @@ class EscalationTest extends CareTaskTestCase
 
         $this->assertStringContainsString('tasks:escalate', $output);
         $this->assertStringContainsString('*/15', $output);
+    }
+
+    // -- ESC-T13 ------------------------------------------------------------
+
+    public function test_esc_t13_a_read_only_workspace_is_not_escalated(): void
+    {
+        $this->makePolicy(['level' => 1, 'after_minutes' => 30]);
+        $task = $this->overdueTask(31);
+
+        $this->setWorkspaceState(RetentionState::ReadOnly);
+
+        $summary = $this->escalate();
+
+        $this->assertSame(0, $summary['scanned']);
+        $this->assertSame(0, $summary['escalated']);
+
+        $this->useWorkspace();
+        $this->assertSame(0, (int) $task->fresh()->escalation_level);
+
+        // The same ladder fires once the account is active again.
+        $this->setWorkspaceState(RetentionState::Active);
+
+        $summary = $this->escalate();
+
+        $this->assertSame(1, $summary['escalated']);
+
+        $this->useWorkspace();
+        $this->assertSame(1, (int) $task->fresh()->escalation_level);
     }
 
     // -- Fixtures -----------------------------------------------------------

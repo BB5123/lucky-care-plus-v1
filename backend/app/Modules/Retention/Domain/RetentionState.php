@@ -66,6 +66,20 @@ enum RetentionState: string
     }
 
     /**
+     * True when the account may receive scheduled background work: reminders,
+     * materialised tasks, escalation and inactivity notices.
+     *
+     * A lapsed account keeps its data and stays readable (in `read_only`), but
+     * processing it would be the "still nagging a family that stopped paying"
+     * behaviour the model forbids. The predicate is defined once here so every
+     * job asks the same question (P2b).
+     */
+    public function acceptsBackgroundWork(): bool
+    {
+        return $this === self::Active;
+    }
+
+    /**
      * True when the account can still be restored to `active`.
      */
     public function isRestorable(): bool

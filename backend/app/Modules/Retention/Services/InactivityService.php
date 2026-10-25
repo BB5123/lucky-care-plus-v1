@@ -45,7 +45,9 @@ final class InactivityService
                 $workspaces = TenantContext::run(
                     $tenantId,
                     '',
-                    fn () => Workspace::query()->orderBy('id')->get(),
+                    // A lapsed/archived account already has a retention deadline;
+                    // an inactivity reminder would be a second, contradictory one.
+                    fn () => Workspace::query()->acceptingBackgroundWork()->orderBy('id')->get(),
                 );
 
                 foreach ($workspaces as $workspace) {

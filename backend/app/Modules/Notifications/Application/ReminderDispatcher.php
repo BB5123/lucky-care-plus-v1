@@ -261,7 +261,14 @@ final class ReminderDispatcher
 
             DB::transaction(function () use ($tenantId, $callback): void {
                 TenantContext::run($tenantId, '', function () use ($tenantId, $callback): void {
-                    foreach (Workspace::query()->orderBy('id')->pluck('id') as $workspaceId) {
+                    // Only active accounts get reminders: a lapsed/archived
+                    // workspace keeps its data but is not processed (P2b).
+                    $workspaceIds = Workspace::query()
+                        ->acceptingBackgroundWork()
+                        ->orderBy('id')
+                        ->pluck('id');
+
+                    foreach ($workspaceIds as $workspaceId) {
                         $workspaceId = (string) $workspaceId;
 
                         TenantContext::run(
