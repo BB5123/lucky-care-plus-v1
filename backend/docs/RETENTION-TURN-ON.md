@@ -45,6 +45,14 @@ runs with `RETENTION_DRY_RUN=false`** - which is still not the case in this repo
 
 ## Order of operations
 
+0. **Read the state machine before touching it.**
+   ```bash
+   php artisan retention:status --verify-archives
+   ```
+   It prints the workspace count per state, what is due now, what is due within 30 days, how many accounts are
+   pinned by a legal hold, and (with the flag) whether every archived bundle passes the same checks as
+   `retention:archive-drill`. `--json` is available for a monitoring probe; `--verify-archives` exits non-zero when
+   any archive fails, so it can be scheduled separately.
 1. **Back up first, both halves.**
    ```bash
    bash backend/scripts/backup-dump.sh              # PostgreSQL
@@ -52,6 +60,8 @@ runs with `RETENTION_DRY_RUN=false`** - which is still not the case in this repo
    php backend/artisan knowledge:restore-drill      # prove the corpus archive
    ```
    The retention run cannot be undone from the database alone; the dump is the only rollback.
+   The **archive disk** (`RETENTION_ARCHIVE_DISK`) is not in that dump: copy it too, and keep `APP_KEY`
+   (the bundles are encrypted with it).
 2. **Rehearse on synthetic rows**, never on real data (below).
 3. **One type, one small batch, dry run first:**
    ```bash

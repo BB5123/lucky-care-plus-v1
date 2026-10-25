@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-26 (Asia/Bangkok) - backend suite re-run after P4b-1 (the encrypted archive bundle); web and
-mobile counts are from the previous runs
+**Last verified:** 2026-10-26 (Asia/Bangkok) - backend suite re-run after `retention:status`; web and mobile counts are
+from the previous runs
 
 ---
 
@@ -38,14 +38,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **477 passed / 2 skipped / 4,734 assertions** (479 tests) |
+| backend `php artisan test` | **480 passed / 2 skipped / 4,749 assertions** (482 tests) |
 | web `npm test` | **140 passed / 43 files** |
 | mobile `flutter test` | **129 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 54 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **101 merged PRs**, no open PRs.
+8 mobile feature folders, **102 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 479 (477 passed, 2 skipped)
+php artisan test                 # 482 (480 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -169,6 +169,8 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    flipped). **Still open:** plan-specific windows (D5), the cancellation choice screen (P3c - blocked on a permission
    change record), the final `scheduled_deletion -> deleted` arrow (P4b-2), the restore data path and per-archive keys
    (P4b-2), and the self-service restore screens. The bundle is a copy, not a move: the active rows remain in place.
+   **Ops:** `retention:status [--verify-archives]` reports counts per state, what is due now / within 30 days, legal
+   holds and archive integrity; with `--verify-archives` it exits non-zero on a broken archive, so it can be a probe.
 7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
    works**: the measurements list is cursor-paginated with an idempotent loadMore, dedupe by id and a
    footer that keeps the rows when a page fails.
@@ -241,10 +243,10 @@ permission change record.
    export route from the banner yet).
 4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 477 passed / 2 skipped / 4,734 assertions · web 140 · mobile 129 · 101 merged PRs ·
+**Verified at hand-off:** backend 480 passed / 2 skipped / 4,749 assertions · web 140 · mobile 129 · 102 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · P4a/P4b-1
-archive inventory + encrypted bundle tested (RET-A01..A04, RET-B01..B04) · document backup tested (DOC-B01..B04) ·
+archive inventory + encrypted bundle tested (RET-A01..A04, RET-B01..B04) · retention:status tested (RET-STAT01..03) · document backup tested (DOC-B01..B04) ·
 APP_KEY fingerprint tested (KEY-T01..T03) · web banner (FE5-T10/T11) and mobile banner (RET-M01..M04) tested · D2
 `ai:ping` proven against the real gateway · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy`
 profile.
