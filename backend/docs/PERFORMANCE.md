@@ -1,8 +1,9 @@
 # Performance smoke test (`perf:smoke`)
 
-> Status: **repeatable harness in place (2026-10-25).** It measures the dashboard aggregate, the
+> Status: **repeatable harness in place (2026-10-25)**. It measures the dashboard aggregate, the
 > timeline page and the care-task list against a synthetic workspace. It is not a concurrent load test;
-> see [Limitations](#limitations).
+> see [Limitations](#6-limitations). A small concurrent HTTP run now exists in
+> [section 8](#8-concurrent-http-load-test-2026-10-26) and is a finding, not a capacity plan.
 
 ## 1. How to run it
 
@@ -165,9 +166,67 @@ These are deliberate and must be read before quoting a number:
 - **Rate limiting is part of the stack.** Each route has a 60/minute throttle. Roughly 55 or more
   iterations in one run can reach it and produce 429s (which correctly fail the command). Keep
   `--iterations` below that, or wait a minute between runs.
-- **Not a pre-launch load test.** A real concurrent load test with multiple clients, realistic think
-  time, network and the deployed stack is still a pre-launch task. This harness is the repeatable
-  regression measurement that makes the next change measurable.
+- **Not a capacity test.** A small concurrent HTTP run exists (section 8: 3 clients, 60 s, one host), but a
+  real pre-launch load test - many clients, network, a production-like host, soak duration - is still ahead.
+  This harness is the repeatable regression measurement that makes the next change measurable.
+
+## 8. Concurrent HTTP load test (2026-10-26)
+
+`backend/scripts/load/read-paths.js` is a k6 script that drives the **real deployed stack** over HTTP with
+several clients at once. It exists because everything above runs in-process: it cannot see nginx, PHP-FPM,
+the Docker network, or two families reading at the same time.
+
+```bash
+# From the repo root, against the reference stack on the host.
+docker run --rm -i \
+  -e BASE_URL=http://host.docker.internal:8080 \
+  -e LOAD_EMAIL=demo.owner@example.test \
+  -e LOAD_PASSWORD='DemoPass!2026' \
+  -e VUS=3 -e DURATION=60s \
+  grafana/k6 run - < backend/scripts/load/read-paths.js
+```
+
+(On Windows PowerShell the `<` redirect is unsupported; pipe the file instead:
+`Get-Content -Raw backend/scripts/load/read-paths.js | docker run --rm -i … grafana/k6 run -`.)
+
+### Method
+
+- Reference stack (docker compose, demo data, nginx on `:8080`), the demo owner, **3 VUs for 60 s**, 2 s think
+  time between requests.
+- `setup()` logs in once, resolves the workspace/profile, and **warms the three routes**. The first requests
+  after a container restart pay for PHP-FPM worker start and opcache cold misses (seconds, not milliseconds);
+  an un-warmed short run measures cold starts, not the route.
+- Each route declares a 60/minute bucket; the pacing keeps the run inside it, so 0 responses are 429s. A 429
+  counts as a failure in the thresholds on purpose - it means the script's pacing is wrong.
+- Thresholds mirror `perf:smoke`: dashboard 800 ms, timeline 800 ms, care-tasks 300 ms p95.
+
+### Result (2026-10-26, `APP_DEBUG=false`, 3 VUs, 60 s)
+
+| Route | p50 ms | p95 ms | max ms | q/req | budget ms | result |
+|---|---|---|---|---|---|---|
+| dashboard | 105 | 281 | 335 | - | 800 | PASS |
+| timeline | 209 | 297 | 306 | - | 800 | PASS |
+| care-tasks | 251 | 358 | 410 | - | 300 | **FAIL** |
+
+96 requests, **0 failed, 0 throttled**, 27 iterations, 3 VUs.
+
+### Finding: the care-tasks HTTP path is ~350 ms p95
+
+The same run with `APP_DEBUG=true` measured care-tasks p95 **348 ms**, so debug mode is not the cause. Single
+requests from the host measure 0.20-0.28 s for the same three routes, and the in-process harness measures
+care-tasks at ~150 ms p95; the extra ~100 ms is the HTTP stack (nginx + PHP-FPM + Docker Desktop networking +
+the k6 container hop) on this laptop, not a query-shape change. The 300 ms gate is left as it is: it is the
+in-process budget, and this run is a **finding to re-measure on a production-like host** before raising or
+lowering it - not a licence to relax the gate.
+
+### Limits (read before quoting the table)
+
+- **Three concurrent clients is a family, not a fleet.** This checks that the stack does not fall over and
+  that p95 stays in the same order of magnitude; it is not throughput or capacity evidence.
+- **One host, Docker Desktop, demo data.** A production host with TLS, a real proxy and more data will differ.
+- **Not a soak test.** No memory growth, connection-pool exhaustion or queue-backlog observation.
+- **Rate limits are part of the stack.** The pacing is deliberate; removing the think time measures the
+  throttle, not the server.
 
 ## 7. Tests
 
