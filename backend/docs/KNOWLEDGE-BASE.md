@@ -28,9 +28,9 @@ as the other AI features.
 - `review_status` is `unreviewed` for the current corpus; the answer appends a warning until a
   clinician/ops reviewer marks the source `reviewed`.
 
-### Current corpus — 15 documents / 181 chunks (2026-10-25)
+### Current corpus — 16 documents / 183 chunks (2026-10-25)
 
-Thirteen DDC disease pages plus two ThaiHealth PM2.5 articles. The diseases were chosen for what Thai
+Thirteen DDC disease pages plus three ThaiHealth articles (two on PM2.5, one on leptospirosis). The diseases were chosen for what Thai
 families actually ask about, not for what the site happens to expose:
 
 | Id | Topic |
@@ -48,6 +48,7 @@ families actually ask about, not for what the site happens to expose:
 | `ddc-disease-73` | การบาดเจ็บจากการจราจรทางถนน (road traffic injury) |
 | `ddc-disease-74` | อหิวาตกโรค (cholera) |
 | `ddc-disease-75` | โรคหัด (measles) |
+| `thaihealth-lepto-symptoms` | โรคไข้ฉี่หนู (leptospirosis) — the article that names the colloquial term and the symptoms |
 | `thaihealth-pm25-symptoms` | PM2.5 — symptom relief |
 | `thaihealth-pm25-heart` | PM2.5 — heart and blood-vessel risk |
 

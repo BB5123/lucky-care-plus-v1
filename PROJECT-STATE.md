@@ -107,9 +107,9 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 ## 6. Known gaps (honest list)
 
 1. **Knowledge base is lexical (SQLite FTS5 + Thai normaliser + aliases)**, and that was **measured against a
-   local embedding model** on 2026-10-25: lexical hit@3 0.964 vs bge-m3 vectors 0.929 on the same 28
-   questions (Ollama 0.40.7 + bge-m3, 181 chunks). Both miss Q-08, the pure symptom question; so the vector
-   store is still not justified. Details, reproduction and the recommended alternative (re-rank the lexical
+   local embedding model** on 2026-10-25: lexical hit@3 0.964 (now **1.000** after the Q-08 fix) vs bge-m3 vectors 0.929 on the same 28
+   questions (Ollama 0.40.7 + bge-m3, 181 chunks). The vector store is still not justified: the symptom question was
+   fixed with one source and two alias entries instead. Details, reproduction and the recommended alternative (re-rank the lexical
    top-20 with embeddings instead of replacing retrieval) are in `backend/docs/RAG-VECTOR-OPTIONS.md`.
 2. **All 15 sources are `unreviewed`** - every answer carries the "not yet reviewed" warning until a
    clinician marks them with `knowledge:review`.

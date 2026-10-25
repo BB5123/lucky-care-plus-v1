@@ -86,26 +86,35 @@ class KnowledgeRetrievalTest extends TestCase
     {
         $retriever = $this->retriever();
 
-        // The corpus never spells the colloquial name; only the alias finds it.
-        $source = $this->source('ddc-disease-16');
-        $this->assertFalse(mb_stripos((string) $source['title'], 'ฉี่หนู'));
-        $this->assertFalse(mb_stripos((string) $source['text'], 'ฉี่หนู'));
-
+        // "ฉี่หนู" is now spelled directly in one source (the ThaiHealth leptospirosis article),
+        // so it matches on the query itself; either leptospirosis document is a correct answer.
         $results = $retriever->search('ฉี่หนู', 2);
 
         $this->assertNotEmpty($results);
-        $this->assertSame('ddc-disease-16', $results[0]['document_id']);
-        $this->assertSame('alias', $results[0]['matched_by']);
-        $this->assertContains($results[0]['matched_term'], ['เลปโตสไปโรซิส', 'leptospirosis']);
+        $this->assertContains(
+            $results[0]['document_id'],
+            ['ddc-disease-16', 'thaihealth-lepto-symptoms'],
+        );
+
+        // The alias path is what carries a *symptom* description that shares no vocabulary with
+        // the corpus - the case KB-2 was built for and the benchmark could not answer (Q-08).
+        $symptomResults = $retriever->search('ปวดน่อง', 2);
+
+        $this->assertNotEmpty($symptomResults, 'a symptom word must still reach the source through an alias');
+        $this->assertSame('alias', $symptomResults[0]['matched_by']);
+        $this->assertContains(
+            $symptomResults[0]['document_id'],
+            ['ddc-disease-16', 'thaihealth-lepto-symptoms'],
+        );
+        $this->assertContains($symptomResults[0]['matched_term'], ['เลปโตสไปโรซิส', 'leptospirosis', 'ฉี่หนู']);
 
         $exitCode = Artisan::call('knowledge:search', [
-            'question' => 'ฉี่หนู',
+            'question' => 'ปวดน่อง',
             '--limit' => 2,
         ]);
         $output = Artisan::output();
 
         $this->assertSame(0, $exitCode);
-        $this->assertStringContainsString('ddc-disease-16', $output);
         $this->assertStringContainsString('alias', $output);
     }
 
