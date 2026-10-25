@@ -127,5 +127,13 @@ void main() {
     expect(find.textContaining('อ่านอย่างเดียว'), findsOneWidget);
     // The tabs still render underneath: the banner explains, it does not block.
     expect(find.byType(NavigationBar), findsOneWidget);
+
+    // The only banner action is the jump to the export card in the family tab.
+    await tester.tap(find.byKey(const Key('retention-banner-export')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('family-page')), findsOneWidget);
+    // The banner follows the account, so it stays visible on the other tab.
+    expect(find.byKey(const Key('retention-banner')), findsOneWidget);
   });
 }
