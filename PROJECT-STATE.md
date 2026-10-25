@@ -38,7 +38,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **428 passed / 2 skipped / 4,517 assertions** (430 tests) |
+| backend `php artisan test` | **429 passed / 2 skipped / 4,522 assertions** (431 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 430 (428 passed, 2 skipped)
+php artisan test                 # 431 (429 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -200,7 +200,7 @@ sitting through `/admin/knowledge`, then regenerate the pack with `php artisan k
 **Where the work stopped:** **P1 (physical deletion) is built, tested and rehearsed.** `retention:compact` runs
 `PurgeService::compactBatch()/compactAll()`, writes one `retention.compact` audit row per batch, respects legal
 holds, removes a document object before its metadata row, and is scheduled at 03:20 UTC after the purge. Evidence:
-`RET-C01..C06` in `backend/tests/Feature/Retention/RetentionCompactionTest.php` and the live-stack rehearsal table
+`RET-C01..C07` in `backend/tests/Feature/Retention/RetentionCompactionTest.php` and the live-stack rehearsal table
 in `backend/docs/RETENTION-TURN-ON.md`. `RETENTION_DRY_RUN` is still `true`, so nothing has been deleted outside
 that rehearsal.
 
@@ -212,7 +212,7 @@ that rehearsal.
 2. Then **F** (16 sources) once the clinician is available - `KNOWLEDGE-REVIEW-SHEET.md` is the script to follow.
 3. Then **D2** (rotate keys, verify each with `php artisan ai:ping`) and **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 428 passed / 2 skipped / 4,517 assertions · web 135 · mobile 125 · 87 merged PRs ·
+**Verified at hand-off:** backend 429 passed / 2 skipped / 4,522 assertions · web 135 · mobile 125 · 87 merged PRs ·
 CI green · P1 rehearsed on the live stack · malware scanning ON and EICAR-proven · TLS + `/ready` live in the
 `proxy` profile.
 

@@ -110,7 +110,7 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | Per-tenant override within bounds | **yes** (`RET-T03`) |
 | Idempotent re-run | **yes** (`RET-T07`) |
 | Export for the member | **yes** (data export, web + mobile) |
-| **Hard delete / compaction** | **yes since 2026-10-25** - `retention:compact` physically removes rows soft-deleted past the grace period, audited and rehearsed on the live stack (`RET-C01..C06`) |
+| **Hard delete / compaction** | **yes since 2026-10-25** - `retention:compact` physically removes rows soft-deleted past the grace period, audited and rehearsed on the live stack (`RET-C01..C07`) |
 | **The five states above** | **no** - there is only "purged or not" |
 | **Notices (30/7/1 day)** | **no** |
 | **Archive store** | **no** |
@@ -156,10 +156,11 @@ Three details differ from the sketch above, each for a reason:
 Every skip that never started (`not_yet_implemented`, `table_not_present`, `no_soft_deletes`) writes no audit row,
 exactly like a skipped purge batch; a batch that was blocked by a hold is audited with its `held` count.
 
-Tests are `RET-C01..C06` in `backend/tests/Feature/Retention/RetentionCompactionTest.php`: inside the grace window
+Tests are `RET-C01..C07` in `backend/tests/Feature/Retention/RetentionCompactionTest.php`: inside the grace window
 nothing is removed; past it the row is physically gone and one `retention.compact` audit row is written; a profile
 hold and a workspace-wide hold both block it; a second run removes nothing; the dry-run switch removes nothing; a
-document object is deleted before its metadata row; a failed object delete keeps the row.
+document object is deleted before its metadata row; a failed object delete keeps the row; and a batch never touches
+another workspace's rows (RLS, F-09).
 
 ## 9. Notice copy (Thai, for the privacy notice)
 

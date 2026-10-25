@@ -287,6 +287,64 @@ class RetentionCompactionTest extends TestCase
         $this->assertDatabaseHas('medical_documents', ['id' => $document->id]);
     }
 
+    public function test_ret_c07_compaction_never_crosses_a_workspace_boundary(): void
+    {
+        config(['retention.dry_run' => false]);
+
+        $mine = $this->measurement(now()->subMonths(61), now()->subDays(40));
+
+        // A second workspace in the same tenant, with its own profile and row.
+        $otherWorkspace = $this->createWorkspace($this->tenant, 'Other Retention Workspace');
+
+        $otherPerson = Person::query()->forceCreate([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenant->id,
+            'workspace_id' => $otherWorkspace->id,
+            'display_name' => 'Other Person',
+        ]);
+
+        $otherProfile = HealthProfile::query()->forceCreate([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenant->id,
+            'workspace_id' => $otherWorkspace->id,
+            'person_id' => $otherPerson->id,
+            'version' => 1,
+        ]);
+
+        $otherMeasurement = HealthMeasurement::query()->forceCreate([
+            'id' => Uuid7::generate(),
+            'tenant_id' => $this->tenant->id,
+            'workspace_id' => $otherWorkspace->id,
+            'profile_id' => $otherProfile->id,
+            'type' => 'weight',
+            'value' => 65.0,
+            'unit' => 'kg',
+            'recorded_at' => now()->subMonths(61),
+            'recorded_by' => $this->user->id,
+            'source' => 'manual',
+            'version' => 1,
+            'deleted_at' => now()->subDays(40),
+        ]);
+
+        // Back to the first workspace: only its own row may be compacted (F-09).
+        TenantContext::set($this->tenant->id, $this->workspace->id);
+
+        $report = app(PurgeService::class)->compactBatch('health_measurements', 30);
+
+        $this->assertSame(1, $report['compacted']);
+        $this->assertDatabaseMissing('health_measurements', ['id' => $mine->id]);
+
+        // The other workspace still has its row and compacts it itself.
+        TenantContext::set($this->tenant->id, $otherWorkspace->id);
+
+        $this->assertDatabaseHas('health_measurements', ['id' => $otherMeasurement->id]);
+
+        $other = app(PurgeService::class)->compactBatch('health_measurements', 30);
+
+        $this->assertSame(1, $other['compacted']);
+        $this->assertDatabaseMissing('health_measurements', ['id' => $otherMeasurement->id]);
+    }
+
     private function measurement(CarbonInterface $recordedAt, ?CarbonInterface $deletedAt = null): HealthMeasurement
     {
         return HealthMeasurement::query()->forceCreate([
