@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,6 +9,7 @@ import '../../../design_system/state_views.dart';
 import '../../../design_system/tokens.dart';
 import 'health_controller.dart';
 import 'health_models.dart';
+import 'health_repository.dart';
 import 'ai_view.dart';
 import 'widgets/measurement_tile.dart';
 import 'widgets/medication_view.dart';
@@ -30,6 +33,46 @@ class HealthPage extends ConsumerStatefulWidget {
 
 class _HealthPageState extends ConsumerState<HealthPage> {
   HealthSection _section = HealthSection.measurements;
+
+  /// Drives the automatic "load the next page" trigger at the end of the
+  /// history list. The explicit button stays the primary affordance; this is
+  /// only a convenience for a thumb already at the bottom.
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_handleScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _handleScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    if (_scrollController.position.extentAfter > AppSpacing.xxl) {
+      return;
+    }
+
+    final HealthData? data = ref.read(healthControllerProvider).value;
+
+    if (data == null ||
+        !data.hasMore ||
+        data.isLoadingMore ||
+        data.loadMoreError != null) {
+      return;
+    }
+
+    unawaited(ref.read(healthControllerProvider.notifier).loadMore());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,9 +164,7 @@ class _HealthPageState extends ConsumerState<HealthPage> {
 
         return ErrorState(
           key: const Key('health-error'),
-          message: error is ApiFailure
-              ? error.message
-              : ApiFailure.genericMessage,
+          message: _errorMessage(error),
           onRetry: () {
             ref.read(healthControllerProvider.notifier).retry();
           },
@@ -139,6 +180,10 @@ class _HealthPageState extends ConsumerState<HealthPage> {
           );
         }
 
+        void loadMore() {
+          unawaited(ref.read(healthControllerProvider.notifier).loadMore());
+        }
+
         final Widget content = value.isEmpty
             ? const EmptyState(
                 key: Key('health-empty-state'),
@@ -148,16 +193,21 @@ class _HealthPageState extends ConsumerState<HealthPage> {
               )
             : ListView.separated(
                 key: const Key('health-list'),
+                controller: _scrollController,
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg,
                   AppSpacing.lg,
                   AppSpacing.lg,
                   AppSpacing.xxxl * 2,
                 ),
-                itemCount: value.measurements.length,
+                itemCount: value.measurements.length + 1,
                 separatorBuilder: (BuildContext context, int index) =>
                     const SizedBox(height: AppSpacing.md),
                 itemBuilder: (BuildContext context, int index) {
+                  if (index == value.measurements.length) {
+                    return _HistoryFooter(data: value, onLoadMore: loadMore);
+                  }
+
                   final HealthMeasurement measurement =
                       value.measurements[index];
 
@@ -192,6 +242,132 @@ class _HealthPageState extends ConsumerState<HealthPage> {
           ],
         );
       },
+    );
+  }
+}
+
+/// Safe, user-facing sentence for a full-page or footer failure.
+String _errorMessage(Object error) {
+  if (error is ApiFailure) {
+    return error.message;
+  }
+
+  if (error is PaginationContractException) {
+    return error.message;
+  }
+
+  return ApiFailure.genericMessage;
+}
+
+/// The history footer.
+///
+/// It is always present at the end of the list and reserves a fixed height in
+/// every state, so loading the next page never shifts the rows above it.
+class _HistoryFooter extends StatelessWidget {
+  const _HistoryFooter({required this.data, required this.onLoadMore});
+
+  /// `AppSpacing.xxxl * 2` — enough for a caption plus a compact text button.
+  static const double reservedHeight = AppSpacing.xxxl * 2;
+
+  final HealthData data;
+  final VoidCallback onLoadMore;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: reservedHeight,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          child: _content(),
+        ),
+      ),
+    );
+  }
+
+  Widget _content() {
+    if (data.isLoadingMore) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const SizedBox(
+            width: AppSpacing.lg,
+            height: AppSpacing.lg,
+            child: CircularProgressIndicator(
+              key: Key('health-load-more-progress'),
+              strokeWidth: 2,
+              color: AppColors.info,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text('กำลังโหลด…', style: AppType.caption),
+        ],
+      );
+    }
+
+    final Object? error = data.loadMoreError;
+
+    if (error != null) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(
+            _errorMessage(error),
+            key: const Key('health-load-more-error'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: AppType.caption,
+          ),
+          TextButton(
+            key: const Key('health-load-more-retry'),
+            onPressed: onLoadMore,
+            style: _linkStyle(),
+            child: const Text('ลองใหม่'),
+          ),
+        ],
+      );
+    }
+
+    if (!data.hasMore) {
+      return Text(
+        'แสดงครบทุกรายการแล้ว',
+        key: const Key('health-history-end'),
+        textAlign: TextAlign.center,
+        style: AppType.caption,
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Text(
+          'แสดง ${data.measurements.length} รายการ — เลื่อนเพื่อดูเพิ่ม',
+          key: const Key('health-load-more-count'),
+          textAlign: TextAlign.center,
+          style: AppType.caption,
+        ),
+        TextButton(
+          key: const Key('health-load-more'),
+          onPressed: onLoadMore,
+          style: _linkStyle(),
+          child: const Text('โหลดเพิ่ม'),
+        ),
+      ],
+    );
+  }
+
+  ButtonStyle _linkStyle() {
+    return TextButton.styleFrom(
+      foregroundColor: AppColors.info,
+      textStyle: AppType.label,
+      visualDensity: VisualDensity.compact,
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xs,
+      ),
+      minimumSize: Size.zero,
     );
   }
 }

@@ -216,20 +216,36 @@ class HealthMeasurement {
 }
 
 /// What the health tab needs once the workspace context and the list resolve.
+///
+/// The list is an accumulated cursor window, not the whole history:
+/// [nextCursor] is `null` when the server says there are no more pages,
+/// [isLoadingMore] drives the footer spinner and [loadMoreError] keeps a failed
+/// second page from replacing the rows that are already on screen.
 class HealthData {
   HealthData({
     required this.hasProfile,
     required List<HealthMeasurement> measurements,
+    this.nextCursor,
+    this.isLoadingMore = false,
+    this.loadMoreError,
   }) : measurements = List<HealthMeasurement>.unmodifiable(
          _newestFirst(measurements),
        );
 
-  const HealthData._({required this.hasProfile, required this.measurements});
+  const HealthData._({required this.hasProfile, required this.measurements})
+    : nextCursor = null,
+      isLoadingMore = false,
+      loadMoreError = null;
 
   final bool hasProfile;
   final List<HealthMeasurement> measurements;
+  final String? nextCursor;
+  final bool isLoadingMore;
+  final Object? loadMoreError;
 
   bool get isEmpty => measurements.isEmpty;
+
+  bool get hasMore => nextCursor != null;
 
   static const HealthData noProfile = HealthData._(
     hasProfile: false,
