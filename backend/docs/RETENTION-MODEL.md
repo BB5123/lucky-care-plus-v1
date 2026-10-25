@@ -328,7 +328,9 @@ on 2026-10-26, so `down()` is exercised, not only written.
 (per-archive keys landed separately, P4b-2a-keys). Those are P4b-2/P4c, and until they exist the final
 `scheduled_deletion -> deleted` arrow stays closed. The archive disk is **not** part of the nightly database dump;
 `retention:archive-backup` zips every bundle a manifest points at, fails on a missing or mismatched file, and the
-nightly workflow drills the uploaded copy with `retention:archive-drill-backup` (`BACKUP-COVERAGE.md`). The
+nightly workflow drills the uploaded copy with `retention:archive-drill-backup --check-db`, which also fails when a
+bundle exists in the database but not in the archive - so a stale archive is caught, not just a corrupt one
+(`BACKUP-COVERAGE.md`). The
 P4b-2 design - move versus copy, restore, crypto-shred, export-from-bundle and its acceptance tests - is in
 `RETENTION-ARCHIVE-DESIGN.md`; it waits on two owner decisions: whether archiving moves the rows out of the active
 tables, and whether an archived account may be absent from them for the whole window.

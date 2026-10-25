@@ -2,12 +2,8 @@
 
 namespace App\Console\Commands;
 
-use App\Modules\Retention\Models\WorkspaceArchiveManifest;
-use App\Modules\Workspace\Models\Tenant;
-use App\Modules\Workspace\Models\Workspace;
-use App\Support\Database\TenantContext;
+use App\Modules\Retention\Services\ArchiveBundleRegistry;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
@@ -40,7 +36,7 @@ final class RetentionArchiveBackupCommand extends Command
 
     protected $description = 'Archive the encrypted retention bundles and verify each against its manifest';
 
-    public function handle(): int
+    public function handle(ArchiveBundleRegistry $registry): int
     {
         $diskName = (string) config('retention.archive_disk', 'local');
         $driver = (string) config("filesystems.disks.{$diskName}.driver", '');
@@ -55,7 +51,7 @@ final class RetentionArchiveBackupCommand extends Command
         }
 
         try {
-            $summary = $this->archive($diskName, (string) ($this->option('output') ?: ''));
+            $summary = $this->archive($diskName, (string) ($this->option('output') ?: ''), $registry);
         } catch (Throwable $exception) {
             $this->error('Archive backup failed: '.$exception->getMessage());
             report($exception);
@@ -102,7 +98,7 @@ final class RetentionArchiveBackupCommand extends Command
      *     mismatched: list<string>
      * }
      */
-    private function archive(string $diskName, string $requestedOutput): array
+    private function archive(string $diskName, string $requestedOutput, ArchiveBundleRegistry $registry): array
     {
         $disk = Storage::disk($diskName);
 
@@ -116,7 +112,7 @@ final class RetentionArchiveBackupCommand extends Command
             throw new RuntimeException('Could not create the archive directory.');
         }
 
-        $manifests = $this->manifests();
+        $manifests = $registry->all();
         $entries = [];
         $missing = [];
         $mismatched = [];
@@ -187,43 +183,5 @@ final class RetentionArchiveBackupCommand extends Command
             'missing' => $missing,
             'mismatched' => $mismatched,
         ];
-    }
-
-    /**
-     * Every manifest that points at a bundle, read inside its tenant/workspace
-     * context because both tables are RLS-forced.
-     *
-     * @return list<WorkspaceArchiveManifest>
-     */
-    private function manifests(): array
-    {
-        $manifests = [];
-
-        foreach (Tenant::query()->orderBy('id')->pluck('id') as $tenantId) {
-            $tenantId = (string) $tenantId;
-
-            DB::transaction(function () use ($tenantId, &$manifests): void {
-                TenantContext::run($tenantId, '', function () use ($tenantId, &$manifests): void {
-                    $workspaceIds = Workspace::query()->where('tenant_id', $tenantId)->orderBy('id')->pluck('id');
-
-                    foreach ($workspaceIds as $workspaceId) {
-                        TenantContext::run($tenantId, (string) $workspaceId, function () use ($workspaceId, &$manifests): void {
-                            $rows = WorkspaceArchiveManifest::query()
-                                ->where('workspace_id', $workspaceId)
-                                ->whereNotNull('archive_path')
-                                ->orderBy('archived_at')
-                                ->orderBy('id')
-                                ->get();
-
-                            foreach ($rows as $row) {
-                                $manifests[] = $row;
-                            }
-                        });
-                    }
-                });
-            });
-        }
-
-        return $manifests;
     }
 }
