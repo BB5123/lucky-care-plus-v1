@@ -315,6 +315,10 @@ final class PurgeService
      *   - one `security_audit_logs` row per batch, counts only (N-02);
      *   - a second run finds nothing, because the rows are physically gone.
      *
+     * F-16 / DM-R01 forbid a *silent* hard delete, not an audited one: this
+     * path runs under the retention policy, respects holds, writes the audit
+     * trail and is off unless the deployment turns the purge on.
+     *
      * Rows are selected by `deleted_at` (the moment the member or the purge
      * deleted them), never by the retention `date_column`: the grace period
      * starts when the data was deleted, not when it was recorded. That is also
