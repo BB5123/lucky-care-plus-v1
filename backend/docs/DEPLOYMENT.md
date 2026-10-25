@@ -403,6 +403,25 @@ A demo workspace seeded by `demo:seed` creates the three document rows as
 metadata only, so a backup of a pure demo install reports them as missing - that
 is the check working, not a backup failure to ignore.
 
+### Archived account bundles (P4b-1)
+
+When a workspace enters `archived`, its rows are written as an encrypted NDJSON
+bundle under `RETENTION_ARCHIVE_DISK` (default: the private `local` disk,
+`storage/app/private/archives/<tenant>/<workspace>/`). The bundle is encrypted
+with `APP_KEY` and is **not** part of the database dump, so back up that disk
+separately and keep the key (see `app:key-fingerprint`). Verify any archive with:
+
+```bash
+docker compose --profile app exec -T app \
+  php artisan retention:archive-drill <workspace-uuid>
+# Bundle verifies: yes / Inventory hash verifies: yes
+```
+
+The drill checks the file, its sha256, decryptability and the row count per
+table against the inventory. It does not restore rows yet (P4b-2), so a
+`scheduled_deletion -> deleted` transition is still not enabled for archived
+accounts.
+
 ---
 
 ## 5.2 Knowledge corpus (mutable state)

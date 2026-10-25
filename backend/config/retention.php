@@ -85,4 +85,9 @@ return [
     // Forced on for the first 30 days of a deployment (ADR-016 §5).
     'dry_run' => filter_var(env('RETENTION_DRY_RUN', true), FILTER_VALIDATE_BOOLEAN),
 
+    // Where the encrypted archive bundles live (P4b-1). The default `local`
+    // disk is private storage; a deployment should point this at the
+    // archive/off-site volume and back that up separately from the database.
+    'archive_disk' => env('RETENTION_ARCHIVE_DISK', 'local'),
+
 ];
