@@ -130,7 +130,7 @@ final class AiSummaryController extends Controller
                 'AI request refused',
                 (string) config('ai.intake.messages.'.$code, 'ไม่สามารถดำเนินการกับคำขอนี้ได้'),
             ],
-            'provider_timeout', 'provider_unavailable', 'provider_invalid_response', 'ai_provider_unavailable' => [
+            'provider_timeout', 'provider_unavailable', 'provider_invalid_response', 'provider_empty_content', 'ai_provider_unavailable' => [
                 'AI provider unavailable',
                 (string) config('ai.provider_messages.'.$code, 'ระบบ AI ไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่ภายหลัง'),
             ],
