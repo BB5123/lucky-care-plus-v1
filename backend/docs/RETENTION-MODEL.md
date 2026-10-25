@@ -129,6 +129,25 @@ So today the product *hides* expired rows forever. That is the gap this document
 P1 is the honest minimum: without it, no wording of the privacy notice is true. **Do P1 before publishing the
 notice**, then P2-P4 behind their own review.
 
+### P1 implementation notes (for whoever writes it)
+
+Everything needed is already in `app/Modules/Retention/Services/PurgeService.php`:
+
+- `TYPE_SPECS` (private const) maps each type to `{table, date_column, model, soft_deletes, objects?}`. Only the
+  entries with `soft_deletes: true` can ever have compactable rows - for the rest, purge already hard-deletes.
+- Per-type work happens per **workspace**, and holds are read with `$this->holds->activeHolds($workspaceId)`; a
+  hold with `profile_id === null` is workspace-wide and must skip the whole workspace.
+- The append-only trigger on `task_events` only allows DELETE when `set_config('app.retention_purge', 'on')` has
+  been set for the connection - the compaction must do the same or it will fail on that table.
+- Object-backed rows (`objects: true`) must delete the private object before the row, and keep the row when the
+  object delete fails, so the next run can retry (fail closed) - same rule as purge.
+
+Signature to add: `compactBatch(string $type, int $graceDays, int $limit = 500): array` returning
+`['compacted' => n, 'held' => n, 'skipped' => ?string]`, plus a `retention:compact {--type=} {--older-than=30}
+{--limit=500}` command that refuses `--older-than` below 1 day and writes one audit row per batch
+(`action = retention.compact`). Tests mirror `RET-T01/T02/T05/T07`: inside the grace window nothing is removed,
+past it the row is gone, an active hold blocks it, a second run removes nothing.
+
 ## 9. Notice copy (Thai, for the privacy notice)
 
 > เราเก็บข้อมูลสุขภาพของท่านไว้ตามวัตถุประสงค์ในการให้บริการ และตามระยะเวลาที่กฎหมายกำหนด
