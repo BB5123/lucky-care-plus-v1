@@ -12,7 +12,16 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'phone', 'password', 'last_login_at'])]
+#[Fillable([
+    'name',
+    'email',
+    'phone',
+    'password',
+    'last_login_at',
+    'is_platform_admin',
+    'platform_admin_granted_at',
+    'platform_admin_granted_by',
+])]
 #[Hidden([
     'password',
     'remember_token',
@@ -39,7 +48,18 @@ class User extends Authenticatable
             'pin_locked_until' => 'datetime',
             'pin_failed_attempts' => 'integer',
             'password' => 'hashed',
+            'is_platform_admin' => 'boolean',
+            'platform_admin_granted_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Platform capabilities (CR-005 / ABD-019) come from this explicit flag,
+     * never from a workspace membership role.
+     */
+    public function isPlatformAdmin(): bool
+    {
+        return (bool) $this->is_platform_admin;
     }
 
     public function memberships(): HasMany

@@ -72,17 +72,18 @@
 | — | [`changes/CR-001`](changes/CR-001-permission-delta-v1.1.md) | Change Record: permission delta v1.1 (Wave 1 อนุมัติแล้ว 4 ID) | ✅ |
 | — | [`changes/CR-003`](changes/CR-003-permission-delta-v1.2.md) | Change Record: permission delta v1.2 (task templates + escalation, 6 ID) | ✅ |
 | — | [`changes/CR-004`](changes/CR-004-task-evidence-scope-v1.3.md) | Change Record: evidence-read scope `task_evidence` (baseline v1.3.0) | ✅ |
+| — | [`changes/CR-005`](changes/CR-005-platform-knowledge-review-v1.4.md) | Change Record: platform knowledge review + `is_platform_admin` (baseline v1.4.0) | ✅ |
 
 ---
 
 ## 4. ภาคผนวก Normative (อ้างอิง ไม่คัดลอก)
 
 เอกสารใน `docs/baseline-v1.0.0/` **เป็นส่วนหนึ่งของ Blueprint นี้** ในฐานะภาคผนวกที่มีผลบังคับ
-**เวอร์ชันปัจจุบัน: `v1.3.0`** (amend โดย [CR-001](changes/CR-001-permission-delta-v1.1.md), 2026-10-22, [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24 และ [CR-004](changes/CR-004-task-evidence-scope-v1.3.md), 2026-10-24) — ชื่อโฟลเดอร์คงเดิมเพื่อไม่ให้ลิงก์เสีย:
+**เวอร์ชันปัจจุบัน: `v1.4.0`** (amend โดย [CR-001](changes/CR-001-permission-delta-v1.1.md), 2026-10-22, [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24, [CR-004](changes/CR-004-task-evidence-scope-v1.3.md), 2026-10-24 และ [CR-005](changes/CR-005-platform-knowledge-review-v1.4.md), 2026-10-25) — ชื่อโฟลเดอร์คงเดิมเพื่อไม่ให้ลิงก์เสีย:
 
 | ไฟล์ | สถานะใน Blueprint | ใช้เมื่อ |
 |---|---|---|
-| [`PERMISSION_CATALOG.md`](../docs/baseline-v1.0.0/PERMISSION_CATALOG.md) | **Normative** — **99 permission ID (v1.2.0)**, 26 โดเมน | ทุกครั้งที่ประกาศสิทธิ์/เขียน Policy |
+| [`PERMISSION_CATALOG.md`](../docs/baseline-v1.0.0/PERMISSION_CATALOG.md) | **Normative** — **101 permission ID (v1.4.0)**, 26 โดเมน | ทุกครั้งที่ประกาศสิทธิ์/เขียน Policy |
 | [`DATA_ACCESS_MATRIX.md`](../docs/baseline-v1.0.0/DATA_ACCESS_MATRIX.md) | **Normative** — 8 role, Matrix A–D, scope model | ออกแบบ endpoint/หน้าจอ |
 | [`AUTHORIZATION_TEST_PLAN.md`](../docs/baseline-v1.0.0/AUTHORIZATION_TEST_PLAN.md) | **Normative** — test ID + release gate | เขียนเทสต์ |
 | [`AUTHORIZATION_BASELINE.md`](../docs/baseline-v1.0.0/AUTHORIZATION_BASELINE.md) | **Normative** — frozen decisions + change control | เมื่อต้องการเปลี่ยนกฎ |

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Authorization;
 
 use App\Http\Middleware\EnsureAuthorized;
+use App\Http\Middleware\EnsurePlatformAuthorized;
 use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Routing\Route;
 use Illuminate\Routing\Router;
@@ -17,7 +18,7 @@ use Tests\TestCase;
  *  1. explicitly allowlisted as public or self-service (with a written
  *     reason, so widening the allowlist is visible in review), or
  *  2. guarded by `EnsureAuthorized` with a permission ID that exists in
- *     `config/authorization.permissions` (the frozen 99-ID catalog).
+ *     `config/authorization.permissions` (the frozen 101-ID catalog).
  *
  * A new endpoint that forgets its authorization middleware therefore fails
  * CI, and so does a route declared with a permission ID that is not in the
@@ -29,6 +30,19 @@ use Tests\TestCase;
  */
 class RoutePermissionCoverageTest extends TestCase
 {
+    /**
+     * Every middleware class that is a valid declaration layer over the
+     * Authorizer. Workspace routes use `EnsureAuthorized`; platform-only routes
+     * (CR-005) use `EnsurePlatformAuthorized` and deliberately have no
+     * `workspace.context`.
+     *
+     * @var list<class-string>
+     */
+    private const AUTHORIZING_MIDDLEWARE = [
+        EnsureAuthorized::class,
+        EnsurePlatformAuthorized::class,
+    ];
+
     /**
      * Routes that intentionally have no permission ID, keyed by
      * "<METHOD> <URI>". The five required entries come from the task that
@@ -121,7 +135,7 @@ class RoutePermissionCoverageTest extends TestCase
         foreach ($this->resolvedMiddleware($route) as $middleware) {
             [$class, $parameters] = array_pad(explode(':', $middleware, 2), 2, null);
 
-            if ($class !== EnsureAuthorized::class || $parameters === null) {
+            if (! in_array($class, self::AUTHORIZING_MIDDLEWARE, true) || $parameters === null) {
                 continue;
             }
 
@@ -140,7 +154,7 @@ class RoutePermissionCoverageTest extends TestCase
     private function hasAuthorizingMiddleware(Route $route): bool
     {
         foreach ($this->resolvedMiddleware($route) as $middleware) {
-            if (explode(':', $middleware, 2)[0] === EnsureAuthorized::class) {
+            if (in_array(explode(':', $middleware, 2)[0], self::AUTHORIZING_MIDDLEWARE, true)) {
                 return true;
             }
         }

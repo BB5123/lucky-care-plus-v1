@@ -2,7 +2,7 @@
 
 > **Normative parent:** [`docs/baseline-v1.0.0/`](../docs/baseline-v1.0.0/) — permission ID, role, matrix, test ID ทุกตัวมาจากที่นั่น
 > ไฟล์นี้อธิบาย *วิธีประกอบ* กลไกเหล่านั้นเป็นระบบที่รันได้ ไม่ได้ประกาศ permission ใหม่
-> **Baseline ปัจจุบัน:** `v1.3.0` — **99 permission ID** (amend โดย [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24 และ [CR-004](changes/CR-004-task-evidence-scope-v1.3.md), 2026-10-24)
+> **Baseline ปัจจุบัน:** `v1.4.0` — **101 permission ID** (amend โดย [CR-003](changes/CR-003-permission-delta-v1.2.md), 2026-10-24, [CR-004](changes/CR-004-task-evidence-scope-v1.3.md), 2026-10-24 และ [CR-005](changes/CR-005-platform-knowledge-review-v1.4.md), 2026-10-25)
 
 ---
 
@@ -116,6 +116,14 @@ baseline มี 8 role ตายตัว:
 | "Dependent / Passive Member" (PDF1) | `persons` ไม่มี `user_id` + `legal_guardian` (ADR-009) |
 
 > **ห้ามสร้าง role ใหม่ถ้า mapping นี้ครอบได้** — การเพิ่ม role ต้องแก้ baseline + matrix + test ทั้งชุด (ADR-009, ADR-012)
+
+### 4.1 Platform capabilities (v1.4.0, CR-005)
+
+`knowledge.source.read` และ `knowledge.source.review` เป็น **platform capability** ไม่ใช่ workspace role
+และไม่มี workspace context: corpus เป็นข้อมูลสาธารณะระดับ platform ไม่มี `tenant_id`/`workspace_id`
+สิทธิ์สองตัวนี้ได้จาก **`users.is_platform_admin` flag เท่านั้น** (ไม่ใช่ role `platform_admin` ใน workspace)
+และตัดสินผ่าน `Authorizer::authorizePlatform()` ซึ่งแยกจาก pipeline ของ workspace โดยสิ้นเชิง (ABD-019)
+ทุกการให้/เพิกถอน flag และทุกการใช้สิทธิ์ถูกบันทึกหนึ่งแถวใน `security_audit_logs`
 
 ---
 

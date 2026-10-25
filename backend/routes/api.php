@@ -7,6 +7,7 @@ use App\Modules\Accounts\Http\Controllers\PinController;
 use App\Modules\AiGateway\Http\Controllers\AiExtractionController;
 use App\Modules\AiGateway\Http\Controllers\AiSummaryController;
 use App\Modules\AiGateway\Knowledge\Http\Controllers\KnowledgeAnswerController;
+use App\Modules\AiGateway\Knowledge\Http\Controllers\KnowledgeSourceAdminController;
 use App\Modules\CareCrm\Http\Controllers\AppointmentController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskActionController;
 use App\Modules\CareCrm\Http\Controllers\CareTaskController;
@@ -94,6 +95,20 @@ Route::prefix('v1')->group(function (): void {
                 ->middleware('authorize.permission:notification.delivery.read');
             Route::post('/notifications/{delivery}/read', [NotificationDeliveryController::class, 'markRead'])
                 ->middleware('authorize.permission:notification.delivery.read');
+        });
+
+    // -- Platform knowledge administration (CR-005 / baseline v1.4.0) ------
+    // The corpus is public platform data: no `{workspace}` in the path and no
+    // `workspace.context` middleware. `authorize.platform` consults the
+    // explicit `users.is_platform_admin` flag through
+    // `Authorizer::authorizePlatform()` (ABD-019), never a workspace role.
+    Route::prefix('/admin/knowledge/sources')
+        ->middleware(['auth:sanctum', 'throttle:60,1,platform-knowledge'])
+        ->group(function (): void {
+            Route::get('/', [KnowledgeSourceAdminController::class, 'index'])
+                ->middleware('authorize.platform:knowledge.source.read');
+            Route::post('/{id}/review', [KnowledgeSourceAdminController::class, 'review'])
+                ->middleware('authorize.platform:knowledge.source.review');
         });
 
     // -- Workspaces ---------------------------------------------------------

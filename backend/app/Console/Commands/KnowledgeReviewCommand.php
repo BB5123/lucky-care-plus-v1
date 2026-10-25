@@ -2,18 +2,19 @@
 
 namespace App\Console\Commands;
 
-use App\Modules\AiGateway\Knowledge\Application\KnowledgeBaseBuilder;
+use App\Modules\AiGateway\Knowledge\Application\KnowledgeSourceService;
+use App\Modules\AiGateway\Knowledge\Domain\KnowledgeSourceInvalidException;
+use App\Modules\AiGateway\Knowledge\Domain\KnowledgeSourceNotFoundException;
 use Illuminate\Console\Command;
 use RuntimeException;
 
 /**
- * Marks a knowledge source reviewed (or unreviewed) — TASK G4-KB.
+ * Marks a knowledge source reviewed (or unreviewed) — TASK G4-KB / CR-005.
  *
  * The answer path appends an "unreviewed" warning to every answer that uses a
- * source whose `review_status` is not `reviewed`. This command is the review
- * workflow until a platform-admin UI exists: it records who reviewed the
- * source and when, revalidates it, writes the JSON atomically and can rebuild
- * the SQLite corpus in the same step.
+ * source whose `review_status` is not `reviewed`. This command is the console
+ * entry point; the platform-admin API calls the same
+ * {@see KnowledgeSourceService} so the two paths cannot drift.
  */
 final class KnowledgeReviewCommand extends Command
 {
@@ -25,7 +26,7 @@ final class KnowledgeReviewCommand extends Command
 
     protected $description = 'Mark a knowledge source reviewed/unreviewed and optionally rebuild';
 
-    public function handle(KnowledgeBaseBuilder $builder): int
+    public function handle(KnowledgeSourceService $service): int
     {
         $id = trim((string) $this->argument('id'));
         $status = (string) $this->option('status');
@@ -42,87 +43,41 @@ final class KnowledgeReviewCommand extends Command
             return self::FAILURE;
         }
 
-        $directory = (string) config('knowledge.sources_path');
-        $path = rtrim($directory, '/\\').'/'.$id.'.json';
-
-        if (! is_file($path)) {
-            $this->error('Source not found: '.$path);
-
-            return self::FAILURE;
-        }
-
-        $json = file_get_contents($path);
-
-        if (! is_string($json) || trim($json) === '') {
-            $this->error('Source file is empty.');
-
-            return self::FAILURE;
-        }
-
-        $source = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-
-        if (! is_array($source) || ($source['id'] ?? null) !== $id) {
-            $this->error('Source file does not carry the expected id.');
-
-            return self::FAILURE;
-        }
-
         $reviewer = trim((string) $this->option('reviewer'));
 
-        if ($status === 'reviewed') {
-            if ($reviewer === '') {
-                $this->error('--reviewer is required when marking a source reviewed.');
+        if ($status === 'reviewed' && $reviewer === '') {
+            $this->error('--reviewer is required when marking a source reviewed.');
 
-                return self::FAILURE;
-            }
-
-            $source['review_status'] = 'reviewed';
-            $source['reviewed_by'] = $reviewer;
-            $source['reviewed_at'] = now()->toDateString();
-        } else {
-            $source['review_status'] = 'unreviewed';
-            $source['reviewed_by'] = null;
-            $source['reviewed_at'] = null;
+            return self::FAILURE;
         }
 
-        $errors = $builder->validateSources([$source]);
+        try {
+            $outcome = $service->review($id, $reviewer, (bool) $this->option('build'), $status);
+        } catch (KnowledgeSourceNotFoundException) {
+            $this->error('Source not found: '.$service->pathFor($id));
 
-        if ($errors !== []) {
-            foreach ($errors as $error) {
+            return self::FAILURE;
+        } catch (KnowledgeSourceInvalidException $exception) {
+            foreach ($exception->errors() as $error) {
                 $this->error($error);
             }
 
             return self::FAILURE;
-        }
-
-        $encoded = json_encode(
-            $source,
-            JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
-        );
-
-        if (! is_string($encoded)) {
-            $this->error('Could not encode the source.');
-
-            return self::FAILURE;
-        }
-
-        file_put_contents($path, $encoded."\n");
-
-        $this->info('Updated: '.$path.' → '.$status
-            .($reviewer !== '' ? ' by '.$reviewer : ''));
-
-        if (! (bool) $this->option('build')) {
-            $this->line('Run `php artisan knowledge:build` to publish the change.');
-
-            return self::SUCCESS;
-        }
-
-        try {
-            $stats = $builder->build($directory, (string) config('knowledge.sqlite_path'));
         } catch (RuntimeException $exception) {
             $this->error($exception->getMessage());
 
             return self::FAILURE;
+        }
+
+        $this->info('Updated: '.$service->pathFor($id).' → '.$status
+            .($reviewer !== '' ? ' by '.$reviewer : ''));
+
+        $stats = $outcome['stats'];
+
+        if ($stats === null) {
+            $this->line('Run `php artisan knowledge:build` to publish the change.');
+
+            return self::SUCCESS;
         }
 
         $this->info('Knowledge base rebuilt: '.$stats['documents'].' documents, '

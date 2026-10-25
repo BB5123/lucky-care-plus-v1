@@ -190,7 +190,7 @@ class AuthorizerTest extends TestCase
         $catalog = new PermissionCatalog;
         $authorizer = $this->authorizer();
 
-        $this->assertCount(99, $catalog->all());
+        $this->assertCount(101, $catalog->all());
 
         foreach ($catalog->all() as $permission) {
             $mapping = $authorizer->mappingFor($permission);
