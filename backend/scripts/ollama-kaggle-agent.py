@@ -25,6 +25,17 @@ Everything is environment-driven, so one file serves several projects:
     NGROK_STATIC_DOMAIN optional; empty = dynamic URL
     HDIR                where the handover files are written        (/kaggle/working)
 
+**Notebook usage** (a Kaggle cell has no ``__file__`` and its ``sys.argv`` belongs to the
+kernel, so neither a plain ``python script.py`` nor ``argparse`` works as written):
+
+    import importlib.util, sys
+    path = "/kaggle/working/backend/scripts/ollama-kaggle-agent.py"
+    spec = importlib.util.spec_from_file_location("ollama_agent", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["ollama_agent"] = module      # dataclasses look the module up here
+    spec.loader.exec_module(module)
+    module.main(["--dry-run"])                # then module.main([]) for the real run
+
 Useful flags:
 
     --dry-run      print the resolved configuration and exit (no install, no tunnel)
@@ -749,6 +760,21 @@ def teardown() -> None:
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def notebook_argv() -> list[str]:
+    """Arguments for a notebook cell.
+
+    IPython starts the kernel with its own argv (``-f /tmp/ipykernel_launcher.py``),
+    so a plain ``parse_args(sys.argv[1:])`` dies with "unrecognized arguments" the
+    first time someone calls ``main()`` from a cell. A cell passes flags explicitly,
+    so the default there is "no flags".
+    """
+    launcher = " ".join(sys.argv[:2])
+    if "ipykernel" in launcher or "ipykernel_launcher" in launcher:
+        return []
+
+    return sys.argv[1:]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Ollama + ngrok for a coding agent")
     parser.add_argument("--dry-run", action="store_true", help="print the configuration and exit")
@@ -756,7 +782,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-pull", action="store_true", help="do not pull models")
     parser.add_argument("--json", action="store_true", help="print the handover as JSON")
     parser.add_argument("--stop", action="store_true", help="stop this session's ngrok and ollama")
-    args = parser.parse_args(argv)
+    args, unknown = parser.parse_known_args(argv if argv is not None else notebook_argv())
+    if unknown:
+        say(f"   ignoring unrecognised arguments: {' '.join(unknown)}")
 
     config = load_config()
 
