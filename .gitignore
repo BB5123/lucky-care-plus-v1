@@ -43,3 +43,7 @@ desktop.ini
 .phpunit.result.cache
 .phpunit.cache/
 coverage/
+
+# Python bytecode from the helper scripts
+__pycache__/
+*.pyc
