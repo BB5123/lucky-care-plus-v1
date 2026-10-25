@@ -115,7 +115,7 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | Lapse trigger | **manual, audited (2026-10-25)** - `retention:lapse` is the support entry point and `retention:advance` moves due accounts nightly. Billing (D5) does not exist yet, so nothing lapses automatically |
 | **Notices (30/7/1 day)** | **yes since 2026-10-25 (P3a)** - `retention:notices` sends in-app + email at day 30/7/1, idempotent through the delivery ledger |
 | **Export offer at lapse** | **yes since 2026-10-25 (P3b)** - `retention.export_offer` in-app when the account enters `read_only` |
-| **UI banner for non-active states** | **yes since 2026-10-26** - the web and mobile shells read the state and show it with a link to the export card (`FE5-T10/T11`, `RET-M01..M04`); the API's 409 remains the authority |
+| **UI banner for non-active states** | **yes since 2026-10-26** - the web and mobile shells read the state and show it with a link to the export card (`FE5-T10/T11`, `RET-M01..M07`); the API's 409 remains the authority |
 | **Cancellation choice screen** | **no** - needs a permission ID ("cancel my account") that the baseline does not have; waits for an owner-approved change record |
 | **Archive inventory** | **yes since 2026-10-26 (P4a)** - entering `archived` writes a hashed per-table inventory (`workspace_archive_manifests`), shown and re-verified by `retention:archive-manifest` (`RET-A01..A04`) |
 | **Encrypted archive bundle** | **yes since 2026-10-26 (P4b-1)** - the archived rows are written as NDJSON, gzipped and encrypted with `APP_KEY` on `RETENTION_ARCHIVE_DISK`; `retention:archive-drill` verifies the file, its hash, decryptability and the per-table counts (`RET-B01..B04`) |
@@ -273,7 +273,7 @@ state (`WorkspaceService.loadLifecycle()`), and the shell renders one banner for
 `workspaceRetentionProvider` and a banner above the tab shell; its one action switches to the family tab, where the
 data-export card lives (restoring is a support decision, so there is no restore button). An unknown state or a failed
 read shows no banner - the client never invents a state - and the server's 409/410 stays the authority: the banner
-explains the refusal, it does not replace it (`FE5-T10/T11`, `RET-M01..M04`).
+explains the refusal, it does not replace it (`FE5-T10/T11`, `RET-M01..M07`).
 
 **Still open for P3:** the cancellation choice screen (P3c). It needs a permission ID for "cancel my account" that the
 baseline catalog does not contain - `workspace.update` is configuration, not cancellation - so it waits for an
