@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/auth/auth_controller.dart';
 import '../../core/preferences/elder_mode.dart';
+import '../../core/workspace/retention_status.dart';
 import '../../design_system/tokens.dart';
 import '../notifications/notifications_controller.dart';
 import '../notifications/notifications_page.dart';
@@ -35,6 +36,10 @@ class AppShell extends ConsumerWidget {
     final int index = navigationShell.currentIndex;
     final int unread = ref.watch(unreadNotificationCountProvider);
     final bool elderMode = ref.watch(elderModeControllerProvider);
+    // Advisory only: an unknown state or a failed read is `none`, and the API
+    // still refuses writes with its 409/410.
+    final RetentionStatus retention =
+        ref.watch(workspaceRetentionProvider).value ?? RetentionStatus.none;
 
     return Scaffold(
       appBar: AppBar(
@@ -69,9 +74,7 @@ class AppShell extends ConsumerWidget {
                     PopupMenuItem<_ShellOverflowAction>(
                       value: _ShellOverflowAction.notifications,
                       child: Text(
-                        unread > 0
-                            ? 'การแจ้งเตือน ($unread)'
-                            : 'การแจ้งเตือน',
+                        unread > 0 ? 'การแจ้งเตือน ($unread)' : 'การแจ้งเตือน',
                       ),
                     ),
                     const PopupMenuItem<_ShellOverflowAction>(
@@ -104,7 +107,16 @@ class AppShell extends ConsumerWidget {
           ],
         ],
       ),
-      body: navigationShell,
+      body: Column(
+        children: <Widget>[
+          if (retention.isRestricted && retention.bannerTitle != null)
+            _RetentionBanner(
+              title: retention.bannerTitle!,
+              detail: retention.bannerDetail ?? '',
+            ),
+          Expanded(child: navigationShell),
+        ],
+      ),
       bottomNavigationBar: NavigationBar(
         key: navigationKey,
         selectedIndex: index,
@@ -154,6 +166,55 @@ class AppShell extends ConsumerWidget {
       showDragHandle: true,
       backgroundColor: AppColors.surfaceRaised,
       builder: (BuildContext context) => const _ElderModeSheet(),
+    );
+  }
+}
+
+/// The one-line account-state banner (P3/P4): read-only, archived or
+/// scheduled-deletion. It explains the state before the member tries a write;
+/// it never offers an action, because restoring is a support decision and the
+/// export screen lives under the family tab.
+class _RetentionBanner extends StatelessWidget {
+  const _RetentionBanner({required this.title, required this.detail});
+
+  final String title;
+  final String detail;
+
+  static const Key bannerKey = Key('retention-banner');
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: bannerKey,
+      width: double.infinity,
+      color: AppColors.warningSurface,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Icon(Icons.lock_clock, color: AppColors.warning),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.warning,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: const TextStyle(color: AppColors.textPrimary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
