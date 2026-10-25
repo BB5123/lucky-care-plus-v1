@@ -45,7 +45,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 54 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **110 merged PRs**, no open PRs.
+8 mobile feature folders, **111 merged PRs**, no open PRs.
 
 ---
 
@@ -243,14 +243,16 @@ permission change record.
 4. **Owner/deployment items:** archive-disk backup + key escrow (P4b-2 depends on them), the `BACKUP_ALERT_WEBHOOK`
    secret, S3/MinIO document mirroring, and D5 plan windows.
 
-**Verified at hand-off:** backend 485 passed / 2 skipped / 4,768 assertions · web 141 · mobile 132 · 110 merged PRs ·
+**Verified at hand-off:** backend 485 passed / 2 skipped / 4,768 assertions · web 141 · mobile 132 · 111 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · P4a/P4b-1
-archive inventory + encrypted bundle tested (RET-A01..A04, RET-B01..B04) · retention:status tested (RET-STAT01..05) · advance command + failure isolation tested (RET-ADV01..02) · weekly archive probe scheduled (RET-SCHED01) ·
+archive inventory + encrypted bundle tested (RET-A01..A04, RET-B01..B04) · retention:status tested (RET-STAT01..05) ·
+advance command + failure isolation tested (RET-ADV01..02) · weekly archive probe scheduled (RET-SCHED01) ·
 document backup tested (DOC-B01..B04) · APP_KEY fingerprint tested (KEY-T01..T03) · web banner (FE5-T10/T11) and
 mobile banner/provider (RET-M01..M07) tested · D2 `ai:ping` proven against the real gateway · malware scanning ON and
-EICAR-proven · TLS + `/ready` live in the `proxy` profile · the live stack was rebuilt from `main` on 2026-10-26 and
-`retention:status`, `retention:purge --dry-run`, `app:key-fingerprint` and `schedule:list` were re-verified there.
+EICAR-proven · TLS + `/ready` live in the `proxy` profile · the archive migrations were rolled back and re-applied on
+2026-10-26 (`down()` exercised); the live stack was rebuilt from `main` on 2026-10-26 and `retention:status`,
+`retention:purge --dry-run`, `app:key-fingerprint` and `schedule:list` were re-verified there.
 
 **Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
 second slice in the same context - that is what forced the hand-off this time.

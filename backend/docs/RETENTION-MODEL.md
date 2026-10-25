@@ -314,7 +314,9 @@ raw ciphertext contains neither the measurement value nor the person's name.
 
 `retention:archive-drill {workspace}` is the verification: file present, ciphertext hash equal to the manifest's,
 decryptable with the current `APP_KEY`, and the row count per table equal to the inventory. It exits non-zero on any
-mismatch, so an archive that was never verified is not reported as one that was (`RET-B01..B04`).
+mismatch, so an archive that was never verified is not reported as one that was (`RET-B01..B04`). The two migrations
+(`workspace_archive_manifests`, then its bundle columns) were rolled back and re-applied on the development database
+on 2026-10-26, so `down()` is exercised, not only written.
 
 **What P4b-1 does not do:** it does not restore rows, does not use a per-archive key, and does not delete the archive
 when the account is deleted. Those are P4b-2, and until they exist the final `scheduled_deletion -> deleted` arrow
