@@ -352,6 +352,20 @@ The compose PostgreSQL credentials (`luckycare` / `luckycare_dev`) and the
 runtime role password (`luckycare_app_dev`) are development defaults. Rotate
 them before a real deployment (section 10, items 4-5).
 
+**Verify the recovered key.** Encrypted columns (health notes, document paths
+and names) are unreadable without the `APP_KEY` that wrote them. After a
+restore, compare the key fingerprint with the value recorded when the key was
+escrowed - the command prints only a sha256, never the key:
+
+```bash
+docker compose --profile app exec -T app php artisan app:key-fingerprint
+# APP_KEY fingerprint (sha256) <64 hex characters>
+# cipher AES-256-CBC, key length 32
+```
+
+`--json` is available for a runbook script; `APP_PREVIOUS_KEYS` (rotation) gets
+one fingerprint per key.
+
 **Failure alerting.** Both backup workflows end with a step that posts one line
 (the workflow name and the run URL) to a webhook when `BACKUP_ALERT_WEBHOOK` is
 set as a repository secret. Without the secret the step is a no-op, so set it

@@ -38,14 +38,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **466 passed / 2 skipped / 4,689 assertions** (468 tests) |
+| backend `php artisan test` | **469 passed / 2 skipped / 4,698 assertions** (471 tests) |
 | web `npm test` | **140 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 52 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **97 merged PRs**, no open PRs.
+8 mobile feature folders, **98 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 468 (466 passed, 2 skipped)
+php artisan test                 # 471 (469 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -142,7 +142,9 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    database expects and **fails when a metadata row has no object**, and `documents:restore-drill` re-reads the
    archive against its manifest. Failure alerting is wired as an **optional** step: setting the
    `BACKUP_ALERT_WEBHOOK` repository secret posts one line with the run URL (the step is a no-op without it), and
-   the `::error::` annotations plus GitHub's failed-workflow notifications remain. Still **not** covered:
+   the `::error::` annotations plus GitHub's failed-workflow notifications remain. Key escrow is verifiable:
+   `php artisan app:key-fingerprint` prints a sha256 of `APP_KEY` (never the key) so a restored host can prove it
+   recovered the right key. Still **not** covered:
    S3/MinIO buckets (the command refuses a non-local driver; mirror the bucket instead), `.env`/`APP_KEY` escrow,
    off-site encryption and RPO/RTO - see `backend/docs/BACKUP-COVERAGE.md`.
 5. **Documents are scanned before they are stored** (since 2026-10-25). `DOCUMENTS_SCAN_REQUIRED`
@@ -233,7 +235,7 @@ P3c (the cancellation choice screen) is blocked on a permission change record.
 3. **P3c** once the owner approves a "cancel my account" permission change record.
 4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 466 passed / 2 skipped / 4,689 assertions · web 140 · mobile 125 · 97 merged PRs ·
+**Verified at hand-off:** backend 469 passed / 2 skipped / 4,698 assertions · web 140 · mobile 125 · 98 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · document
 backup tested (DOC-B01..B04) · web retention banner tested (FE5-T10/T11) · D2 `ai:ping` proven against the real
