@@ -45,7 +45,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **71 merged PRs**, no open PRs.
+8 mobile feature folders, **74 merged PRs**, no open PRs.
 
 ---
 
@@ -123,17 +123,12 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    150 ms / 40 queries, all inside the 800/800/300 ms budgets. See `backend/docs/PERFORMANCE.md`. It is
    single-process and sequential; a real concurrent load test against the deployed stack is still a
    pre-launch task and the numbers are not capacity evidence.
-4. **Backups**: both halves of the mutable state are now produced and drilled in CI. The database half is
-   `.github/workflows/backup.yml` -> `scripts/backup-dump.sh` (dump, verify readability, `.sha256`, prune)
-   -> `scripts/restore-drill.sh` (restore into a scratch DB, row counts, RLS probes); the **corpus half** is
-   `php artisan knowledge:backup` (archives the `knowledgedata` volume: `sources/*.json`, `health_kb.sqlite`,
-   `benchmark/`) -> `php artisan knowledge:restore-drill` (JSON, unique ids, SQLite `integrity_check`, index
-   counts, and that every `reviewed` source kept `reviewed_by`/`reviewed_at`). Both archives are uploaded as
-   one 7-day artifact and drilled again after download. **Honest note:** a 7-day workflow artifact is a
-   safety net, not a compliance backup - it lives in the CI system that produces it and is compressed, not
-   encrypted; off-site encrypted storage, RPO/RTO and key management stay with the deployment target.
-   Still **not** covered: object storage for uploaded documents, `.env`/secrets, and Redis (fine while the
-   queue is database-backed). The full table is `backend/docs/BACKUP-COVERAGE.md`.
+4. **Backups cover the database and the corpus, and both are proven restorable.** The nightly workflow dumps
+   PostgreSQL (row counts + RLS probes on the restored copy) and archives the knowledge corpus
+   (`knowledge:backup` -> `knowledge:restore-drill`: source JSON, unique ids, SQLite integrity, index counts,
+   review fields, membership), uploads both as one 7-day artifact and drills the downloaded copy. Still **not**
+   covered: uploaded document objects, `.env`/`APP_KEY` escrow, off-site encryption, RPO/RTO, and alerting on a
+   failed night - see `backend/docs/BACKUP-COVERAGE.md`.
 5. **Documents are unscanned by default.** The ClamAV adapter is wired and fail-closed
    (`backend/docs/MALWARE-SCANNING.md`), but `DOCUMENTS_SCAN_REQUIRED` is false and no deployment runs
    clamd yet; turning it on needs a shared unix socket plus the owner decision in D4.
@@ -169,7 +164,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | Knowledge review pack (generated) | `backend/docs/KNOWLEDGE-REVIEW-PACK.md` - regenerate with `php artisan knowledge:review-pack` |
 | RAG retrieval decision (lexical vs vector) | `backend/docs/RAG-VECTOR-OPTIONS.md` |
 | Local model evaluation (Pathumma/Kaggle) | `backend/docs/LOCAL-AI-PATHUMMA.md` |
-| Backup and restore | `backend/docs/QUALITY-SWEEP-2026-10-24.md`, `backend/docs/BACKUP-COVERAGE.md` (coverage table), `.github/workflows/backup.yml` (nightly producer), `.github/workflows/restore-drill.yml` (weekly drill) |
+| Backup and restore | `backend/docs/BACKUP-COVERAGE.md`, `backend/docs/QUALITY-SWEEP-2026-10-24.md`, `backend/docs/BACKUP-COVERAGE.md` (coverage table), `.github/workflows/backup.yml` (nightly producer), `.github/workflows/restore-drill.yml` (weekly drill) |
 | First overnight run | `MORNING-REPORT.md` |
 | Second overnight run (this one) | `NIGHT-REPORT-2026-10-25.md` |
 
