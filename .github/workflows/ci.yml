@@ -111,6 +111,26 @@ jobs:
       - name: Run test suite
         run: php artisan test
 
+      # Supply chain: a known-vulnerable dependency must fail the pull request, not
+      # be discovered after a deployment. `composer audit` exits non-zero on any
+      # advisory it knows about.
+      - name: Audit PHP dependencies
+        run: composer audit --no-interaction --abandoned=report
+
+      # Cheap, dependency-free secret scan: a key pasted into a tracked file is a
+      # realistic mistake (it happened in a chat transcript on 2026-10-24), and the
+      # history scan is done separately by the maintainer.
+      - name: Scan for committed secrets
+        working-directory: .
+        run: |
+          set -euo pipefail
+          patterns='sk_[A-Za-z0-9]{20,}|gsk_[A-Za-z0-9]{20,}|thk_[A-Za-z0-9]{20,}|sk-or-v1-[A-Za-z0-9]{20,}|BEGIN (RSA|OPENSSH|EC) PRIVATE KEY'
+          if git grep -nEI "$patterns" -- . ':!frontend/package-lock.json' ':!backend/composer.lock'; then
+            echo "::error::A secret-shaped string is committed. Rotate the key and remove it from history."
+            exit 1
+          fi
+          echo "No secret-shaped strings in tracked files."
+
   frontend:
     name: Frontend (Angular 22)
     runs-on: ubuntu-latest
@@ -139,6 +159,13 @@ jobs:
 
       - name: Run unit tests
         run: npm test
+
+      # Fails on high/critical advisories only; a moderate advisory in a build tool
+      # should not block a pull request, but a high one must. The vite override in
+      # package.json exists because @angular/build pins an affected 8.3.0 - see
+      # backend/docs/SECURITY-SWEEP-2026-10-25.md.
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=high
 
       - name: Build
         run: npm run build
