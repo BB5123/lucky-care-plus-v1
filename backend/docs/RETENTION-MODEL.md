@@ -113,7 +113,7 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | **Hard delete / compaction** | **yes since 2026-10-25** - `retention:compact` physically removes rows soft-deleted past the grace period (28 days, R8), audited and rehearsed on the live stack (`RET-C01..C08`) |
 | **The five states above** | **yes since 2026-10-25** - `workspaces.retention_state` + `WorkspaceLifecycle`; the state is enforced on every workspace route (`RET-S01..S08`, `RET-G01..G07`) |
 | Lapse trigger | **manual, audited (2026-10-25)** - `retention:lapse` is the support entry point and `retention:advance` moves due accounts nightly. Billing (D5) does not exist yet, so nothing lapses automatically |
-| **Notices (30/7/1 day)** | **no** |
+| **Notices (30/7/1 day)** | **yes since 2026-10-25 (P3a)** - `retention:notices` sends in-app + email at day 30/7/1, idempotent through the delivery ledger; the export push and the cancellation screen are still P3b/P3c |
 | **Archive store** | **no** |
 
 So until 2026-10-25 the product *hid* expired rows forever - the gap P1 closed. Rows are now removed from the
@@ -125,7 +125,7 @@ database, but they still live in backups for up to the backup window (the privac
 |---|---|---|---|
 | **P1** | `retention:compact --older-than=<grace>` : physical delete of rows already soft-deleted, audit row, legal hold respected, idempotent - **built and signed 2026-10-25 (R8: grace 28 days)** | ~1 day | "we actually delete" |
 | **P2** | `retention_state` column + the five states + the lapse trigger - **built 2026-10-25 (P2a; plan windows wait for D5)** | ~2 days | plan windows |
-| **P3** | Notices (email + in-app), export push, the cancellation choice screen | ~2 days | the notices and the choice |
+| **P3** | Notices (email + in-app), export push, the cancellation choice screen - **notices built 2026-10-25 (P3a); export push and the choice screen remain** | ~2 days | the notices and the choice |
 | **P4** | Archive store + restore action + access audit | ~3 days | the long windows |
 
 P1 is the honest minimum: without it, no wording of the privacy notice is true. **Do P1 before publishing the
@@ -227,8 +227,29 @@ Tests: `WIRE-T12` (due-soon reminders), `WIRE-T13` (a queued job is dropped), `R
 (escalation), `RET-T04b` (inactivity scan). Each test also proves the work happens once the account is restored again,
 so the state - not a broken fixture - is what suppressed it.
 
-Still open for P3/P4: the 30/7/1-day notices, the export push, the cancellation choice screen, and the separate archive
-store. Plan-specific windows wait for D5 (billing).
+### P3a: the 30/7/1-day notices (as built, 2026-10-25)
+
+`retention:notices` runs nightly at 04:20 UTC. For every workspace in `scheduled_deletion` it computes the calendar
+days left, picks the most urgent due notice (`retention.notice_1` / `_7` / `_30`), and dispatches it to every active
+member through the normal pipeline:
+
+- **in-app and email** (`channels: ['in_app', 'email']`): the email channel was added to the delivery ledger (new
+  check value) and to `EmailSender`, which renders only the retention templates and fails closed for anything else;
+- **no preference can suppress it**: an explicit `channels` option marks the dispatch as a legal notice, so
+  `channelEnabled()` is not consulted. A member who turned in-app off still gets the notice;
+- **reaches a lapsed account**: the job carries `reachLapsedAccounts: true`, the one documented exception to the P2b
+  delivery guard;
+- **idempotent through the ledger**: the key is template + workspace id as the subject, so a second run the same night
+  sends nothing. One notice per workspace per run: a missed night does not replay three mails at once.
+- **no PHI and no name**: the only placeholder is `days_left`; the email body says "บัญชีของท่าน" and the deadline.
+
+Tests: `RET-N01..N07` (`RetentionNoticeTest`): 30/7/1-day selection, in-app + email, idempotency, active workspace
+excluded, dry run writes nothing, a disabled preference is overridden, and a missing address marks only the email
+delivery failed (in-app still sent).
+
+**Still open for P3:** the export push (offering the export at lapse) and the cancellation choice screen (P3b/P3c).
+The email transport itself is deployment configuration (`MAIL_*`); with the default `log` mailer the notice is
+rendered and written to the log, which is why the test asserts the Mailable rather than an SMTP handshake.
 
 ## 9. Notice copy (Thai, for the privacy notice)
 

@@ -64,6 +64,9 @@ content, but this file is ASCII). Fill in at least:
 - `APP_URL` - the public `https://...` URL clients will call.
 - `DB_PASSWORD` - a strong password for `luckycare_app`.
 - `MAIL_*` - a real relay, or `MAIL_MAILER=log` for a staging install only.
+  Retention sends its 30/7/1-day deletion notices by email (`retention:notices`),
+  so a production install needs a working relay: with `log` the notice is only
+  written to the log, not delivered.
 - `REDIS_PASSWORD` if you enable Redis auth (the reference compose does not).
 
 The reference compose creates `luckycare_app` with the development password
@@ -243,8 +246,9 @@ docker compose --profile app exec -T scheduler pgrep -af 'artisan schedule:work'
 
 # Scheduler: print the schedule it is driving (same code the worker evaluates).
 docker compose --profile app exec -T scheduler php artisan schedule:list
-# Expected: retention:purge, retention:compact, retention:advance, retention:inactivity,
-# notifications:send-due, notifications:send-appointment-reminders, tasks:materialise, tasks:escalate.
+# Expected: retention:purge, retention:compact, retention:advance, retention:notices,
+# retention:inactivity, notifications:send-due, notifications:send-appointment-reminders,
+# tasks:materialise, tasks:escalate.
 
 # Non-root check: both workers must run as www-data, not root.
 docker compose --profile app exec -T queue id

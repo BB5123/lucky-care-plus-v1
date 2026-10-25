@@ -56,6 +56,20 @@ final class NotificationTemplateCatalog
             'required' => ['due_at'],
             'optional' => [],
         ],
+        // Legal retention notices (R7). `days_left` is a scalar count, not a
+        // date or a person: it is the only thing the in-app renderer needs.
+        'retention.notice_30' => [
+            'required' => ['days_left'],
+            'optional' => [],
+        ],
+        'retention.notice_7' => [
+            'required' => ['days_left'],
+            'optional' => [],
+        ],
+        'retention.notice_1' => [
+            'required' => ['days_left'],
+            'optional' => [],
+        ],
     ];
 
     /**
