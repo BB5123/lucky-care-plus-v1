@@ -18,6 +18,11 @@ interface NavItem {
   readonly label: string;
 }
 
+interface RetentionBanner {
+  readonly title: string;
+  readonly detail: string;
+}
+
 @Component({
   selector: 'app-shell',
   imports: [RouterLink, RouterLinkActive, RouterOutlet],
@@ -39,6 +44,35 @@ export class AppShell {
   protected readonly currentWorkspace = this.workspace.currentWorkspace;
   protected readonly unreadCount = this.notifications.unreadCount;
   protected readonly loggingOut = signal(false);
+
+  /**
+   * Advisory banner for a non-active account. The API refuses the write with a
+   * stable 409 either way; the banner exists so a member understands why before
+   * they try, and can jump to the export card.
+   */
+  protected readonly retentionBanner = computed<RetentionBanner | null>(() => {
+    switch (this.workspace.retentionState()) {
+      case 'read_only':
+        return {
+          title: 'บัญชีนี้อยู่ในสถานะอ่านอย่างเดียว',
+          detail:
+            'ยังอ่านและส่งออกข้อมูลได้ แต่การแก้ไขถูกปิดไว้จนกว่าจะกลับมาใช้งานต่อ กรุณาติดต่อผู้ดูแลหากต้องการกู้คืน',
+        };
+      case 'archived':
+        return {
+          title: 'บัญชีนี้ถูกเก็บถาวร',
+          detail:
+            'ข้อมูลไม่ถูกโหลดเข้าสู่แอปแล้ว ท่านยังส่งออกข้อมูลได้ และสามารถติดต่อผู้ดูแลเพื่อกู้คืนบัญชี',
+        };
+      case 'scheduled_deletion':
+        return {
+          title: 'บัญชีนี้อยู่ในคิวการลบ',
+          detail: 'กรุณาส่งออกข้อมูลที่ต้องการเก็บไว้ หรือติดต่อผู้ดูแลก่อนถึงกำหนดลบ',
+        };
+      default:
+        return null;
+    }
+  });
 
   /** The five IA destinations from .ai/MOBILE_DESIGN.md §3. */
   protected readonly navItems: readonly NavItem[] = [
@@ -65,9 +99,10 @@ export class AppShell {
   constructor() {
     // Boot the workspace context after authentication. The dashboard shows the
     // invite empty-state; this call only makes the shell header aware of it.
-    void this.workspace.load().catch(() => {
-      // The dashboard surfaces a retryable error itself.
-    });
+    void this.workspace.load().then(
+      () => this.workspace.loadLifecycle(),
+      () => undefined,
+    );
 
     // Refresh the badge after each navigation, never on a timer (no polling).
     this.navigationSubscription = this.router.events
@@ -86,8 +121,8 @@ export class AppShell {
   protected changeWorkspace(event: Event): void {
     const target = event.target as HTMLSelectElement | null;
 
-    if (target !== null) {
-      this.workspace.select(target.value);
+    if (target !== null && this.workspace.select(target.value)) {
+      void this.workspace.loadLifecycle();
     }
   }
 

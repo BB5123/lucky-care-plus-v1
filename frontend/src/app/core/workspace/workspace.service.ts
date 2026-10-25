@@ -8,6 +8,26 @@ import { AuthService } from '../auth/auth.service';
 
 const WORKSPACE_STORAGE_KEY = 'luckycare.workspace';
 
+/**
+ * The five account states of `RETENTION-MODEL.md` §2, as the API reports them
+ * on `GET /workspaces/{id}`. Only `active` accepts writes; the other four are
+ * surfaced as a banner instead of being guessed at from error responses.
+ */
+export type RetentionState = 'active' | 'read_only' | 'archived' | 'scheduled_deletion' | 'deleted';
+
+const RETENTION_STATES: readonly RetentionState[] = [
+  'active',
+  'read_only',
+  'archived',
+  'scheduled_deletion',
+  'deleted',
+];
+
+export interface WorkspaceLifecycle {
+  readonly retention_state: RetentionState;
+  readonly retention_expires_at: string | null;
+}
+
 /** One row of `GET /workspaces/{workspace}/members`. */
 export interface WorkspaceMember {
   readonly user_id: number;
@@ -36,6 +56,30 @@ function readMember(value: unknown): WorkspaceMember | null {
     name: typeof value['name'] === 'string' ? value['name'] : null,
     role: typeof value['role'] === 'string' ? value['role'] : 'member',
     status: typeof value['status'] === 'string' ? value['status'] : 'active',
+  };
+}
+
+/**
+ * Reads the retention state, discarding anything the API did not declare.
+ * An unknown value never becomes a guessed state - it becomes "unknown", which
+ * the UI treats as no banner and the server still enforces on every route.
+ */
+function readLifecycle(value: unknown): WorkspaceLifecycle | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const state = value['retention_state'];
+
+  if (typeof state !== 'string' || !(RETENTION_STATES as readonly string[]).includes(state)) {
+    return null;
+  }
+
+  const expires = value['retention_expires_at'];
+
+  return {
+    retention_state: state as RetentionState,
+    retention_expires_at: typeof expires === 'string' ? expires : null,
   };
 }
 
@@ -79,11 +123,14 @@ export class WorkspaceService {
   private readonly workspacesState = signal<readonly MembershipSummary[]>([]);
   private readonly currentState = signal<MembershipSummary | null>(null);
   private readonly loadingState = signal(false);
+  private readonly lifecycleState = signal<WorkspaceLifecycle | null>(null);
   private readonly membersState = signal<readonly WorkspaceMember[]>([]);
   private readonly membersLoadingState = signal(false);
   private readonly membersErrorState = signal<string | null>(null);
 
   private inFlight: Promise<void> | null = null;
+  private lifecycleInFlight: Promise<void> | null = null;
+  private lifecycleWorkspaceId: string | null = null;
   private membersInFlight: Promise<void> | null = null;
   private membersWorkspaceId: string | null = null;
   private loadedForUserId: string | null = null;
@@ -95,6 +142,51 @@ export class WorkspaceService {
   readonly currentWorkspace = this.currentState.asReadonly();
   readonly loading = this.loadingState.asReadonly();
   readonly hasWorkspace = computed(() => this.currentState() !== null);
+
+  /** The account lifecycle of the selected workspace, when it is known. */
+  readonly lifecycle = this.lifecycleState.asReadonly();
+  readonly retentionState = computed<RetentionState | null>(
+    () => this.lifecycleState()?.retention_state ?? null,
+  );
+
+  /**
+   * True when the account is not `active`. The banner is advisory: the API
+   * refuses writes with a stable 409 code regardless of what this signal says.
+   */
+  readonly isRestricted = computed(() => {
+    const state = this.retentionState();
+
+    return state !== null && state !== 'active';
+  });
+
+  /**
+   * Load the account state for the selected workspace.
+   *
+   * `GET /workspaces/{id}` is allowed in every state except `deleted`, so this
+   * succeeds exactly when the state should be shown. A failure leaves the
+   * lifecycle unknown (no banner); it never blocks the app, because the server
+   * gate is the authority on what a non-active account may do.
+   */
+  async loadLifecycle(): Promise<void> {
+    const workspaceId = this.currentState()?.workspace_id ?? null;
+
+    if (workspaceId === null) {
+      this.lifecycleState.set(null);
+      return;
+    }
+
+    if (this.lifecycleWorkspaceId === workspaceId) {
+      return;
+    }
+
+    if (this.lifecycleInFlight !== null) {
+      return this.lifecycleInFlight;
+    }
+
+    this.lifecycleInFlight = this.fetchLifecycle(workspaceId);
+
+    return this.lifecycleInFlight;
+  }
 
   /**
    * Active members of the current workspace, loaded only when a screen needs
@@ -176,6 +268,10 @@ export class WorkspaceService {
     this.currentState.set(next);
     writeStoredWorkspaceId(workspaceId);
     this.clearMembers();
+    // The state belongs to the selection, not to the user: drop the previous
+    // workspace's banner. The caller decides when to read the new one (the
+    // shell does it after a switch; a page-level select may not need it).
+    this.clearLifecycle();
 
     return true;
   }
@@ -187,6 +283,7 @@ export class WorkspaceService {
     this.inFlight = null;
     this.loadedForUserId = null;
     this.clearMembers();
+    this.clearLifecycle();
     removeStoredWorkspaceId();
   }
 
@@ -223,6 +320,37 @@ export class WorkspaceService {
     this.membersErrorState.set(null);
   }
 
+  private clearLifecycle(): void {
+    this.lifecycleInFlight = null;
+    this.lifecycleWorkspaceId = null;
+    this.lifecycleState.set(null);
+  }
+
+  private async fetchLifecycle(workspaceId: string): Promise<void> {
+    try {
+      const response = await firstValueFrom(
+        this.http.get<{ readonly data?: unknown }>(
+          `${this.baseUrl}/workspaces/${encodeURIComponent(workspaceId)}`,
+        ),
+      );
+
+      // A late response for a workspace the user already left must not
+      // overwrite the current selection's state.
+      if (this.currentState()?.workspace_id !== workspaceId) {
+        return;
+      }
+
+      this.lifecycleState.set(readLifecycle(response.data));
+      this.lifecycleWorkspaceId = workspaceId;
+    } catch {
+      if (this.currentState()?.workspace_id === workspaceId) {
+        this.lifecycleState.set(null);
+      }
+    } finally {
+      this.lifecycleInFlight = null;
+    }
+  }
+
   private async fetch(): Promise<void> {
     this.loadingState.set(true);
 
@@ -243,6 +371,12 @@ export class WorkspaceService {
     const active = memberships.filter((item) => item.status === 'active');
     const storedId = readStoredWorkspaceId();
     const chosen = active.find((item) => item.workspace_id === storedId) ?? active[0] ?? null;
+
+    // Only drop the lifecycle when the selection actually changed; a refresh of
+    // the same workspace must keep its banner.
+    if (this.lifecycleWorkspaceId !== null && this.lifecycleWorkspaceId !== chosen?.workspace_id) {
+      this.clearLifecycle();
+    }
 
     this.currentState.set(chosen);
 

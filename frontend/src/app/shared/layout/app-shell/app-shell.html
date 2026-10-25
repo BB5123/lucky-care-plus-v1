@@ -105,6 +105,24 @@
     </div>
   </header>
 
+  @if (retentionBanner(); as banner) {
+    <div
+      class="border-b border-line bg-surface-muted px-4 py-3 text-sm text-ink"
+      role="status"
+      data-testid="retention-banner"
+    >
+      <div
+        class="mx-auto flex max-w-6xl flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          <p class="font-medium">{{ banner.title }}</p>
+          <p class="text-ink-muted">{{ banner.detail }}</p>
+        </div>
+        <a class="link shrink-0" routerLink="/family">ส่งออกข้อมูล / จัดการบัญชี</a>
+      </div>
+    </div>
+  }
+
   <div class="mx-auto flex max-w-6xl flex-col md:flex-row">
     <aside
       class="border-b border-line bg-white md:min-h-[calc(100dvh-48px)] md:w-[240px] md:border-r md:border-b-0"

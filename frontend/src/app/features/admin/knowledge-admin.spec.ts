@@ -73,6 +73,8 @@ function workspaceStub(): Partial<WorkspaceService> {
   return {
     activeWorkspaces: workspaces.asReadonly(),
     currentWorkspace: current.asReadonly(),
+    retentionState: signal(null).asReadonly(),
+    loadLifecycle: () => Promise.resolve(),
     load: () => Promise.resolve(),
     select: () => true,
     reset: () => undefined,
