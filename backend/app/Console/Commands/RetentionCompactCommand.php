@@ -15,6 +15,10 @@ use Throwable;
  * two actions run on different clocks and an operator must be able to run one
  * without the other.
  *
+ * The grace is a policy number (`retention.compact_grace_days`, 28 days as
+ * signed in RETENTION-MODEL.md R8), not a CLI convenience: `--older-than` is
+ * for a rehearsal or a one-off, while the scheduled run uses the policy value.
+ *
  * Exit code is non-zero for a real failure (invalid input, database or policy
  * error) and also when an object-backed row could not be removed, because that
  * is a storage incident the next run has to be paged for.
@@ -23,7 +27,7 @@ final class RetentionCompactCommand extends Command
 {
     protected $signature = 'retention:compact
         {--type= : Compact a single retention type instead of every type}
-        {--older-than=30 : Days a row must have been soft-deleted before it is physically removed}
+        {--older-than= : Grace in days; defaults to retention.compact_grace_days (28)}
         {--limit=500 : Maximum rows per batch}
         {--dry-run : Report what would be compacted without deleting anything}';
 
@@ -31,13 +35,19 @@ final class RetentionCompactCommand extends Command
 
     public function handle(PurgeService $purge): int
     {
-        $graceDays = filter_var(
-            $this->option('older-than'),
-            FILTER_VALIDATE_INT,
-            ['options' => ['min_range' => 1]],
-        );
+        $requestedGrace = $this->option('older-than');
 
-        if ($graceDays === false) {
+        if ($requestedGrace === null || $requestedGrace === '') {
+            $graceDays = (int) config('retention.compact_grace_days', 28);
+        } else {
+            $graceDays = filter_var(
+                $requestedGrace,
+                FILTER_VALIDATE_INT,
+                ['options' => ['min_range' => 1]],
+            );
+        }
+
+        if ($graceDays === false || $graceDays < 1) {
             $this->error('The --older-than option must be a whole number of days, at least 1.');
 
             return self::FAILURE;

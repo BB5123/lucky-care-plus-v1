@@ -17,6 +17,8 @@ Schedule::command('retention:purge')
 // P1 (RETENTION-MODEL.md §8): physical deletion runs on its own clock - a row
 // must have been soft-deleted for the grace period before it is removed - so
 // it runs after the purge and never compacts the same night's soft deletes.
+// The grace itself is policy (`retention.compact_grace_days`, 28 days, R8), not
+// an argument here: the settlement must be the same every night.
 Schedule::command('retention:compact')
     ->dailyAt('03:20')
     ->timezone('UTC')

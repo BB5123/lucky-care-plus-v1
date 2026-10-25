@@ -110,7 +110,7 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | Per-tenant override within bounds | **yes** (`RET-T03`) |
 | Idempotent re-run | **yes** (`RET-T07`) |
 | Export for the member | **yes** (data export, web + mobile) |
-| **Hard delete / compaction** | **yes since 2026-10-25** - `retention:compact` physically removes rows soft-deleted past the grace period, audited and rehearsed on the live stack (`RET-C01..C07`) |
+| **Hard delete / compaction** | **yes since 2026-10-25** - `retention:compact` physically removes rows soft-deleted past the grace period (28 days, R8), audited and rehearsed on the live stack (`RET-C01..C08`) |
 | **The five states above** | **no** - there is only "purged or not" |
 | **Notices (30/7/1 day)** | **no** |
 | **Archive store** | **no** |
@@ -122,7 +122,7 @@ database, but they still live in backups for up to the backup window (the privac
 
 | Phase | Work | Effort | Unblocks |
 |---|---|---|---|
-| **P1** | `retention:compact --older-than=<grace>` : physical delete of rows already soft-deleted, audit row, legal hold respected, idempotent - **built 2026-10-25** | ~1 day | "we actually delete" |
+| **P1** | `retention:compact --older-than=<grace>` : physical delete of rows already soft-deleted, audit row, legal hold respected, idempotent - **built and signed 2026-10-25 (R8: grace 28 days)** | ~1 day | "we actually delete" |
 | **P2** | `retention_state` column + the five states + the lapse trigger | ~2 days | plan windows |
 | **P3** | Notices (email + in-app), export push, the cancellation choice screen | ~2 days | the notices and the choice |
 | **P4** | Archive store + restore action + access audit | ~3 days | the long windows |
@@ -134,9 +134,10 @@ notice**, then P2-P4 behind their own review.
 
 `PurgeService::compactBatch(string $type, int $graceDays, int $limit = 500): array` returns
 `['compacted' => n, 'held' => n, 'skipped' => ?string, 'evaluated' => n, 'dry_run' => bool]`; `compactAll()` fans a
-batch out over every tenant/workspace, and `retention:compact {--type=} {--older-than=30} {--limit=500} {--dry-run}`
-drives it. The scheduler runs it at 03:20 UTC, after the 03:00 purge, so the same night's soft deletes can never be
-compacted by accident.
+batch out over every tenant/workspace, and `retention:compact {--type=} {--older-than=} {--limit=500} {--dry-run}`
+drives it. The grace is the policy value `retention.compact_grace_days` (28 days, R8); `--older-than` exists for a
+rehearsal or a one-off, and when it is omitted the command uses the policy. The scheduler runs it at 03:20 UTC,
+after the 03:00 purge, so the same night's soft deletes can never be compacted by accident.
 
 Three details differ from the sketch above, each for a reason:
 
@@ -156,11 +157,11 @@ Three details differ from the sketch above, each for a reason:
 Every skip that never started (`not_yet_implemented`, `table_not_present`, `no_soft_deletes`) writes no audit row,
 exactly like a skipped purge batch; a batch that was blocked by a hold is audited with its `held` count.
 
-Tests are `RET-C01..C07` in `backend/tests/Feature/Retention/RetentionCompactionTest.php`: inside the grace window
+Tests are `RET-C01..C08` in `backend/tests/Feature/Retention/RetentionCompactionTest.php`: inside the grace window
 nothing is removed; past it the row is physically gone and one `retention.compact` audit row is written; a profile
 hold and a workspace-wide hold both block it; a second run removes nothing; the dry-run switch removes nothing; a
-document object is deleted before its metadata row; a failed object delete keeps the row; and a batch never touches
-another workspace's rows (RLS, F-09).
+document object is deleted before its metadata row; a failed object delete keeps the row; a batch never touches
+another workspace's rows (RLS, F-09); and the scheduled run uses the signed 28-day grace, not a hard-coded argument.
 
 ## 9. Notice copy (Thai, for the privacy notice)
 
@@ -173,23 +174,21 @@ another workspace's rows (RLS, F-09).
 
 Every sentence above is a promise the system must keep. P1 is what makes the last sentence about deletion true.
 
-### Open timing question (R3): "within 30 days" vs the 30-day grace
+### Timing question: resolved 2026-10-25 (R8 - grace 28 days)
 
 The nightly jobs run at 03:00 (purge - sets `deleted_at`) and 03:20 (compaction) UTC. For a row whose retention
 period ends at time E:
 
 1. the purge soft-deletes it at the next 03:00, up to 24 h after E;
-2. the compaction removes it at the first 03:20 that is at least `--older-than` after `deleted_at`, up to 24 h after
+2. the compaction removes it at the first 03:20 that is at least the grace after `deleted_at`, up to 24 h after
    that boundary.
 
-With the shipped grace of 30 days, physical deletion happens **30 to 32 days after E**, while the third sentence
-promises "ภายใน 30 วันหลังสิ้นสุดระยะเวลา" (within 30 days). Before the notice is published, one of these must change
-(the numbers are R3, the owner's decision):
+With the original 30-day grace that came to **30 to 32 days after E**, while the third sentence promises
+"ภายใน 30 วันหลังสิ้นสุดระยะเวลา" (within 30 days). The owner chose **grace 28 days** (R8), so the worst case is
+24 h + 28 d + 24 h = **exactly 30 days** and the sentence stays true as written. The value lives in
+`config/retention.php` (`compact_grace_days`), not in the schedule, and `RET-C08` asserts the command uses it.
 
-- **grace 28** (or lower): worst case is exactly E + 30 days, so the notice stays true as written; or
-- **reword** the notice to "ภายใน 45 วัน" and keep the 30-day grace, which leaves room for a recovery request.
-
-Either way the backup sentence is separate and already says the copies can lag by up to 7 days.
+The backup sentence is separate and already says the copies can lag by up to 7 days.
 
 ## 10. PDPA mapping
 
@@ -205,12 +204,13 @@ Either way the backup sentence is separate and already says the copies can lag b
 
 | # | Decision | Answer | Date |
 |---|---|---|---|
-| R1 | The five states and the arrows between them | | |
-| R2 | Plan windows in §3 (including Free-with-data = 12 months) | | |
-| R3 | Case 2 (death) is manual, never automatic | | |
-| R4 | Free account without health data deletes after 60 days | | |
-| R5 | `audit_*` stays out of scope forever | | |
-| R6 | P1 (hard delete) ships before the notice is published | | |
-| R7 | Archive notices at 30/7/1 days, delivered by email and in-app | | |
+| R1 | The five states and the arrows between them | approved | 2026-10-25 |
+| R2 | Plan windows in §3 (including Free-with-data = 12 months) | approved | 2026-10-25 |
+| R3 | Case 2 (death) is manual, never automatic | approved | 2026-10-25 |
+| R4 | Free account without health data deletes after 60 days | approved | 2026-10-25 |
+| R5 | `audit_*` stays out of scope forever | approved | 2026-10-25 |
+| R6 | P1 (hard delete) ships before the notice is published | approved - P1 built 2026-10-25 | 2026-10-25 |
+| R7 | Archive notices at 30/7/1 days, delivered by email and in-app | approved | 2026-10-25 |
+| R8 | Grace before physical deletion, so the notice's "within 30 days" is true | **28 days** (`retention.compact_grace_days`) | 2026-10-25 |
 
-**Signed off by:** ____________ (owner) · **Date:** ____________
+**Signed off by:** product owner (recorded from the 2026-10-25 session) · **Date:** 2026-10-25

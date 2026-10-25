@@ -25,7 +25,7 @@ use Tests\Concerns\CreatesWorkspaces;
 use Tests\TestCase;
 
 /**
- * RET-C01..C06 — physical deletion of already soft-deleted rows (P1).
+ * RET-C01..C08 — physical deletion of already soft-deleted rows (P1).
  *
  * The purge only hides data; these tests prove that the compaction pass
  * removes it, respects holds and the dry-run switch, keeps its audit trail and
@@ -343,6 +343,24 @@ class RetentionCompactionTest extends TestCase
 
         $this->assertSame(1, $other['compacted']);
         $this->assertDatabaseMissing('health_measurements', ['id' => $otherMeasurement->id]);
+    }
+
+    public function test_ret_c08_the_command_uses_the_signed_grace_policy(): void
+    {
+        config(['retention.dry_run' => false]);
+
+        // The policy number is signed as R8 in RETENTION-MODEL.md: 28 days, so
+        // purge lag + grace + compaction lag stays inside the notice's 30 days.
+        $this->assertSame(28, (int) config('retention.compact_grace_days'));
+
+        $inside = $this->measurement(now()->subMonths(61), now()->subDays(27));
+        $outside = $this->measurement(now()->subMonths(61), now()->subDays(29));
+
+        // No --older-than: the scheduled run must use the policy value.
+        $this->artisan('retention:compact')->assertSuccessful();
+
+        $this->assertDatabaseMissing('health_measurements', ['id' => $outside->id]);
+        $this->assertSoftDeleted('health_measurements', ['id' => $inside->id]);
     }
 
     private function measurement(CarbonInterface $recordedAt, ?CarbonInterface $deletedAt = null): HealthMeasurement

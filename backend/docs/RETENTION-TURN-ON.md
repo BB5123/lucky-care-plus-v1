@@ -37,10 +37,11 @@ only sets `deleted_at`. Tables without soft deletes are removed with a real `DEL
 hard-delete or compaction step anywhere in the codebase (`grep forceDelete` found nothing).
 
 That is now the `retention:compact` pass (`RETENTION-MODEL.md` section 8, P1, built 2026-10-25). It physically removes
-rows that have been soft-deleted for at least the grace period (default 30 days), writes one `retention.compact`
-audit row per batch, respects legal holds, deletes a document object before its metadata row, and is gated by the
-same `RETENTION_DRY_RUN` switch. **The privacy notice may describe "deletion" only once that pass runs with
-`RETENTION_DRY_RUN=false`** - which is still not the case in this repository.
+rows that have been soft-deleted for at least the grace period (28 days, R8, `retention.compact_grace_days`), writes
+one `retention.compact` audit row per batch, respects legal holds, deletes a document object before its metadata row,
+and is gated by the same `RETENTION_DRY_RUN` switch. **The privacy notice may describe "deletion" only once that pass
+runs with `RETENTION_DRY_RUN=false`** - which is still not the case in this repository: the flag stays `true` in
+`.env`/`config` on purpose, and turning it on is a deployment action (step 6 below).
 
 ## Order of operations
 
@@ -63,11 +64,11 @@ same `RETENTION_DRY_RUN` switch. **The privacy notice may describe "deletion" on
    ```
 5. **Compact that batch**, first as a dry run, then for real - one type, small batch:
    ```bash
-   php artisan retention:compact --type=health_measurements --older-than=30 --dry-run
-   RETENTION_DRY_RUN=false php artisan retention:compact --type=health_measurements --older-than=30 --limit=100
+   php artisan retention:compact --type=health_measurements --dry-run
+   RETENTION_DRY_RUN=false php artisan retention:compact --type=health_measurements --limit=100
    ```
-   Use `--older-than=1` only to prove the path on a synthetic row soft-deleted yesterday; the deployment value is
-   30 days. Re-run it and expect `0 eligible`.
+   Without `--older-than` the command uses the signed policy (28 days, R8). Use `--older-than=1` only to prove the
+   path on a synthetic row soft-deleted yesterday. Re-run it and expect `0 eligible`.
 6. Only after both are clean, set `RETENTION_DRY_RUN=false` for the deployment and let the scheduler own it.
    Check the scheduler is running: `docker compose ps scheduler` (the `app` profile starts it) and that
    `schedule:list` shows `retention:purge` (03:00 UTC) and `retention:compact` (03:20 UTC).
@@ -98,7 +99,9 @@ project has consistently refused to accept.
 ## Compaction: rehearsed end to end on 2026-10-25 (live stack, synthetic rows)
 
 Rows were inserted as the database superuser (RLS hides them from the app otherwise) into the demo workspace, with
-`deleted_at` set to controlled ages. The `app` image was rebuilt first, so the container ran the branch's code.
+`deleted_at` set to controlled ages. The `app` image was rebuilt first, so the container ran the branch's code. The
+run used the then-default grace of 30 days; the signed policy (R8) is **28 days**, so `--older-than` is no longer
+needed for a real run - the numbers below are otherwise unchanged.
 
 | Step | Expected | Observed |
 |---|---|---|
