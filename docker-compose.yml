@@ -18,10 +18,20 @@ x-app-environment: &app-environment
   REDIS_HOST: redis
   REDIS_PORT: "6379"
 
+# Bounded log retention for every container. `docker compose logs` is the only
+# log store in the reference stack, so a laptop or a small host must not let a
+# noisy process fill the disk. See backend/docs/DEPLOYMENT.md section 15.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16-alpine
     container_name: luckycare-postgres
+    logging: *default-logging
     environment:
       POSTGRES_DB: lucky_care_plus
       POSTGRES_USER: luckycare
@@ -40,6 +50,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: luckycare-redis
+    logging: *default-logging
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6380:6379"
@@ -58,6 +69,7 @@ services:
     profiles: ["storage"]
     image: quay.io/minio/minio:latest
     container_name: luckycare-minio
+    logging: *default-logging
     command: server /data --console-address ":9003"
     environment:
       MINIO_ROOT_USER: luckycare
@@ -79,6 +91,7 @@ services:
     profiles: ["scan"]
     image: clamav/clamav:stable
     container_name: luckycare-clamav
+    logging: *default-logging
     ports:
       - "3310:3310"
     volumes:
@@ -106,6 +119,7 @@ services:
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
+    logging: *default-logging
     env_file:
       - path: ./backend/.env
         required: false
@@ -127,6 +141,7 @@ services:
     image: nginx:1.27-alpine
     container_name: luckycare-web
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8080:80"
     volumes:
@@ -141,6 +156,44 @@ services:
       retries: 3
       start_period: 15s
 
+  # TLS terminator. Additive and profile-gated like `app` and `scan`:
+  #   docker compose --profile app --profile proxy up -d --build
+  #
+  # Local mode (default) uses Caddy's internal CA and host port 8443, plus 8088
+  # for the HTTP->HTTPS redirect, so the whole TLS path can be exercised without
+  # a domain. (8081 is deliberately avoided: it collides with other local
+  # projects often enough to be a nuisance.) Domain mode is selected
+  # with APP_DOMAIN plus the snippet/port overrides in the comment below:
+  #   APP_DOMAIN=api.example.com
+  #   CADDY_TLS_SNIPPET=tls_domain
+  #   CADDY_HSTS_SNIPPET=hsts
+  #   CADDY_REDIRECT_TARGET=https://api.example.com
+  #   CADDY_HTTP_PORT=80
+  #   CADDY_HTTPS_PORT=443
+  # The `web` service keeps its 8080 plain port for local debugging; the proxy
+  # is the only public listener in a real deployment.
+  proxy:
+    profiles: ["proxy"]
+    image: caddy:2-alpine
+    container_name: luckycare-proxy
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "${CADDY_HTTP_PORT:-8088}:80"
+      - "${CADDY_HTTPS_PORT:-8443}:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+      CADDY_TLS_SNIPPET: ${CADDY_TLS_SNIPPET:-tls_local}
+      CADDY_HSTS_SNIPPET: ${CADDY_HSTS_SNIPPET:-no_hsts}
+      CADDY_REDIRECT_TARGET: ${CADDY_REDIRECT_TARGET:-https://localhost:8443}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      web:
+        condition: service_healthy
+
   queue:
     profiles: ["app"]
     # Same tag as `app`; the build happens once in the `app` service.
@@ -148,6 +201,7 @@ services:
     container_name: luckycare-queue
     restart: unless-stopped
     init: true
+    logging: *default-logging
     # A graceful stop lets the job that is already running finish (the worker
     # timeout is 120s). Docker kills the worker after this grace period.
     stop_grace_period: 130s
@@ -178,6 +232,7 @@ services:
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
+    logging: *default-logging
     command: ["php", "artisan", "schedule:work"]
     env_file:
       - path: ./backend/.env
@@ -204,6 +259,10 @@ volumes:
   clamavdata:
   appstorage:
   applogs:
+  # Caddy's internal CA and issued certificates. Local mode regenerates the CA
+  # if this volume is removed; domain mode re-issues on the next start.
+  caddydata:
+  caddyconfig:
   # Knowledge corpus + SQLite index. Mutable review decisions live here, so the
   # image only ships a seed (database/knowledge-seed) that is copied once on
   # first boot. `docker compose down -v` destroys every review decision.

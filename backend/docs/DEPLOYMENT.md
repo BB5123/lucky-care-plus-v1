@@ -11,12 +11,15 @@ Relevant files:
 | `backend/Dockerfile` | One image for `app` (php-fpm), `queue`, `scheduler`. |
 | `backend/Dockerfile.dockerignore` | Keeps `.env`, `vendor/`, `storage/` out of the image. |
 | `backend/.env.production.example` | Every variable, with production-safe defaults. |
-| `docker/nginx.conf` | Nginx front door for the `web` service. |
-| `docker-compose.yml` | `app` profile (app, web, queue, scheduler), infra unchanged. |
+| `docker/nginx.conf` | Nginx front door for the `web` service (edge rate limits). |
+| `docker/caddy/Caddyfile` | Optional TLS terminator for the `proxy` profile. |
+| `docker-compose.yml` | `app` profile (app, web, queue, scheduler), `proxy` profile, infra unchanged. |
 | `.github/workflows/ci.yml` | `Image` job: a broken Dockerfile fails a pull request. |
 
-The stack does **not** terminate TLS. Run it behind a TLS terminator (Caddy,
-Traefik, nginx on the host, or a cloud load balancer) that forwards to port 8080.
+The default `app` profile serves plain HTTP on `:8080`. The additive `proxy`
+profile puts Caddy in front of `web`, terminates TLS, and serves HTTPS on `:443`
+or the local-mode host port `:8443` (section 12). Run it in a real deployment;
+keep `web:8080` for local debugging only.
 
 ---
 
@@ -27,8 +30,11 @@ Traefik, nginx on the host, or a cloud load balancer) that forwards to port 8080
 - **4 GB RAM** minimum for the host (Postgres, Redis, php-fpm, nginx and one
   queue worker). Add Redis/DB headroom for a real workload.
 - 10 GB free disk for images, the Postgres volume, and document storage.
-- A DNS name and a **TLS terminator** in front of `http://<host>:8080`. The
-  compose stack listens on plain HTTP only.
+- A DNS name and a **TLS terminator** in front of the API. The optional `proxy`
+  profile (section 12) provides one; alternatively use your own load balancer in
+  front of `http://<host>:8080`. The `app` profile alone listens on plain HTTP.
+- Host ports `8080` (web, debug only) and, when the `proxy` profile is enabled,
+  `8443` (local TLS) or `80`/`443` (domain TLS).
 - Outbound HTTPS during the first install (Docker Hub, Packagist, Alpine
   packages). The running stack does not need internet unless AI is enabled.
 - Git and a checkout of this repository on the host.
@@ -103,7 +109,8 @@ docker compose --profile app ps
 Expected: `luckycare-app`, `luckycare-web`, `luckycare-queue` and
 `luckycare-scheduler` are `Up (healthy)`. `postgres` and `redis` are healthy.
 The `app`, `queue` and `scheduler` healthchecks boot Laravel and call `GET /up`;
-`web` checks the same route through nginx.
+`web` checks the same route through nginx. Adding `--profile proxy` starts
+`luckycare-proxy` as well (section 2.6).
 
 On a completely fresh database the queue worker and the scheduled commands may
 log "relation jobs does not exist" and restart until step 2.4 runs. That is
@@ -154,16 +161,55 @@ curl -fsS -X POST http://localhost:8080/api/v1/workspaces \
 ### 2.5 Verify the API is up
 
 ```bash
-curl -fsS -o /dev/null -w 'GET /up -> %{http_code}\n' http://localhost:8080/up
+curl -fsS -o /dev/null -w 'GET /up    -> %{http_code}\n' http://localhost:8080/up
+curl -fsS -o /dev/null -w 'GET /ready -> %{http_code}\n' http://localhost:8080/ready
 ```
 
-Expected: `GET /up -> 200`. `/up` is the Laravel health route registered in
+Expected: both `200`. `/up` is the Laravel liveness route registered in
 `backend/bootstrap/app.php`; it does not touch the database, so a 200 proves the
-HTTP path and the application boot, not schema state (section 4 checks that).
+HTTP path and the application boot, not schema state. `/ready` additionally
+proves the database answers `select 1` and the cache/Redis dependency answers
+`PING` (section 16). A `503` names the failed dependency in the JSON body.
 
-If you terminate TLS, the same request through the terminator must return 200.
+If you terminate TLS, the same requests through the terminator must return 200.
 Set `APP_URL` to the external HTTPS URL so signed document/export links use the
-public host.
+public host, and set `FORCE_HTTPS=true` once the proxy is the only public path
+(section 13).
+
+### 2.6 Enable TLS (optional `proxy` profile)
+
+**Local mode** uses Caddy's internal CA, so it needs no domain and no DNS. It
+listens on host port `8443`:
+
+```bash
+docker compose --profile app --profile proxy up -d --build
+curl -k -o /dev/null -w 'GET /ready -> %{http_code}\n' https://localhost:8443/ready
+curl -k -I https://localhost:8443/up
+```
+
+`-k` is required because the certificate is signed by Caddy's local CA. To trust
+it in a browser, import the root certificate from the `caddydata` volume
+(`/data/caddy/pki/authorities/local/root.crt`) or keep using `curl -k`.
+
+**Domain mode** obtains a real certificate automatically. It requires a DNS name
+that resolves to the host and inbound `80`/`443` (ACME needs port 80 for the
+HTTP challenge):
+
+```bash
+APP_DOMAIN=api.example.com \
+CADDY_TLS_SNIPPET=tls_domain \
+CADDY_HSTS_SNIPPET=hsts \
+CADDY_REDIRECT_TARGET=https://api.example.com \
+CADDY_HTTP_PORT=80 \
+CADDY_HTTPS_PORT=443 \
+docker compose --profile app --profile proxy up -d
+```
+
+Then set `APP_URL=https://api.example.com`, `FORCE_HTTPS=true`,
+`TRUSTED_PROXIES` to the compose network CIDR, and restart the application
+containers so `config:cache` reads the new values. The proxy profile is additive:
+`web` keeps `:8080` for local debugging, but do not expose it to the internet.
+
 
 For a demo or pilot workspace with realistic synthetic data (and the exact
 login steps), run `docker compose --profile app exec -T app php artisan demo:seed`
@@ -228,29 +274,33 @@ schema and the queue backend.
 set -euo pipefail
 BASE=http://localhost:8080
 
-# 1. Health route (HTTP 200, empty body).
+# 1. Liveness route (HTTP 200, empty body).
 curl -fsS -o /dev/null -w 'GET /up -> %{http_code}\n' "$BASE/up"
 
-# 2. Auth surface is reachable and validates input (422, not 500/502).
+# 2. Readiness route (HTTP 200; 503 names the failing dependency).
+curl -fsS -o /dev/null -w 'GET /ready -> %{http_code}\n' "$BASE/ready"
+
+# 3. Auth surface is reachable and validates input (422, not 500/502).
 curl -sS -o /dev/null -w 'POST /auth/login (bad credentials) -> %{http_code}\n' \
   -X POST "$BASE/api/v1/auth/login" \
   -H 'Content-Type: application/json' \
   -d '{"email":"smoke@example.invalid","password":"not-a-real-password"}'
 
-# 3. Database is migrated (prints the last few migrations and their batch).
+# 4. Database is migrated (prints the last few migrations and their batch).
 docker compose --profile app exec -T app php artisan migrate:status | tail -n 5
 
-# 4. The app sees the production environment and no debug output.
+# 5. The app sees the production environment and no debug output.
 docker compose --profile app exec -T app php artisan about --only=environment
 
-# 5. Queue backend is reachable from the worker (0 pending is fine).
+# 6. Queue backend is reachable from the worker (0 pending is fine).
 #    Use "<connection>:<queue>": database:default or redis:default.
 docker compose --profile app exec -T queue php artisan queue:monitor database:default --max=1000
 ```
 
-Expected: `200`, `422`, migration rows with `Ran`, `environment: production`,
+Expected: `200`, `200`, `422`, migration rows with `Ran`, `environment: production`,
 and a queue table. A `502` from step 1/2 means nginx cannot reach php-fpm; a
-`500` means the application booted but a dependency failed; see section 9.
+`500` means the application booted but a dependency failed; a `503` from `/ready`
+means the JSON body names the dependency; see sections 9 and 16.
 
 For a PDF/photo upload smoke, use the API with a real token and a small PDF.
 The upload limit is 10 MiB (`DOCUMENTS_MAX_BYTES`, enforced by
@@ -296,7 +346,7 @@ docker compose --profile app exec -T postgres \
 
 The compose PostgreSQL credentials (`luckycare` / `luckycare_dev`) and the
 runtime role password (`luckycare_app_dev`) are development defaults. Rotate
-them before a real deployment (section 10).
+them before a real deployment (section 10, items 4-5).
 
 ---
 
@@ -664,44 +714,118 @@ those in `.env` alone has no effect on the container network.
   the `app` service name changed. The config is mounted from
   `docker/nginx.conf`; the `fastcgi_pass` target is `app:9000`.
 
+### 9.7 The proxy returns 503, a certificate warning, or will not start
+
+- **`curl -k https://localhost:8443/up` returns Caddy's 503 with no body.** Caddy's
+  active health check uses `/ready`, so the upstream was marked down. Query the
+  app through nginx to see the real reason:
+  `curl http://localhost:8080/ready` (section 16). Then check
+  `docker compose --profile app --profile proxy logs proxy`.
+- **Certificate warning in local mode.** Caddy uses its internal CA; `curl -k`
+  is expected. To trust it, import
+  `/data/caddy/pki/authorities/local/root.crt` from the `caddydata` volume.
+- **Domain mode cannot get a certificate.** Confirm the DNS name resolves to the
+  host, ports `80` and `443` are reachable from the internet, and
+  `docker compose --profile app --profile proxy logs proxy` shows the ACME
+  challenge. Do not set `CADDY_TLS_SNIPPET=tls_local` in domain mode.
+- **Port already allocated.** Local mode publishes `8088` (HTTP redirect) and
+  `8443` (HTTPS). Change `CADDY_HTTP_PORT`/`CADDY_HTTPS_PORT`; do not reuse
+  `web`'s `8080`.
+- **`service "proxy" depends on undefined service "web"`.** The `proxy` service
+  needs the `web` service, which is in the `app` profile. Start both:
+  `docker compose --profile app --profile proxy up -d`.
+
+### 9.8 HTTPS is terminated but Laravel still generates `http://` URLs
+
+**Cause:** `TRUSTED_PROXIES` is empty, or it does not include every hop between
+the client and php-fpm. The application then sees the connection as plain HTTP
+and ignores `X-Forwarded-Proto`.
+
+**Fix:** set `TRUSTED_PROXIES` to the compose network CIDR (for example the
+subnet from `docker network inspect lucky-care-plus_default`), recreate `app`,
+`queue` and `scheduler`, and confirm:
+
+```bash
+docker compose --profile app exec -T app php artisan tinker --execute="
+  echo config('app.trusted_proxies'), PHP_EOL;
+  echo config('app.force_https') ? 'force_https=on' : 'force_https=off', PHP_EOL;
+"
+```
+
+`FORCE_HTTPS=true` additionally redirects HTTP and forces `https://` in
+generated URLs; `/up` and `/ready` stay exempt so the container healthcheck over
+plain HTTP is not broken. See section 13.
+
+### 9.9 A client gets `429 {"error":"rate_limited"}`
+
+This is the nginx edge limit, not necessarily Laravel's throttle. Auth endpoints
+allow about 10 requests/minute per source IP, everything else about 60/minute
+(section 14). `Retry-After: 60` is set. Check `docker compose logs web`; the app's
+own per-endpoint limits still apply and are stricter in places (for example
+`throttle:6,1` on login). Behind a proxy the key is the first
+`X-Forwarded-For` address, so a missing or forged header changes the bucket; see
+the warning in `docker/nginx.conf`.
+
+### 9.10 `/ready` returns 503
+
+The body names the failed dependency, for example:
+
+```json
+{"status":"unavailable","checks":{"database":"failed","redis":"ok"},"failed":["database"]}
+```
+
+**The Redis half is driver-aware.** `checks.redis` is `skipped` when the deployment does not use
+Redis - when `CACHE_STORE`, `QUEUE_CONNECTION` and `SESSION_DRIVER` are all non-Redis drivers - because a probe
+that fails for a dependency the app never touches marks a healthy instance unavailable. The reference stack
+defaults to the `database` drivers, so it reports:
+
+```json
+{"status":"ok","checks":{"database":"ok","redis":"skipped"}}
+```
+
+Switch any of those three drivers to `redis` and the probe follows automatically; set
+`READINESS_CHECK_REDIS=true` to force the check even when the drivers are database-based (useful when Redis
+carries the rate limiter directly), or `false` to skip it in a deployment with no Redis at all.
+
+- `database`: `docker compose ps postgres`, then check `DB_*` in `backend/.env`
+  and run `docker compose --profile app exec -T app php artisan migrate:status`.
+- `redis`: `docker compose ps redis`, `REDIS_*`, and whether `CACHE_STORE` points
+  at a reachable store. A bare `503` from Caddy means Caddy already marked the upstream down after its own
+  `/ready` probe; query `http://localhost:8080/ready` to read the JSON body.
+
 ---
 
 ## 10. Honest "not production-ready yet" list
 
-This slice makes the stack installable. It does not make it a compliant
-production platform. Known gaps:
+TLS termination, trusted-proxy handling, edge rate limiting, bounded log
+retention and a real readiness probe are implemented in sections 12-16. The
+items below are genuinely outside this slice:
 
-1. **No TLS.** The stack terminates nothing. A separate terminator and a
-   certificate lifecycle are required. The application also does not yet read a
-   trusted-proxy allow-list, so generated absolute URLs behind a terminator can
-   use `http`; add `$middleware->trustProxies(...)` in `bootstrap/app.php` as a
-   follow-up (outside this task's allowed file set).
-2. **No log shipping, metrics, tracing or alerting.** Logs go to stderr (or the
-   `applogs` volume) and are readable with `docker compose logs`. There is no
-   Prometheus endpoint, no APM, and no alert on failed jobs, scan failures or
-   audit denials.
-3. **No autoscaling or high availability.** One host, one Postgres, one Redis,
-   one queue worker. A host failure is downtime. Postgres/Redis are not
-   replicated.
-4. **Backups are not production-grade.** The CI producer is a 7-day artifact
-   safety net; there is no off-site encrypted storage, tested restore, or
-   stated RPO/RTO in this repository (section 5).
-5. **Default credentials are development values.** The reference compose uses
-   `luckycare` / `luckycare_dev` for Postgres and `luckycare_app_dev` for the
-   runtime role. Rotate both, and update `backend/.env`, before exposing the
-   host.
-6. **AI is disabled** until G4/D1 (section 7). **Scanning is disabled** until D4
-   and a reachable clamd socket (section 6). **Retention has never deleted
-   anything** (`RETENTION_DRY_RUN=true`) until D3.
-7. **No per-tenant quotas/backpressure for scans**, no quarantine review UI and
-   no rescan after signature updates (see `backend/docs/MALWARE-SCANNING.md`).
-8. **Single-host document storage** unless you switch `DOCUMENTS_DISK`/
-   `EXPORTS_DISK` to S3/MinIO. The `appstorage` named volume is not replicated.
-9. **No edge WAF or global rate limiting** beyond Laravel's per-endpoint
-   throttles.
-10. **No zero-downtime deploy.** The upgrade section recreates containers; a
-    short 502 window is possible. Use a load balancer with two hosts if that
-    matters.
+1. **No WAF or DDoS protection.** nginx's per-IP limits blunt a single-source
+   credential-stuffing run; they do nothing against a botnet or a volumetric
+   attack. Put the API behind a provider WAF / scrubbing service, or a
+   load-balancer product with those features, before exposing it publicly.
+2. **No external monitoring or alerting.** `/ready` is a probe an orchestrator
+   can poll; it is not a monitor. There is no uptime check, no alert on a 503,
+   no failed-job or scan-failure alert, and no dashboard. The containers keep a
+   bounded local log window (section 15), not a searchable store.
+3. **No multi-host or high availability.** One host, one Postgres, one Redis,
+   one queue worker. A host failure is downtime; Postgres/Redis are not
+   replicated; the `appstorage`, `applogs` and `knowledgedata` volumes are
+   single-host. There is no zero-downtime deploy (section 8 recreates
+   containers, so a short 502 window is possible).
+4. **No secret manager.** Credentials are read from `backend/.env` on the host
+   (section 2.1). Docker secrets, Vault, SOPS or a cloud secret manager, plus a
+   defined access path for operators, are still required.
+5. **No key/certificate rotation procedure.** `APP_KEY` rotation has a
+   documented `APP_PREVIOUS_KEYS` mechanism, but no runbook for rotating it, the
+   database password, the mail credentials or the TLS material on a schedule.
+   Domain-mode certificates renew automatically; local-mode Caddy CA material
+   and the application secrets do not.
+
+Everything else that used to be on this list - plain HTTP, inert
+`TRUSTED_PROXIES`, no edge limit, unbounded Docker logs, liveness dressed up as
+readiness - is now implemented and documented below.
 
 ---
 
@@ -729,7 +853,8 @@ configuration change, not a code change.
 | `APP_FAKER_LOCALE` | Faker locale (tests/factories only). |
 | `APP_MAINTENANCE_DRIVER` | `file`, `cache` or `array` for `artisan down`. |
 | `APP_MAINTENANCE_STORE` | Cache store when the maintenance driver is `cache`. Optional. |
-| `TRUSTED_PROXIES` | Reserved; not read by the application yet (section 10). |
+| `TRUSTED_PROXIES` | Comma-separated proxy IPs/CIDRs whose `X-Forwarded-*` headers are trusted. `*` trusts the calling address and is risky (section 13). |
+| `FORCE_HTTPS` | Redirect HTTP to HTTPS and force https URLs. `false` by default; `/up` and `/ready` are exempt (section 13). |
 | `BCRYPT_ROUNDS` | Framework hashing cost; no `config/hashing.php` exists today. |
 | `BROADCAST_CONNECTION` | Framework default; no `config/broadcasting.php` exists. |
 
@@ -935,3 +1060,254 @@ configuration change, not a code change.
 
 There is no metrics/tracing endpoint in the application yet; the logging
 variables above are the only observability knobs that exist.
+
+---
+
+## 12. TLS termination (optional `proxy` profile)
+
+The stack ships a profile-gated Caddy terminator. It is additive: `docker
+compose --profile app up -d` is unchanged and still serves plain HTTP on
+`:8080` for local debugging, while `--profile app --profile proxy` adds a TLS
+front door and leaves `web` unexposed by the proxy. Files:
+
+| File | Purpose |
+|---|---|
+| `docker/caddy/Caddyfile` | Site address, security headers, TLS mode, `/ready` health check. |
+| `docker-compose.yml` (`proxy`) | Caddy container, host ports, Caddy data volumes. |
+
+### 12.1 Local mode (no domain, internal CA)
+
+```bash
+docker compose --profile app --profile proxy up -d --build
+curl -k -o /dev/null -w 'GET /ready -> %{http_code}\n' https://localhost:8443/ready
+curl -k -I https://localhost:8443/up
+```
+
+Defaults: `APP_DOMAIN=localhost`, `CADDY_TLS_SNIPPET=tls_local`,
+`CADDY_HSTS_SNIPPET=no_hsts`, host ports `8088` (HTTP redirect) and `8443`
+(HTTPS). `-k` accepts Caddy's internal CA; import
+`/data/caddy/pki/authorities/local/root.crt` from the `caddydata` volume to trust
+it. HSTS is deliberately **off** in local mode: pinning a locally trusted
+certificate would break other local HTTPS sites in that browser profile.
+
+The `proxy` profile depends on the `web` service, which lives in the `app`
+profile, so always pass both profiles. Local TLS is useful even without a
+domain, but Laravel only sees the forwarded scheme once it trusts the nginx hop:
+
+```bash
+docker network inspect lucky-care-plus_default \
+  -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}'   # e.g. 172.19.0.0/16
+```
+
+Put that CIDR in `backend/.env` as `TRUSTED_PROXIES`, then recreate `app`
+(section 8). Without it the pages still load over HTTPS, but generated absolute
+URLs and `secure` cookies use `http` (section 9.8).
+
+### 12.2 Domain mode (real certificate)
+
+```bash
+APP_DOMAIN=api.example.com \
+CADDY_TLS_SNIPPET=tls_domain \
+CADDY_HSTS_SNIPPET=hsts \
+CADDY_REDIRECT_TARGET=https://api.example.com \
+CADDY_HTTP_PORT=80 \
+CADDY_HTTPS_PORT=443 \
+docker compose --profile app --profile proxy up -d
+```
+
+Requirements: the DNS name resolves to the host and inbound `80`/`443` reach
+Caddy (ACME HTTP challenge). Caddy obtains and renews the certificate
+automatically and stores it in the `caddydata` volume. Port 80 redirects to the
+HTTPS URL, and HSTS is enabled.
+
+Then set in `backend/.env` and recreate `app`, `queue`, `scheduler` (section 8):
+
+```dotenv
+APP_URL=https://api.example.com
+FORCE_HTTPS=true
+TRUSTED_PROXIES=<compose network CIDR>
+```
+
+### 12.3 What the proxy adds
+
+- TLS on `:443` (host `:8443` locally) and an HTTP -> HTTPS redirect.
+- `Strict-Transport-Security` in domain mode only.
+- `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+  `X-Frame-Options: DENY` on every response (the API is JSON; nothing should
+  frame it).
+- `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` on every proxied
+  request (Caddy sets them by default; confirmed with `caddy adapt`).
+- An active `health_uri /ready` check. A failing readiness probe marks the
+  upstream down, so Caddy returns 503 instead of forwarding to an instance that
+  cannot reach its database or cache.
+
+Certificate material lives in `caddydata`; removing that volume in local mode
+regenerates the CA and invalidates previously trusted copies.
+
+---
+
+## 13. Trusted proxies and forced HTTPS
+
+`TRUSTED_PROXIES` is a **security control**, not boilerplate. `X-Forwarded-*`
+headers are supplied by the client unless the application knows which peers are
+allowed to set them. With an empty list Laravel ignores them: behind Caddy every
+request looks like plain HTTP from the proxy's address, so generated URLs and
+signed links are `http://` and audit rows record the proxy IP. With an
+over-broad list any client that can reach `app` directly can forge its address
+and scheme.
+
+The application is configured in `backend/bootstrap/app.php` (a booting callback
+runs after `config` is loaded) and reads `app.trusted_proxies`, which comes from
+`TRUSTED_PROXIES`. Format: comma-separated IPs and/or CIDRs. `*` trusts the
+calling address; it is only safe when nothing but the proxy can reach php-fpm
+(for example a host firewall that drops `:8080`). In the reference stack the
+nginx and Caddy containers are both hops, so the compose subnet is the practical
+value:
+
+```bash
+docker network inspect lucky-care-plus_default \
+  --format '{{(index .IPAM.Config 0).Subnet}}'
+# Example: 172.19.0.0/16 -> TRUSTED_PROXIES=172.19.0.0/16
+```
+
+nginx deliberately does **not** rewrite `REMOTE_ADDR` with `real_ip`; it keeps
+itself as Laravel's direct peer and appends its own hop to
+`X-Forwarded-For`. That is why the allow-list must contain the nginx container
+(and Caddy, because Symfony walks the chain right-to-left through every trusted
+hop). Do not add a public client range.
+
+`FORCE_HTTPS=true` does two things:
+
+1. calls `URL::forceScheme('https')`, so `url()` and `secure_url()` produce
+   `https://` even on a request that arrived over plain HTTP; and
+2. redirects a plain-HTTP request with `301` to the same URI over HTTPS.
+
+`/up` and `/ready` are exempt from the redirect: the container healthcheck
+talks to php-fpm over plain HTTP from inside the container, and a 301 would make
+a healthy instance look unhealthy. The URLs generated on those requests are
+still forced to https. `FORCE_HTTPS=false` (the default) leaves both behaviours
+off.
+
+`trustHosts` is also enabled: the host patterns are the public host from
+`APP_URL`, its subdomains, plus `localhost`, `127.0.0.1` and `web` (the internal
+probe and Caddy health-check hosts). Laravel only enforces host validation
+outside `local`/`testing`, so the framework does not reject the development
+server. If you change `APP_URL` to a new public host, include it before pointing
+DNS at the stack.
+
+After changing either variable, recreate the application containers and rebuild
+the config cache (section 8); `config:cache` freezes the old value.
+
+---
+
+## 14. Edge rate limiting
+
+`docker/nginx.conf` adds a second, cheaper layer in front of Laravel's
+per-endpoint throttle middleware. It is per source IP, enforced by nginx before
+php-fpm is involved:
+
+| Zone | Paths | Rate | Burst |
+|---|---|---|---|
+| `auth_limit` | `/api/v1/auth/*` (login, register, OTP, PIN) | **10 requests/minute** per IP | 10, `nodelay` |
+| `api_limit` | everything else, including `/up` and `/ready` | **60 requests/minute** per IP | 60, `nodelay` |
+
+Excess requests return `429` with
+`{"error":"rate_limited","message":"Too many requests"}` and `Retry-After: 60`.
+The app's own limits are untouched (for example `throttle:6,1` on login), so the
+effective budget is the stricter of the two. When the request arrives through
+Caddy the key is the first `X-Forwarded-For` address; a direct request to the
+debug port has no header and falls back to the connection address. **Do not
+expose `:8080` publicly** - a direct client can spoof that header and choose its
+own bucket.
+
+**A per-IP limit is weak against distributed traffic.** A botnet with a thousand
+addresses gets a thousand buckets; only a provider WAF / DDoS service (section
+10) addresses that. Tune the numbers in `docker/nginx.conf` and reload the `web`
+container (`docker compose --profile app exec -T web nginx -s reload`) if the
+reference values do not fit the traffic profile.
+
+---
+
+## 15. Logs
+
+The reference stack has no log stack. Every service uses Docker's `json-file`
+driver with bounded rotation:
+
+```yaml
+logging:
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+```
+
+That is at most 50 MB per container (10 MB x 5 files) and a bounded time window
+that depends on traffic. It keeps a laptop or small host from filling its disk
+and gives an operator a recent window for an incident. The application writes to
+stderr (`LOG_STACK=stderr`), so the lines appear in the container log; the
+optional `applogs` volume at `/var/www/html/storage/logs` only holds files if a
+file channel is configured.
+
+Useful idioms:
+
+```bash
+docker compose --profile app logs -f app
+docker compose --profile app logs --since=30m app queue scheduler
+docker compose --profile app logs --tail=200 web
+docker compose --profile proxy logs -f proxy
+docker compose --profile app logs --no-color app | Select-String -Pattern 'ERROR|CRITICAL'
+```
+
+`docker compose logs` follows the current container; `docker compose logs
+--timestamps` adds the Docker timestamp, and `--since`/`--until` bound the
+window. `docker compose ps` shows which services are up; a restarted container's
+previous log is gone when the json-file was rotated.
+
+### Shipping options (documented, not installed)
+
+| Option | How it works | Trade-off |
+|---|---|---|
+| Vector or Fluent Bit -> Loki | A log agent reads the Docker socket / json-file and ships structured lines to Loki; Grafana queries them. | Best queryability and retention control; adds two services and a retention policy you must size. |
+| Hosted collector | Point the Docker logging driver or an agent at a SaaS (Datadog, Grafana Cloud, etc.). | No local stack; cost, data-residency/DPA review, and PHI policy (N-02) before enabling. |
+| `docker logs` scraping | A cron/agent calls `docker compose logs --since=...` and stores the text. | Last resort. No correlation, no back-pressure, easy to lose lines, weak retention. |
+
+What is still missing even with shipping: **no correlation id across
+services** (a request id is not propagated to queue jobs), **no retention policy
+beyond file rotation** (no legal/PHI retention decision), and **no alerting**
+(nothing watches error rates, failed jobs, scan failures or audit denials).
+N-02 still applies: health data must never be put in logs, notification
+payloads, file names, URLs or error messages.
+
+---
+
+## 16. Liveness vs readiness
+
+| Probe | Path | What it proves | Used by |
+|---|---|---|---|
+| Liveness | `GET /up` | The application booted and can answer HTTP. It does **not** touch the database, Redis or the schema. | Docker healthcheck (`app`, `queue`, `scheduler`), `web` healthcheck. |
+| Readiness | `GET /ready` | The database answers `select 1` **and** the cache/Redis dependency answers `PING` (or a put/get round-trip on a non-Redis store). | Caddy `health_uri`; an orchestrator or load balancer. |
+
+`/ready` is registered in `backend/bootstrap/app.php` (outside the `web` and
+`api` groups, so no session or auth), returns `200` with
+`{"status":"ok","checks":{"database":"ok","redis":"ok"}}`, and `503` with the
+failing dependency named:
+
+```json
+{"status":"unavailable","checks":{"database":"failed","redis":"ok"},"failed":["database"]}
+```
+
+It carries no secrets, version strings or stack traces. The route is
+rate-limited by `ReadyRateLimit` (60/minute per IP, cache-backed) and by
+nginx's `api_limit`. The limiter **fails open** if the cache is the failing
+dependency, so a Redis outage is reported as a `503 naming redis` instead of a
+`500 from the throttle middleware`; the nginx limit remains in front of it.
+
+Caddy's `health_uri /ready` means traffic is only routed to an instance that can
+actually serve. If `/ready` fails, Caddy marks the upstream down and returns its
+own 503 (without the JSON body); query `http://localhost:8080/ready` directly to
+read which dependency failed. Do not point a container healthcheck at `/ready`:
+a database blip would then restart a perfectly good php-fpm process. Use `/up`
+for liveness and `/ready` for routing.
+
+A readiness probe is not monitoring. There is no alert on a persistent 503, no
+uptime check from outside the host, and no dashboard (section 10).

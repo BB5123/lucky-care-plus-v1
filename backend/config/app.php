@@ -56,6 +56,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies and Forced HTTPS
+    |--------------------------------------------------------------------------
+    |
+    | TRUSTED_PROXIES is a comma-separated list of proxy IP addresses or CIDR
+    | ranges whose X-Forwarded-* headers the application trusts. It must name
+    | every hop between the client and php-fpm (the compose network covers the
+    | Caddy and nginx containers). `*` trusts the calling address and is only
+    | safe when nothing but the proxy can reach the application.
+    |
+    | FORCE_HTTPS makes generated URLs https and redirects plain HTTP requests
+    | to HTTPS. The /up and /ready probes are exempt so an internal healthcheck
+    | over http still gets a response.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    'force_https' => (bool) env('FORCE_HTTPS', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
