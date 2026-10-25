@@ -30,6 +30,9 @@ class WorkspaceArchiveManifest extends Model
         'archived_at',
         'counts',
         'sha256',
+        'archive_path',
+        'archive_sha256',
+        'archive_bytes',
     ];
 
     protected function casts(): array

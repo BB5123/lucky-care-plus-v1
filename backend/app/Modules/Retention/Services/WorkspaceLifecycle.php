@@ -59,6 +59,7 @@ final class WorkspaceLifecycle
         private readonly LegalHold $holds,
         private readonly SecurityAuditLogger $audit,
         private readonly ArchiveManifestService $manifests,
+        private readonly ArchiveBundleService $bundles,
     ) {}
 
     public function state(Workspace $workspace): RetentionState
@@ -156,11 +157,13 @@ final class WorkspaceLifecycle
             $now,
         );
 
-        // Entering `archived` records what the account holds before the data is
-        // excluded from the app (P4a). A failure here aborts the transition: an
-        // archive without an inventory would be a claim we cannot verify.
+        // Entering `archived` records what the account holds (P4a) and writes the
+        // encrypted bundle outside the active tables (P4b-1). A failure here
+        // aborts the transition: an archive without an inventory or a copy would
+        // be a claim we cannot verify.
         if ($next === RetentionState::Archived) {
-            $this->manifests->createFor($workspace, $now);
+            $manifest = $this->manifests->createFor($workspace, $now);
+            $this->bundles->write($workspace, $manifest, $now);
         }
 
         return $workspace;

@@ -3,6 +3,7 @@
 namespace App\Modules\Retention\Services;
 
 use App\Modules\Audit\Services\SecurityAuditLogger;
+use App\Modules\Retention\Domain\ArchiveTables;
 use App\Modules\Retention\Models\WorkspaceArchiveManifest;
 use App\Modules\Workspace\Models\Workspace;
 use App\Support\Database\TenantContext;
@@ -34,29 +35,6 @@ use LogicException;
  */
 final class ArchiveManifestService
 {
-    /**
-     * Tables counted for the inventory. Missing tables (a deployment without
-     * the knowledge/AI modules) are skipped rather than reported as zero, so the
-     * manifest never claims a table exists when it does not.
-     *
-     * @var list<string>
-     */
-    private const TABLES = [
-        'health_measurements',
-        'health_conditions',
-        'allergies',
-        'medication_plans',
-        'medication_records',
-        'appointments',
-        'care_tasks',
-        'task_events',
-        'task_evidence',
-        'medical_documents',
-        'timeline_entries',
-        'notification_deliveries',
-        'ai_conversations',
-    ];
-
     public function __construct(private readonly SecurityAuditLogger $audit) {}
 
     public function createFor(Workspace $workspace, ?CarbonInterface $at = null): WorkspaceArchiveManifest
@@ -127,7 +105,7 @@ final class ArchiveManifestService
 
         $counts = [];
 
-        foreach (self::TABLES as $table) {
+        foreach (ArchiveTables::ALL as $table) {
             if (! Schema::hasTable($table)) {
                 continue;
             }

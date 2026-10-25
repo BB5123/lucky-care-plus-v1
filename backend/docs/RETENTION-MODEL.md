@@ -118,7 +118,8 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | **UI banner for non-active states** | **yes since 2026-10-26** - the web and mobile shells read the state and show it with a link to the export card (`FE5-T10/T11`, `RET-M01..M04`); the API's 409 remains the authority |
 | **Cancellation choice screen** | **no** - needs a permission ID ("cancel my account") that the baseline does not have; waits for an owner-approved change record |
 | **Archive inventory** | **yes since 2026-10-26 (P4a)** - entering `archived` writes a hashed per-table inventory (`workspace_archive_manifests`), shown and re-verified by `retention:archive-manifest` (`RET-A01..A04`) |
-| **Archive store (encrypted, separate) + restore data path** | **no** - P4b; the inventory exists so the store starts from a recorded fact |
+| **Encrypted archive bundle** | **yes since 2026-10-26 (P4b-1)** - the archived rows are written as NDJSON, gzipped and encrypted with `APP_KEY` on `RETENTION_ARCHIVE_DISK`; `retention:archive-drill` verifies the file, its hash, decryptability and the per-table counts (`RET-B01..B04`) |
+| **Restore data path + per-archive keys** | **no** - P4b-2; until then the final `scheduled_deletion -> deleted` arrow stays closed |
 
 So until 2026-10-25 the product *hid* expired rows forever - the gap P1 closed. Rows are now removed from the
 database, but they still live in backups for up to the backup window (the privacy notice says so).
@@ -130,7 +131,7 @@ database, but they still live in backups for up to the backup window (the privac
 | **P1** | `retention:compact --older-than=<grace>` : physical delete of rows already soft-deleted, audit row, legal hold respected, idempotent - **built and signed 2026-10-25 (R8: grace 28 days)** | ~1 day | "we actually delete" |
 | **P2** | `retention_state` column + the five states + the lapse trigger - **built 2026-10-25 (P2a; plan windows wait for D5)** | ~2 days | plan windows |
 | **P3** | Notices (email + in-app), export push, the cancellation choice screen - **notices + export push built 2026-10-25 (P3a/P3b); the choice screen waits for a permission change record** | ~2 days | the notices and the choice |
-| **P4** | Archive store + restore action + access audit - **P4a (hashed inventory) built 2026-10-26; the encrypted separate store and the restore data path remain** | ~3 days | the long windows |
+| **P4** | Archive store + restore action + access audit - **P4a (hashed inventory) and P4b-1 (encrypted bundle + drill) built 2026-10-26; the restore data path and per-archive keys remain** | ~3 days | the long windows |
 
 P1 is the honest minimum: without it, no wording of the privacy notice is true. **Do P1 before publishing the
 notice**, then P2-P4 behind their own review.
@@ -296,6 +297,28 @@ claim nobody can verify.
 
 Tests: `RET-A01..A04` (manifest on archive with the fixture counts, command + tamper detection, restore keeps it and a
 second archive appends, read_only/active have none).
+
+### P4b-1: the encrypted bundle (as built, 2026-10-26)
+
+Right after the inventory, the same transition writes the account's rows as NDJSON - one row per line, parents before
+children (`persons`, `health_profiles`, conditions, allergies, measurements, medication, appointments, care tasks and
+their events/evidence, documents, timeline, notifications, AI conversations) - gzips it and encrypts it with the
+application key. The ciphertext goes to `RETENTION_ARCHIVE_DISK` (default: the private `local` disk) under
+`archives/{tenant}/{workspace}/manifest-{id}.json.gz.enc`; the manifest gains `archive_path`, `archive_sha256` and
+`archive_bytes`. Adding a table to the archive means adding it to `ArchiveTables::ALL`, the single list both the
+inventory and the bundle read, so counts and content cannot drift.
+
+The file name carries ids only - no profile name, no document title, no date of care (N-02) - and a test asserts the
+raw ciphertext contains neither the measurement value nor the person's name.
+
+`retention:archive-drill {workspace}` is the verification: file present, ciphertext hash equal to the manifest's,
+decryptable with the current `APP_KEY`, and the row count per table equal to the inventory. It exits non-zero on any
+mismatch, so an archive that was never verified is not reported as one that was (`RET-B01..B04`).
+
+**What P4b-1 does not do:** it does not restore rows, does not use a per-archive key, and does not delete the archive
+when the account is deleted. Those are P4b-2, and until they exist the final `scheduled_deletion -> deleted` arrow
+stays closed. The archive disk is **not** part of the nightly database dump; a deployment must back it up separately
+(`BACKUP-COVERAGE.md`).
 
 ## 9. Notice copy (Thai, for the privacy notice)
 
