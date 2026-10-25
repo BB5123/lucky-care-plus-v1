@@ -16,6 +16,7 @@ use App\Modules\Workspace\Models\Workspace;
 use App\Support\Database\TenantContext;
 use App\Support\Id\Uuid7;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\CreatesWorkspaces;
 use Tests\TestCase;
@@ -155,6 +156,26 @@ class ArchiveBundleTest extends TestCase
             collect($result['problems'])->contains(fn (string $problem): bool => str_contains($problem, 'health_measurements')),
             implode('; ', $result['problems']),
         );
+    }
+
+    public function test_ret_b05_the_drill_json_output_is_machine_readable(): void
+    {
+        $this->measurement();
+        $this->archive();
+
+        $exit = Artisan::call('retention:archive-drill', [
+            'workspace' => $this->workspace->id,
+            '--json' => true,
+        ]);
+        $payload = json_decode(Artisan::output(), true);
+
+        $this->assertSame(0, $exit);
+        $this->assertSame($this->workspace->id, $payload['workspace_id']);
+        $this->assertTrue($payload['bundle_verified']);
+        $this->assertTrue($payload['inventory_verified']);
+        $this->assertSame([], $payload['problems']);
+        $this->assertGreaterThan(0, $payload['archive_bytes']);
+        $this->assertSame(1, $payload['counts']['health_measurements']);
     }
 
     private function archive(): WorkspaceArchiveManifest

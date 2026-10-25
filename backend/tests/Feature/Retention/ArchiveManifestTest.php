@@ -16,6 +16,7 @@ use App\Modules\Workspace\Models\Workspace;
 use App\Support\Database\TenantContext;
 use App\Support\Id\Uuid7;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\CreatesWorkspaces;
@@ -169,6 +170,30 @@ class ArchiveManifestTest extends TestCase
 
         $this->artisan('retention:archive-manifest', ['workspace' => $this->workspace->id])
             ->assertFailed();
+    }
+
+    public function test_ret_a05_the_json_output_is_machine_readable(): void
+    {
+        $this->freezeTime();
+        $this->measurement();
+
+        $lifecycle = app(WorkspaceLifecycle::class);
+        $lifecycle->lapse($this->workspace);
+        $this->travel(31)->days();
+        $lifecycle->advance($this->workspace->fresh());
+
+        $exit = Artisan::call('retention:archive-manifest', [
+            'workspace' => $this->workspace->id,
+            '--json' => true,
+        ]);
+        $payload = json_decode(Artisan::output(), true);
+
+        $this->assertSame(0, $exit);
+        $this->assertSame($this->workspace->id, $payload['workspace_id']);
+        $this->assertSame(1, $payload['counts']['health_measurements']);
+        $this->assertSame(array_sum($payload['counts']), $payload['rows']);
+        $this->assertTrue($payload['verified']);
+        $this->assertNotNull($payload['archived_at']);
     }
 
     private function measurement(): HealthMeasurement
