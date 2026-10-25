@@ -31,7 +31,15 @@ final class ClamAvScanner implements MalwareScanner
 
     /**
      * The optional connector is a test seam: production passes nothing and the
-     * adapter opens a real `unix://` stream socket.
+     * adapter opens a real stream socket.
+     *
+     * The endpoint comes from `config('documents.clamav.socket')` and may be a bare
+     * path (a unix socket, the default) or an explicit `unix://` / `tcp://` URI.
+     * TCP exists because sharing a unix socket between containers is fragile: the
+     * clamav image *appends* `LocalSocket` entries instead of replacing them, so an
+     * override silently keeps listening on `/tmp/clamd.sock`. On a private compose
+     * network, `tcp://clamav:3310` is one hop shorter and has no file permissions to
+     * get wrong.
      *
      * @param  Closure(string, float): (resource|false)|null  $connector
      */
@@ -166,7 +174,7 @@ final class ClamAvScanner implements MalwareScanner
         $errno = 0;
         $errstr = '';
         $socket = @stream_socket_client(
-            'unix://'.$this->socketPath,
+            $this->endpoint(),
             $errno,
             $errstr,
             $this->timeoutSeconds,
@@ -254,5 +262,17 @@ final class ClamAvScanner implements MalwareScanner
         }
 
         return true;
+    }
+
+    /**
+     * Normalise the configured endpoint into something stream_socket_client accepts.
+     */
+    private function endpoint(): string
+    {
+        if (str_starts_with($this->socketPath, 'unix://') || str_starts_with($this->socketPath, 'tcp://')) {
+            return $this->socketPath;
+        }
+
+        return 'unix://'.$this->socketPath;
     }
 }
