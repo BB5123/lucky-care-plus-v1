@@ -9,6 +9,7 @@ use App\Modules\Workspace\Models\Workspace;
 use App\Support\Database\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -34,11 +35,12 @@ final class RetentionAdvanceCommand extends Command
         $dryRun = (bool) $this->option('dry-run');
 
         $rows = [];
+        $failed = [];
 
         try {
             foreach (Tenant::query()->orderBy('id')->pluck('id') as $tenantId) {
-                DB::transaction(function () use ($tenantId, $dryRun, $lifecycle, &$rows): void {
-                    TenantContext::run($tenantId, '', function () use ($tenantId, $dryRun, $lifecycle, &$rows): void {
+                DB::transaction(function () use ($tenantId, $dryRun, $lifecycle, &$rows, &$failed): void {
+                    TenantContext::run($tenantId, '', function () use ($tenantId, $dryRun, $lifecycle, &$rows, &$failed): void {
                         $workspaceIds = Workspace::query()
                             ->whereIn('retention_state', [
                                 RetentionState::ReadOnly->value,
@@ -51,7 +53,7 @@ final class RetentionAdvanceCommand extends Command
                             TenantContext::run(
                                 $tenantId,
                                 $workspaceId,
-                                function () use ($workspaceId, $dryRun, $lifecycle, &$rows): void {
+                                function () use ($workspaceId, $dryRun, $lifecycle, &$rows, &$failed): void {
                                     $workspace = Workspace::query()->find($workspaceId);
 
                                     if (! $workspace instanceof Workspace || ! $lifecycle->isDue($workspace)) {
@@ -72,12 +74,30 @@ final class RetentionAdvanceCommand extends Command
                                         return;
                                     }
 
-                                    $advanced = $lifecycle->advance($workspace);
+                                    try {
+                                        // A savepoint per workspace: the archive
+                                        // bundle is I/O, and one full disk must
+                                        // not roll back the other tenants - nor
+                                        // stop this batch.
+                                        $advanced = DB::transaction(fn (): ?Workspace => $lifecycle->advance($workspace));
+                                    } catch (Throwable $exception) {
+                                        $rows[] = [$workspaceId, $from->value, '-', 'failed'];
+                                        $failed[] = $workspaceId;
+
+                                        // Class only: a database error message can
+                                        // carry bound values (N-02).
+                                        Log::error('retention.advance.failed', [
+                                            'workspace_id' => $workspaceId,
+                                            'exception' => $exception::class,
+                                        ]);
+
+                                        return;
+                                    }
 
                                     $rows[] = [
                                         $workspaceId,
                                         $from->value,
-                                        $advanced !== null ? $lifecycle->state($workspace)->value : $from->value,
+                                        $advanced !== null ? $lifecycle->state($workspace->fresh())->value : $from->value,
                                         match (true) {
                                             $advanced !== null => 'advanced',
                                             $lifecycle->held($workspace) => 'held',
@@ -109,6 +129,12 @@ final class RetentionAdvanceCommand extends Command
 
         if ($held > 0) {
             $this->warn("{$held} workspace(s) are pinned by a legal hold and were not advanced.");
+        }
+
+        if ($failed !== []) {
+            $this->error(count($failed).' workspace(s) failed to advance; the other workspaces were still processed.');
+
+            return self::FAILURE;
         }
 
         return self::SUCCESS;

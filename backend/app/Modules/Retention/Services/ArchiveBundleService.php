@@ -34,8 +34,12 @@ use Throwable;
  * Memory note: the NDJSON is built per table and gzipped as a whole. A family
  * account is small (hundreds to thousands of rows); P4b-2 should stream for
  * larger accounts, which is why the format is NDJSON and not one JSON document.
+ *
+ * Deliberately not final: the advance command's per-workspace failure path is
+ * tested with a mock whose `write()` throws (a disk that is full or read-only),
+ * and the command must keep advancing the other workspaces.
  */
-final class ArchiveBundleService
+class ArchiveBundleService
 {
     public const FORMAT = 1;
 
