@@ -34,18 +34,18 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 16-document knowledge base with a measured benchmark, web + mobile AI surfaces |
 | **4 - Scale/compliance** | not started | |
 
-**Verified test counts (2026-10-25 14:13):**
+**Verified test counts (2026-10-25 19:25):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **418 passed / 2 skipped / 4,451 assertions** (420 tests) |
+| backend `php artisan test` | **419 passed / 2 skipped / 4,457 assertions** (421 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **74 merged PRs**, no open PRs.
+8 mobile feature folders, **79 merged PRs**, no open PRs.
 
 ---
 
@@ -96,10 +96,10 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 
 | # | Decision | Blocking what |
 |---|---|---|
-| D1 | **Provider + DPA (AIG-010)**: which vendor, and written confirmation the data is not used for training | G4 sign-off, `AI_ENABLED=true` |
-| D2 | **API keys rotated** after they appeared in a chat transcript | security hygiene, not a blocker |
+| D1 | **Provider + DPA (AIG-010)**: which vendor, and written confirmation the data is not used for training. The letter is ready to send: `backend/docs/DPA-REQUEST-OKMD.md` (5 questions, EN + TH) | G4 sign-off, `AI_ENABLED=true` |
+| D2 | **API keys rotated** after they appeared in a chat transcript - now checkable: `php artisan ai:ping` (exit 0/1, key never printed) | security hygiene, not a blocker |
 | D3 | Retention numbers + privacy notice (Q-12) - `retention.dry_run` is still true | turning retention on |
-| D4 | ClamAV before production - the scanner is **wired and fail-closed** (ClamAV unix-socket adapter + fake in tests), but still disabled by default (`DOCUMENTS_SCAN_REQUIRED=false`) until the owner decides to turn it on and a deployment runs clamd | production readiness |
+| D4 | ~~ClamAV before production~~ - **decided 2026-10-25: ON.** `DOCUMENTS_SCAN_REQUIRED` defaults to true, the app reaches clamd over `tcp://clamav:3310`, and the gate is proven with EICAR (422 + audit row), fail-closed (503), and a clean upload (201). Start with `--profile app --profile scan` | done |
 | D5 | Pricing / plan entitlements (Q-2) | billing, quota tiers |
 
 ---
@@ -129,9 +129,10 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    review fields, membership), uploads both as one 7-day artifact and drills the downloaded copy. Still **not**
    covered: uploaded document objects, `.env`/`APP_KEY` escrow, off-site encryption, RPO/RTO, and alerting on a
    failed night - see `backend/docs/BACKUP-COVERAGE.md`.
-5. **Documents are unscanned by default.** The ClamAV adapter is wired and fail-closed
-   (`backend/docs/MALWARE-SCANNING.md`), but `DOCUMENTS_SCAN_REQUIRED` is false and no deployment runs
-   clamd yet; turning it on needs a shared unix socket plus the owner decision in D4.
+5. **Documents are scanned before they are stored** (since 2026-10-25). `DOCUMENTS_SCAN_REQUIRED`
+   defaults to true; clamd is reached over `tcp://clamav:3310` (sharing the unix socket does not work with the
+   clamav image). The gate is proven with EICAR, and a deployment that forgets `--profile scan` fails closed
+   with 503 rather than storing unscanned bytes - see `backend/docs/MALWARE-SCANNING.md`.
 6. **Retention has never deleted anything** (`dry_run = true`).
 7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
    works**: the measurements list is cursor-paginated with an idempotent loadMore, dedupe by id and a
