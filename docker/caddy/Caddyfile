@@ -1,0 +1,75 @@
+# Lucky Care Plus - TLS terminator (compose profile `proxy`).
+#
+# Two modes, selected by environment variables in docker-compose.yml:
+#
+#   local (default)   APP_DOMAIN=localhost
+#                     CADDY_TLS_SNIPPET=tls_local   -> Caddy internal CA
+#                     CADDY_HSTS_SNIPPET=no_hsts
+#                     host port 8443 -> container 443
+#
+#   domain            APP_DOMAIN=api.example.com
+#                     CADDY_TLS_SNIPPET=tls_domain  -> ACME / automatic HTTPS
+#                     CADDY_HSTS_SNIPPET=hsts
+#                     host ports 443:443 and 80:80
+#
+# The site address is the only public listener. `web` stays on plain HTTP on
+# the compose network (and on its debug port) and is never exposed by this
+# profile.
+
+# HSTS is only sent in domain mode: pinning a localhost certificate from
+# Caddy's internal CA would break every other local HTTPS site for the
+# browser profile that saw it.
+(hsts) {
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+}
+
+(no_hsts) {
+	# Intentionally empty. Local mode must not send Strict-Transport-Security.
+}
+
+(security_headers) {
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+		-Server
+	}
+}
+
+(tls_local) {
+	tls internal
+}
+
+(tls_domain) {
+	# No arguments: Caddy obtains and renews a publicly trusted certificate
+	# for APP_DOMAIN through ACME.
+}
+
+# Plain HTTP always redirects. In domain mode set
+# CADDY_REDIRECT_TARGET=https://<domain>; in local mode the default keeps the
+# 8443 host port so a developer's curl lands on the TLS listener.
+http://{$APP_DOMAIN:localhost} {
+	import security_headers
+	redir {$CADDY_REDIRECT_TARGET:https://localhost:8443}{uri} permanent
+}
+
+{$APP_DOMAIN:localhost} {
+	import {$CADDY_TLS_SNIPPET:tls_local}
+	import security_headers
+	import {$CADDY_HSTS_SNIPPET:no_hsts}
+	encode zstd gzip
+
+	reverse_proxy web:80 {
+		# Readiness, not liveness: traffic only reaches an instance that can
+		# answer the database and cache/Redis checks. A 503 marks the upstream
+		# down until it recovers.
+		health_uri /ready
+		health_interval 30s
+		health_timeout 5s
+		health_status 200
+
+		# Caddy sets X-Forwarded-For, X-Forwarded-Proto and X-Forwarded-Host
+		# from the original request by default (verified with `caddy adapt`),
+		# so the application's trusted-proxy layer receives all three.
+	}
+}
