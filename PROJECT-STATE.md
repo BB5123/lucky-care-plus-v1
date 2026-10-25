@@ -45,7 +45,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 54 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **117 merged PRs**, no open PRs.
+8 mobile feature folders, **118 merged PRs**, no open PRs.
 
 ---
 
@@ -247,7 +247,7 @@ permission change record.
 4. **Owner/deployment items:** archive-disk backup + key escrow (P4b-2 depends on them), the `BACKUP_ALERT_WEBHOOK`
    secret, S3/MinIO document mirroring, and D5 plan windows.
 
-**Verified at hand-off:** backend 495 passed / 2 skipped / 4,834 assertions · web 141 · mobile 132 · 117 merged PRs ·
+**Verified at hand-off:** backend 495 passed / 2 skipped / 4,834 assertions · web 141 · mobile 132 · 118 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · P4a/P4b-1
 archive inventory + encrypted bundle + backup tested (RET-A01..A05, RET-B01..B07, RET-AB01..05) · archive access audit
@@ -258,7 +258,9 @@ mobile banner/provider (RET-M01..M07) tested · D2 `ai:ping` proven against the 
 EICAR-proven · TLS + `/ready` live in the `proxy` profile · the archive migrations were rolled back and re-applied on
 2026-10-26 (`down()` exercised); the live stack was rebuilt from `main` on 2026-10-26 and `retention:status`,
 `retention:purge --dry-run`, `app:key-fingerprint` and `schedule:list` were re-verified there · the "Nightly backup"
-workflow was dispatched twice on 2026-10-26 and its retention produce/upload/download-drill steps passed.
+workflow was dispatched twice on 2026-10-26 and its retention produce/upload/download-drill steps passed · on the
+rebuilt stack `retention:archive-backup` + `retention:archive-drill-backup --check-db` produced and verified an empty
+archive (the no-archived-account path).
 
 **Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
 second slice in the same context - that is what forced the hand-off this time.

@@ -26,9 +26,12 @@ nginx upstream). Then, against the demo workspace:
 | `app:key-fingerprint` | `AES-256-CBC`, key length 32, the same sha256 as the host `.env` (the container and the host agree on the key) |
 | `retention:archive-manifest <demo>` | exits 1 with "No archive manifest exists ... (it has never entered `archived`)" - the expected answer for an active account |
 | `schedule:list` | `retention:purge` 03:00, `retention:compact` 03:20, `retention:advance` 03:40, `retention:notices` 04:20, `retention:inactivity` 04:00 (UTC), and `retention:status --verify-archives` Sundays 02:30 (next due 6 days at the check) |
+| `retention:archive-backup --output=/tmp/archives.zip` | `bundles 0`, `bytes 0`, no missing/mismatched; the empty archive is written with its `.sha256` |
+| `retention:archive-drill-backup /tmp/archives.zip --check-db --json` | `checksum_verified true`, `bundles 0`, `checked_against_db true`, no problems - the staleness check agrees with the database (no archived workspace) |
 
-The archive drill itself is covered by `RET-B01..B04` with a fake disk; the demo workspace is deliberately left
-`active`, so the live stack has no bundle to drill.
+The archive drill itself is covered by `RET-B01..B07` with a fake disk; the demo workspace is deliberately left
+`active`, so the live stack has no bundle to drill. The backup producer and its drill were exercised on the rebuilt
+stack as an empty archive, which is the path a deployment with no archived account takes every night.
 
 ## Rehearsed end to end on 2026-10-25 (live stack, synthetic row)
 
