@@ -17,15 +17,20 @@ x-app-environment: &app-environment
   REDIS_CLIENT: phpredis
   REDIS_HOST: redis
   REDIS_PORT: "6379"
-  # Malware scanning (ADR-014). clamd is reached over the private compose network
-  # (`tcp://clamav:3310`), which is simpler than sharing a unix socket: the clamav
-  # image appends LocalSocket entries instead of replacing them, so a socket
-  # override silently keeps listening on /tmp/clamd.sock. Enforcement stays off
-  # unless DOCUMENTS_SCAN_REQUIRED=true for the deployment - that switch is the
-  # owner's decision (see backend/docs/MALWARE-SCANNING.md).
+  # Malware scanning (ADR-014) is ON by default since 2026-10-25 (owner decision):
+  # a document is only persisted after a clean verdict. clamd is reached over the
+  # private compose network (`tcp://clamav:3310`), which is simpler than sharing a
+  # unix socket - the clamav image appends LocalSocket entries instead of replacing
+  # them, so a socket override silently keeps listening on /tmp/clamd.sock.
+  #
+  # Consequence, by design: running the `app` profile WITHOUT the `scan` profile
+  # makes document uploads fail closed (503 scan_unavailable). Start both:
+  #   docker compose --profile app --profile scan up -d
+  # Set DOCUMENTS_SCAN_REQUIRED=false only for a deployment that stores no
+  # documents at all.
   DOCUMENTS_SCANNER: clamav
   DOCUMENTS_CLAMAV_SOCKET: tcp://clamav:3310
-  DOCUMENTS_SCAN_REQUIRED: ${DOCUMENTS_SCAN_REQUIRED:-false}
+  DOCUMENTS_SCAN_REQUIRED: ${DOCUMENTS_SCAN_REQUIRED:-true}
 
 # Bounded log retention for every container. `docker compose logs` is the only
 # log store in the reference stack, so a laptop or a small host must not let a
