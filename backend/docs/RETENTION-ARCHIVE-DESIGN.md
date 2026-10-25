@@ -1,19 +1,23 @@
 # P4b-2 design: restore an archived account, then delete the archive
 
-> **Status: design only (2026-10-26).** P4b-1 shipped the encrypted bundle (`ArchiveBundleService`,
-> `retention:archive-drill`, `RET-B01..B04`). Nothing in this document is implemented yet, and the final
-> `scheduled_deletion -> deleted` arrow stays closed until it is. This file exists so P4b-2 starts from the
-> decisions that are actually hard, instead of from a data mover.
+> **Status: partly built (2026-10-26).** P4b-1 shipped the encrypted bundle (`ArchiveBundleService`,
+> `retention:archive-drill`, `RET-B01..B07`) and **P4b-2a-keys** shipped the per-archive wrapped key
+> (`key_wrapped` / `key_algorithm`, §3.1). The **restore path**, **move-out**, **export-from-bundle** and
+> **crypto-shred** are still design only, and the final `scheduled_deletion -> deleted` arrow stays closed until
+> they exist. This file exists so the rest of P4b-2 starts from the decisions that are actually hard, instead of
+> from a data mover.
 
 ## 1. Where P4b-1 stops
 
 The bundle is a **copy, not a move**: the active rows are still in the database, hidden by the state gate and
-excluded from jobs. That is deliberate, because it makes P4b-1 safe, but it leaves three holes:
+excluded from jobs. That is deliberate, because it makes P4b-1 safe, but it leaves two holes (the per-archive key
+hole below is closed since 2026-10-26):
 
 1. **No restore proof.** A bundle can be verified (hash, decryptability, counts) but never used to reconstruct a
    workspace, so "we can restore the archive" is still a claim.
-2. **No per-archive key.** Every bundle is encrypted with `APP_KEY`. Losing the app key loses every archive at once,
-   and "delete this account's archive" cannot be proven by destroying one key.
+2. ~~**No per-archive key.**~~ **Closed by P4b-2a-keys**: each bundle has its own key, wrapped by `APP_KEY`. The
+   remaining part is **crypto-shred** (delete the wrapped key) in P4c, which is what makes "delete this account's
+   archive" provable.
 3. **Export still reads the tables.** In `archived`/`scheduled_deletion` the gate allows export; if the rows moved out,
    the current export endpoint would return an empty account. Restore alone is not enough - export from the bundle is
    part of moving out.
@@ -30,15 +34,17 @@ crypto-shred only. If yes, the move sequence in §3.2 and the restore path in §
 
 ## 3. Design
 
-### 3.1 Per-archive key (P4b-2a)
+### 3.1 Per-archive key (P4b-2a) - **keys built 2026-10-26**
 
-- A random 32-byte key per archive, generated at bundle time.
-- Bundle encrypted with `sodium_crypto_secretstream_xchacha20poly1305` (streaming, authenticated), replacing the
-  current `Crypt::encryptString(gzencode(...))`.
+- A random 32-byte key per archive, generated at bundle time. **Built.**
+- Bundle encrypted with `sodium_crypto_secretbox` (XSalsa20-Poly1305, authenticated), replacing the P4b-1
+  `Crypt::encryptString(gzencode(...))`. The blob carries a `LCA2` magic so the drill can tell the formats apart.
+  **Built** - `sodium_crypto_secretstream_xchacha20poly1305` (streaming) is the P4b-2 upgrade for large accounts.
 - The archive key is wrapped with the app key (`Crypt::encryptString($archiveKey)`) and stored on the manifest
-  (`key_wrapped`, plus `key_algorithm`). A separate table is not needed for one key per manifest.
+  (`key_wrapped`, plus `key_algorithm`). A separate table is not needed for one key per manifest. **Built.**
 - **Crypto-shred** = delete `key_wrapped` (and overwrite the column). The ciphertext may remain, in the archive and in
-  backups, but it is unreadable; the audit row records the shred.
+  backups, but it is unreadable; the audit row records the shred. **Not built** - P4c, with the deletion guard.
+- A P4b-1 bundle (no `key_wrapped`) is still read with `APP_KEY`, so no existing archive breaks (`RET-B07`).
 
 ### 3.2 Move-out sequence (P4b-2b, only if Q-A = move)
 

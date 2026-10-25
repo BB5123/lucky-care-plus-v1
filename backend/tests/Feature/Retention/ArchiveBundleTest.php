@@ -17,6 +17,7 @@ use App\Support\Database\TenantContext;
 use App\Support\Id\Uuid7;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\CreatesWorkspaces;
 use Tests\TestCase;
@@ -176,6 +177,64 @@ class ArchiveBundleTest extends TestCase
         $this->assertSame([], $payload['problems']);
         $this->assertGreaterThan(0, $payload['archive_bytes']);
         $this->assertSame(1, $payload['counts']['health_measurements']);
+    }
+
+    public function test_ret_b06_each_bundle_has_its_own_wrapped_key(): void
+    {
+        $this->measurement();
+        $manifest = $this->archive();
+
+        $this->assertNotNull($manifest->key_wrapped);
+        $this->assertSame(ArchiveBundleService::KEY_ALGORITHM, $manifest->key_algorithm);
+
+        // The key wraps the bundle: losing it makes the bytes unreadable, which
+        // is exactly the property crypto-shred will rely on (P4c).
+        $manifest->forceFill(['key_wrapped' => 'not-a-wrapped-key'])->save();
+
+        $result = app(ArchiveBundleService::class)->verify($manifest->fresh());
+
+        $this->assertFalse($result['ok']);
+        $this->assertTrue(
+            collect($result['problems'])->contains(fn (string $problem): bool => str_contains($problem, 'archive key')),
+            implode('; ', $result['problems']),
+        );
+
+        $this->artisan('retention:archive-drill', ['workspace' => $this->workspace->id])
+            ->assertFailed();
+    }
+
+    public function test_ret_b07_a_legacy_bundle_still_verifies(): void
+    {
+        $this->measurement();
+        $manifest = $this->archive();
+
+        $blob = (string) Storage::disk('local')->get((string) $manifest->archive_path);
+        $key = base64_decode((string) Crypt::decryptString((string) $manifest->key_wrapped), true);
+        $this->assertIsString($key);
+
+        $nonce = substr($blob, 4, SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        $gzip = sodium_crypto_secretbox_open(
+            substr($blob, 4 + SODIUM_CRYPTO_SECRETBOX_NONCEBYTES),
+            $nonce,
+            $key,
+        );
+
+        $this->assertIsString($gzip);
+
+        // P4b-1 format: the payload was encrypted straight with APP_KEY.
+        $legacy = Crypt::encryptString($gzip);
+        Storage::disk('local')->put((string) $manifest->archive_path, $legacy);
+
+        $manifest->forceFill([
+            'archive_sha256' => hash('sha256', $legacy),
+            'archive_bytes' => strlen($legacy),
+            'key_wrapped' => null,
+            'key_algorithm' => null,
+        ])->save();
+
+        $result = app(ArchiveBundleService::class)->verify($manifest->fresh());
+
+        $this->assertTrue($result['ok'], implode('; ', $result['problems']));
     }
 
     private function archive(): WorkspaceArchiveManifest
