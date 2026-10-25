@@ -169,7 +169,9 @@ class KnowledgeBaseTest extends TestCase
 
         $this->assertSame('reviewed', $source['review_status']);
         $this->assertSame('Dr. Reviewer', $source['reviewed_by']);
-        $this->assertSame('2026-10-24', $source['reviewed_at']);
+        // The command stamps today's date; hardcoding the day this test was written
+        // made the whole suite fail the moment UTC rolled over (caught 2026-10-25).
+        $this->assertSame(now()->toDateString(), $source['reviewed_at']);
 
         $pdo = new \PDO('sqlite:'.$this->directory.'/kb.sqlite');
         $status = $pdo->query("select review_status from documents where id = 'ddc-disease-44'")->fetchColumn();

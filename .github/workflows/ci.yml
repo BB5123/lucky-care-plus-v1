@@ -169,3 +169,28 @@ jobs:
       # so the analyzer alone is no longer enough to catch a regression.
       - name: Run tests
         run: flutter test
+
+  # Build the deployment image on every PR so a broken Dockerfile or a missing
+  # PHP extension fails before merge. No push, no run: this is a build check.
+  # The gha cache backend uses the GitHub Actions cache (same storage as the
+  # actions/cache steps above) without a separate cache directory.
+  image:
+    name: Image (backend Dockerfile)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          load: false
+          cache-from: type=gha,scope=backend-image
+          cache-to: type=gha,mode=max,scope=backend-image
