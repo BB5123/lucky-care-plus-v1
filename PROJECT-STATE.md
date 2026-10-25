@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 09:30 (Asia/Bangkok) - backend suite re-run after DEPLOY-2 (demo seed + smoke
-check); web/mobile counts are from the previous verification
+**Last verified:** 2026-10-25 14:13 (Asia/Bangkok) - backend suite re-run after REVIEW-PACK (review pack
+generator + committed pack); web/mobile counts are from the previous verification
 
 ---
 
@@ -31,18 +31,18 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **0 - Foundation** | G0 passed (2026-10-23) | `backend/docs/G0-CHECKLIST.md` |
 | **1 - Core MVP** | backend + web complete | health vault, medication, care tasks, appointments, dashboard, notifications, timeline, family |
 | **2 - Coordination** | complete | recurring templates, escalation ladder, doctor brief, documents + photo evidence, quality sweep |
-| **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 15-document knowledge base with a measured benchmark, web + mobile AI surfaces |
+| **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 16-document knowledge base with a measured benchmark, web + mobile AI surfaces |
 | **4 - Scale/compliance** | not started | |
 
-**Verified test counts (2026-10-25 09:30):**
+**Verified test counts (2026-10-25 14:13):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **382 passed / 4,049 assertions** |
+| backend `php artisan test` | **402 passed / 2 skipped / 4,394 assertions** (404 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **116 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
-| `php artisan knowledge:bench` | **28 questions - hit@1 0.893, hit@3 0.964, MRR 0.929** (15 docs / 181 chunks) |
+| `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
 8 mobile feature folders, **67 merged PRs**, no open PRs.
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 382
+php artisan test                 # 404 (402 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -111,8 +111,10 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    questions (Ollama 0.40.7 + bge-m3, 181 chunks). The vector store is still not justified: the symptom question was
    fixed with one source and two alias entries instead. Details, reproduction and the recommended alternative (re-rank the lexical
    top-20 with embeddings instead of replacing retrieval) are in `backend/docs/RAG-VECTOR-OPTIONS.md`.
-2. **All 15 sources are `unreviewed`** - every answer carries the "not yet reviewed" warning until a
-   clinician marks them with `knowledge:review`.
+2. **All 16 sources are `unreviewed`** - every answer carries the "not yet reviewed" warning until a
+   clinician marks them with `knowledge:review` (or the `/admin/knowledge` screen). The generated
+   `backend/docs/KNOWLEDGE-REVIEW-PACK.md` puts provenance, section excerpts and the clinician checklist
+   for every source in one document so the review can be done in one sitting.
 3. **Load behaviour is measured by an in-process harness, not by concurrent load.** `php artisan perf:smoke`
    seeds a dedicated `perf-smoke` tenant (500 measurements over 24 months, 120 care tasks, 60 medication
    records, 12 appointments), drives the real HTTP kernel for the dashboard aggregate, the timeline and the
@@ -132,8 +134,9 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    OCR scan-and-confirm now exist. What remains read-only is **history pagination** on long lists.
 8. **AI and export surfaces are at parity** (summary, knowledge answers, OCR, data export) on web and mobile.
    Mobile's download hands the short-lived URL to the clipboard because `url_launcher` is not a dependency.
-9. **Knowledge sources cannot be reviewed from the product.** `knowledge:review` is a console command, so a
-   clinician needs shell access to mark 15 sources as reviewed - and until then every answer warns.
+9. **No knowledge source is reviewed yet.** The review path exists in the product (`/admin/knowledge`,
+   CR-005) and in the console (`knowledge:review`); the remaining work is the clinical decision, not
+   tooling. Start from the generated `backend/docs/KNOWLEDGE-REVIEW-PACK.md`.
 10. **The demo smoke check uses password login, not OTP as the first step.** `/auth/otp/request` and
     `/auth/otp/verify` require an existing bearer token, so `scripts/smoke.sh` logs in with the seeded demo
     password, then exercises the OTP round-trip with that token. With `OTP_DEMO_MODE=true` it verifies the
@@ -154,6 +157,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | Demo data and smoke check | `backend/docs/DEMO-DATA.md`, `backend/scripts/smoke.sh` |
 | G4 live evaluation | `backend/docs/G4-LIVE-EVALUATION.md` |
 | Knowledge base | `backend/docs/KNOWLEDGE-BASE.md` |
+| Knowledge review pack (generated) | `backend/docs/KNOWLEDGE-REVIEW-PACK.md` - regenerate with `php artisan knowledge:review-pack` |
 | RAG retrieval decision (lexical vs vector) | `backend/docs/RAG-VECTOR-OPTIONS.md` |
 | Local model evaluation (Pathumma/Kaggle) | `backend/docs/LOCAL-AI-PATHUMMA.md` |
 | Backup and restore | `backend/docs/QUALITY-SWEEP-2026-10-24.md`, `.github/workflows/backup.yml` (nightly producer), `.github/workflows/restore-drill.yml` (weekly drill) |
@@ -166,3 +170,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 
 > "Read `PROJECT-STATE.md`, then continue with the next open item in section 5 or 6 - verify with the
 > commands in section 3 before committing."
+
+For the knowledge corpus, open `backend/docs/KNOWLEDGE-REVIEW-PACK.md`, review the 16 sources in one
+sitting through `/admin/knowledge`, then regenerate the pack with `php artisan knowledge:review-pack`
+(or `--status=all` to include already-reviewed sources).
