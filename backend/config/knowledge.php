@@ -46,6 +46,12 @@ return [
         'มือเท้าปาก' => ['HFM', 'Hand Foot and Mouth'],
         'ฝุ่น' => ['PM2.5', 'PM 2.5'],
         'ไข้เลือดออก' => ['เด็งกี่', 'dengue'],
+        // Symptom words, not disease names. A caregiver describes the illness, not its label:
+        // "after wading through flood water: high fever, severe calf pain, red eyes" is how
+        // leptospirosis presents, while the corpus pages use the clinical vocabulary. This is
+        // the exact question the benchmark could not answer (Q-08) until these entries existed.
+        'ปวดน่อง' => ['เลปโตสไปโรซิส', 'leptospirosis', 'ฉี่หนู'],
+        'ลุยน้ำ' => ['เลปโตสไปโรซิส', 'leptospirosis', 'ฉี่หนู'],
     ],
 
     'max_question_chars' => (int) env('KNOWLEDGE_MAX_QUESTION_CHARS', 500),

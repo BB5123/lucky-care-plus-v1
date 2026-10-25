@@ -33,12 +33,13 @@ python backend/scripts/rag-vector-probe.py
 
 | Retriever | hit@3 | Misses |
 |---|---|---|
-| **Lexical, as shipped** (`knowledge:bench`) | **0.964** | Q-08 |
+| **Lexical, as shipped** (measured before the Q-08 fix) | **0.964** | Q-08 |
 | Vector, best chunk per document, cosine over bge-m3 | 0.929 | Q-07, Q-08 |
 | Hybrid (reciprocal rank fusion of the two) | 0.929 | Q-07, Q-08 |
 
 **Conclusion: the local embedding model does not beat what we have, and does not fix the one thing we
-miss.** Both retrievers fail Q-08 ("after wading through flood water: high fever, severe calf pain, red
+miss.** (The lexical miss was later fixed without embeddings - one symptom-focused source plus two alias
+entries: hit@3 1.000. See section 1.) Both retrievers fail Q-08 ("after wading through flood water: high fever, severe calf pain, red
 eyes"), which is the diagnostic question for leptospirosis. The vectors do rank it sensibly - cosine 0.517
 against the leptospirosis page versus 0.38 against HFMD and 0.36 against TB - but "sensible" is not
 "top three", and the tuned lexical retriever already wins the other 27.
