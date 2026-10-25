@@ -8,8 +8,9 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-26 (Asia/Bangkok) - backend suite re-run after `retention:status`; web and mobile counts are
-from the previous runs
+**Last verified:** 2026-10-26 (Asia/Bangkok) - backend (495 passed / 2 skipped / 4,834 assertions), web (141) and
+mobile (132) suites all re-run on the final `main`; the rebuilt live stack and the "Nightly backup" workflow were
+re-verified the same night.
 
 ---
 
@@ -45,7 +46,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 54 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **118 merged PRs**, no open PRs.
+8 mobile feature folders, **119 merged PRs**, no open PRs.
 
 ---
 
@@ -227,27 +228,29 @@ sitting through `/admin/knowledge`, then regenerate the pack with `php artisan k
 
 ---
 
-## Start here (next session, 2026-10-26 03:00)
+## Start here (next session, 2026-10-26 05:30)
 
-**Where the work stopped:** **retention P1/P2/P2b/P3a/P3b/P4a/P4b-1 are built.** `retention:notices` sends the
-30/7/1-day notices in-app + email; a lapse offers the export on day 1; both shells show the account state; entering
-`archived` writes a hashed inventory **and** an encrypted NDJSON bundle on `RETENTION_ARCHIVE_DISK`, both verified by
-`retention:archive-manifest` / `retention:archive-drill`; the document objects have a backup producer and the APP_KEY
-has a fingerprint check; the load test exists with its numbers. P3c (the cancellation choice screen) is blocked on a
-permission change record.
+**Where the work stopped:** **retention P1/P2/P2b/P3a/P3b/P4a and P4b-1/P4b-2a-keys are built.** `retention:notices`
+sends the 30/7/1-day notices in-app + email; a lapse offers the export on day 1; both shells show the account state;
+entering `archived` writes a hashed inventory **and** an encrypted NDJSON bundle on `RETENTION_ARCHIVE_DISK` with a
+**per-archive key** wrapped by `APP_KEY`, verified by `retention:archive-manifest` / `retention:archive-drill`; every
+console read of an archive is audited (`retention.archive_read`); the nightly workflow now also produces
+`retention:archive-backup`, uploads it with the dump/corpus and drills the downloaded copy with `--check-db`; the
+document objects have a backup producer and the APP_KEY has a fingerprint check; the load test exists with its
+numbers. P3c (the cancellation choice screen) is blocked on a permission change record.
 
 **Do this first, in order:**
 
-1. **P4b-2** - the restore data path, per-archive keys and the move-out/delete semantics. The bundle is currently a
-   **copy**: the active rows stay in the database, so nothing can prove a restore or an archive deletion yet. The
-   design (move-vs-copy, keys, crypto-shred, export-from-bundle, `ARC-*` tests) is in
+1. **P4b-2** - the restore data path, move-out semantics and crypto-shred. The bundle is currently a **copy**: the
+   active rows stay in the database, so nothing can prove a restore or an archive deletion yet (the keys are done).
+   The design (move-vs-copy, restore, crypto-shred, export-from-bundle, `ARC-*` tests) is in
    `backend/docs/RETENTION-ARCHIVE-DESIGN.md`; it waits on two owner decisions before code.
 2. **P3c** once the owner approves a "cancel my account" permission change record.
 3. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
-4. **Owner/deployment items:** archive-disk backup + key escrow (P4b-2 depends on them), the `BACKUP_ALERT_WEBHOOK`
-   secret, S3/MinIO document mirroring, and D5 plan windows.
+4. **Owner/deployment items:** `APP_KEY` escrow (the per-archive keys are wrapped by it and travel in the dump), the
+   `BACKUP_ALERT_WEBHOOK` secret, S3/MinIO document + archive mirroring, and D5 plan windows.
 
-**Verified at hand-off:** backend 495 passed / 2 skipped / 4,834 assertions · web 141 · mobile 132 · 118 merged PRs ·
+**Verified at hand-off:** backend 495 passed / 2 skipped / 4,834 assertions · web 141 · mobile 132 · 119 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · P4a/P4b-1
 archive inventory + encrypted bundle + backup tested (RET-A01..A05, RET-B01..B07, RET-AB01..05) · archive access audit
