@@ -605,6 +605,18 @@ The adapter stays on the in-process provider until base URL, key and model are
 all present; half-configuration does not silently go live. Do not enable AI
 before the DPA confirms the data is not used for training.
 
+`php artisan ai:ping` is the post-rotation check (D2). It forces `AI_ENABLED`
+for that one run: with the flag at its shipped default the gateway answers from
+the in-process stub, and the command used to print "ok" in 0 ms without
+contacting anyone. When no real provider is configured it now exits non-zero
+with `provider_not_configured` instead. A green ping therefore means a
+credential actually answered - it does not authorise `AI_ENABLED=true` for the
+product; that is still D1/G4. The ping sends 32 tokens by default; a reasoning
+model (the OKMD gateway's `deepseek-v4-flash` is one) can spend a smaller
+budget thinking and answer with `content: null`, which is reported as
+`provider_empty_content` - raise the budget with `--max-tokens` instead of
+reading it as a bad key.
+
 ---
 
 ## 8. Upgrade procedure

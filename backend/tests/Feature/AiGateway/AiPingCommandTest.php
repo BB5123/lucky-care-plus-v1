@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /**
- * AIP-T01..T03 - `ai:ping` is the post-rotation check for D2.
+ * AIP-T01..T05 - `ai:ping` is the post-rotation check for D2.
  *
  * The whole point of the command is that rotating a key is not finished until the
  * *new* key answers, so the test drives the real gateway adapter with a faked
@@ -71,6 +71,68 @@ class AiPingCommandTest extends TestCase
         // not acceptable is printing it.
         $this->artisan('ai:ping')
             ->doesntExpectOutputToContain('sk-test-key-that-must-not-be-printed')
+            ->assertExitCode(1);
+    }
+
+    public function test_aip_t04_the_feature_flag_does_not_short_circuit_the_check(): void
+    {
+        $this->configureProvider();
+        // The shipped default: AI is off for product traffic. The credential
+        // check must still reach the provider, or a rotation can never be proven.
+        config(['ai.enabled' => false]);
+
+        Http::fake([
+            'provider.test/*' => Http::response([
+                'choices' => [['message' => ['content' => 'pong'], 'finish_reason' => 'stop']],
+                'usage' => ['prompt_tokens' => 12, 'completion_tokens' => 1],
+            ]),
+        ]);
+
+        $this->artisan('ai:ping')->assertExitCode(0);
+
+        Http::assertSent(static fn ($request): bool => str_contains($request->url(), 'provider.test'));
+    }
+
+    public function test_aip_t05_no_configured_provider_fails_instead_of_reporting_ok(): void
+    {
+        config([
+            'ai.enabled' => false,
+            'ai.provider' => 'null',
+            'ai.openai_compatible.base_url' => null,
+            'ai.openai_compatible.api_key' => null,
+            'ai.openai_compatible.model' => null,
+        ]);
+
+        Http::fake();
+
+        $this->artisan('ai:ping')
+            ->expectsOutputToContain('provider_not_configured')
+            ->assertExitCode(1);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_aip_t06_empty_content_names_the_token_budget(): void
+    {
+        $this->configureProvider();
+
+        Http::fake([
+            'provider.test/*' => Http::response([
+                'choices' => [[
+                    'message' => ['role' => 'assistant', 'content' => null, 'reasoning' => 'thinking'],
+                    'finish_reason' => 'length',
+                ]],
+            ]),
+        ]);
+
+        // One expectation: both facts are on the same output line, and
+        // `expectsOutputToContain` matches them in order across lines.
+        $this->artisan('ai:ping')
+            ->expectsOutputToContain('provider_empty_content  the model returned no content;')
+            ->assertExitCode(1);
+
+        $this->artisan('ai:ping')
+            ->expectsOutputToContain('--max-tokens (this run used 32)')
             ->assertExitCode(1);
     }
 }

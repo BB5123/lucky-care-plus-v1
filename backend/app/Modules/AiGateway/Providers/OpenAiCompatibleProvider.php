@@ -26,6 +26,9 @@ use JsonException;
  *  - HTTP 429 or 5xx               → `provider_unavailable` (retry up to max_retries)
  *  - any other non-2xx             → `provider_rejected` (never retry)
  *  - unparsable/unusable body      → `provider_invalid_response` (never retry)
+ *  - null/empty content            → `provider_empty_content` (a reasoning model
+ *    can spend the whole budget thinking and return `content: null` with
+ *    `finish_reason: length`; that is a budget outcome, not a broken body)
  *  - a refusal field in the body   → `provider_refused` (never retry)
  */
 final class OpenAiCompatibleProvider implements LlmProvider
@@ -184,6 +187,14 @@ final class OpenAiCompatibleProvider implements LlmProvider
         }
 
         $content = $message['content'] ?? null;
+
+        if ($content === null) {
+            // A reasoning model can spend the whole token budget thinking and
+            // return `content: null` with `finish_reason: length`. The G4 live
+            // run hit this, and classifying it as a malformed body hid the real
+            // cause; it is the same outcome as an empty string.
+            throw ProviderException::emptyContent();
+        }
 
         if (! is_string($content)) {
             throw ProviderException::invalidResponse();

@@ -173,6 +173,24 @@ another workspace's rows (RLS, F-09).
 
 Every sentence above is a promise the system must keep. P1 is what makes the last sentence about deletion true.
 
+### Open timing question (R3): "within 30 days" vs the 30-day grace
+
+The nightly jobs run at 03:00 (purge - sets `deleted_at`) and 03:20 (compaction) UTC. For a row whose retention
+period ends at time E:
+
+1. the purge soft-deletes it at the next 03:00, up to 24 h after E;
+2. the compaction removes it at the first 03:20 that is at least `--older-than` after `deleted_at`, up to 24 h after
+   that boundary.
+
+With the shipped grace of 30 days, physical deletion happens **30 to 32 days after E**, while the third sentence
+promises "ภายใน 30 วันหลังสิ้นสุดระยะเวลา" (within 30 days). Before the notice is published, one of these must change
+(the numbers are R3, the owner's decision):
+
+- **grace 28** (or lower): worst case is exactly E + 30 days, so the notice stays true as written; or
+- **reword** the notice to "ภายใน 45 วัน" and keep the 30-day grace, which leaves room for a recovery request.
+
+Either way the backup sentence is separate and already says the copies can lag by up to 7 days.
+
 ## 10. PDPA mapping
 
 | Requirement | Where it is answered |
