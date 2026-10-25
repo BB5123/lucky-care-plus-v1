@@ -69,15 +69,18 @@ runs with `RETENTION_DRY_RUN=false`** - which is still not the case in this repo
    pinned by a legal hold, and (with the flag) whether every archived bundle passes the same checks as
    `retention:archive-drill`. `--json` is available for a monitoring probe; `--verify-archives` exits non-zero when
    any archive fails, so it can be scheduled separately.
-1. **Back up first, both halves.**
+1. **Back up first, all three halves.**
    ```bash
    bash backend/scripts/backup-dump.sh              # PostgreSQL
    php backend/artisan knowledge:backup             # the corpus
    php backend/artisan knowledge:restore-drill      # prove the corpus archive
+   php backend/artisan retention:archive-backup     # the encrypted bundles
+   php backend/artisan retention:archive-drill-backup storage/app/backups/archives-<UTC>.zip
    ```
    The retention run cannot be undone from the database alone; the dump is the only rollback.
-   The **archive disk** (`RETENTION_ARCHIVE_DISK`) is not in that dump: copy it too, and keep `APP_KEY`
-   (the bundles are encrypted with it).
+   The **archive disk** (`RETENTION_ARCHIVE_DISK`) is not in that dump: the archive-backup command zips every
+   bundle that a manifest points at and fails when one is missing. Keep `APP_KEY` too - the per-archive keys are
+   wrapped by it, and they travel in the database dump.
 2. **Rehearse on synthetic rows**, never on real data (below).
 3. **One type, one small batch, dry run first:**
    ```bash

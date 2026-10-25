@@ -164,6 +164,18 @@ jobs:
           echo "Drilling the corpus archive: $archive"
           php backend/artisan knowledge:restore-drill --archive="$archive"
 
+      # The database dump does not contain the encrypted retention bundles, so
+      # a restored database would name archived accounts whose files are gone.
+      # With no archived workspace (as in CI) this produces a valid empty
+      # archive - the smoke test is that the commands and the drill run.
+      - name: Produce and verify the retention bundle archive
+        working-directory: .
+        run: |
+          set -euo pipefail
+          mkdir -p backend/backups/archives
+          php backend/artisan retention:archive-backup --output=backend/backups/archives/archives.zip
+          php backend/artisan retention:archive-drill-backup backend/backups/archives/archives.zip
+
       # `path` is resolved from the workspace root, not from the step's
       # working-directory, so the `backend/` prefix is required here.
       - name: Upload the dump and corpus as build artifacts
@@ -175,6 +187,8 @@ jobs:
             backend/backups/luckycare-*.dump.sha256
             backend/backups/knowledge/knowledge-*.tar.gz
             backend/backups/knowledge/knowledge-*.tar.gz.sha256
+            backend/backups/archives/archives.zip
+            backend/backups/archives/archives.zip.sha256
           retention-days: 7
           if-no-files-found: error
 
@@ -216,12 +230,27 @@ jobs:
           echo "Drilling the uploaded corpus artifact: $archive"
           php artisan knowledge:restore-drill --archive="$archive"
 
+      # Same reasoning as the database drill above: prove the *uploaded*
+      # retention archive, not a fresh one taken seconds later.
+      - name: Restore-drill the downloaded retention archive
+        run: |
+          set -euo pipefail
+          archive="$(find artifact-dump -type f -name 'archives.zip' -print -quit)"
+          if [ -z "$archive" ]; then
+            echo "::error::No retention archive found in the downloaded artifact."
+            exit 1
+          fi
+          ( cd "$(dirname "$archive")" && sha256sum -c ./archives.zip.sha256 )
+          echo "Drilling the uploaded retention archive: $archive"
+          php artisan retention:archive-drill-backup "$archive"
+
       - name: Report failure
         if: failure()
         run: |
           echo "::error::Nightly backup failed: the dump was not produced, not verifiable, or not restorable with RLS intact."
           echo "Inspect the failing step above. A dump that only passes pg_dump's exit code is not a backup."
           echo "::error::If the knowledge steps failed: the corpus archive was not produced, or its restore drill failed a check (source JSON, unique ids, SQLite integrity_check, index counts, lost reviewed_by/reviewed_at, or membership drift)."
+          echo "::error::If the retention steps failed: a bundle recorded in the database is missing from the archive disk, or the archive checksum/drill did not verify."
 
       # A red badge in the Actions UI is easy to miss for a job that runs at
       # 02:00. If the repository has a `BACKUP_ALERT_WEBHOOK` secret (Slack,

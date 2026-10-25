@@ -423,6 +423,28 @@ table against the inventory. It does not restore rows yet (P4b-2), so a
 `scheduled_deletion -> deleted` transition is still not enabled for archived
 accounts.
 
+### Backing the bundles up (5.1.1)
+
+The database dump does **not** contain the bundles, so the nightly workflow
+archives the archive disk as well:
+
+```bash
+# Producer: every manifest with a bundle, checked against its sha256, zipped
+# with a manifest (ids and hashes only) and a .sha256 next to it.
+docker compose --profile app exec -T app \
+  php artisan retention:archive-backup --output=/var/www/html/storage/app/backups/archives.zip
+
+# Prove the uploaded archive: outer checksum + every entry re-hashed.
+docker compose --profile app exec -T app \
+  php artisan retention:archive-drill-backup /var/www/html/storage/app/backups/archives.zip
+```
+
+The producer fails when a database manifest points at a missing bundle or one
+whose hash no longer matches, and still writes the archive so the operator can
+see what is missing. The per-archive keys travel in the database dump (wrapped
+by `APP_KEY`), so restoring the dump and the archive together is enough - and
+`app:key-fingerprint` is how the key itself is verified.
+
 ---
 
 ## 5.2 Knowledge corpus (mutable state)
