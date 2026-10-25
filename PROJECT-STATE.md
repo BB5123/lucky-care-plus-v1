@@ -184,3 +184,25 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 For the knowledge corpus, open `backend/docs/KNOWLEDGE-REVIEW-PACK.md`, review the 16 sources in one
 sitting through `/admin/knowledge`, then regenerate the pack with `php artisan knowledge:review-pack`
 (or `--status=all` to include already-reviewed sources).
+
+---
+
+## Start here (next session, 2026-10-25 21:00)
+
+**Where the work stopped:** D3 is designed and rehearsed, but **P1 (physical deletion) is not written yet**.
+Model + sign-off table: `backend/docs/RETENTION-MODEL.md` (section 8 phases, R1-R7). The P1 implementation notes
+are in that file - read them before writing code; they were taken from `PurgeService` itself.
+
+**Do this first, in order:**
+
+1. **P1** - `PurgeService::compactBatch()` + `retention:compact` + `RET-C01..C04` + a live rehearsal
+   (`RETENTION-TURN-ON.md` shows the exact rehearsal that already worked once). This is what makes the deletion
+   sentence in the privacy notice true, so R6 says it ships before the notice.
+2. Then **F** (16 sources) once the clinician is available - `KNOWLEDGE-REVIEW-SHEET.md` is the script to follow.
+3. Then **D2** (rotate keys, verify each with `php artisan ai:ping`) and **D1** (send `DPA-REQUEST-OKMD.md`).
+
+**Verified at hand-off:** backend 422 passed / 2 skipped / 4,463 assertions · web 135 · mobile 125 · 86 merged PRs ·
+CI green · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy` profile.
+
+**Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
+second slice in the same context - that is what forced the hand-off this time.
