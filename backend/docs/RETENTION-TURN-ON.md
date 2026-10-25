@@ -25,7 +25,7 @@ nginx upstream). Then, against the demo workspace:
 | `retention:purge --dry-run` | every type `0 eligible`, `ai_conversations` `table_not_present`, "no rows were deleted" |
 | `app:key-fingerprint` | `AES-256-CBC`, key length 32, the same sha256 as the host `.env` (the container and the host agree on the key) |
 | `retention:archive-manifest <demo>` | exits 1 with "No archive manifest exists ... (it has never entered `archived`)" - the expected answer for an active account |
-| `schedule:list` | `retention:purge` 03:00, `retention:compact` 03:20, `retention:advance` 03:40, `retention:notices` 04:20, `retention:inactivity` 04:00 (UTC) |
+| `schedule:list` | `retention:purge` 03:00, `retention:compact` 03:20, `retention:advance` 03:40, `retention:notices` 04:20, `retention:inactivity` 04:00 (UTC), and `retention:status --verify-archives` Sundays 02:30 (next due 6 days at the check) |
 
 The archive drill itself is covered by `RET-B01..B04` with a fake disk; the demo workspace is deliberately left
 `active`, so the live stack has no bundle to drill.

@@ -3,11 +3,13 @@
 namespace Tests\Feature\Retention;
 
 use App\Models\User;
+use App\Modules\Retention\Models\DataHold;
 use App\Modules\Retention\Models\WorkspaceArchiveManifest;
 use App\Modules\Retention\Services\WorkspaceLifecycle;
 use App\Modules\Workspace\Models\Tenant;
 use App\Modules\Workspace\Models\Workspace;
 use App\Support\Database\TenantContext;
+use App\Support\Id\Uuid7;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
@@ -15,7 +17,7 @@ use Tests\Concerns\CreatesWorkspaces;
 use Tests\TestCase;
 
 /**
- * RET-STAT01..03 - the operator report (`retention:status`).
+ * RET-STAT01..05 - the operator report (`retention:status`).
  *
  * The report is what an operator reads before turning retention on: how many
  * accounts sit in each state, which are due, how many are held, and (opt-in)
@@ -126,5 +128,56 @@ class RetentionStatusTest extends TestCase
 
         $this->assertSame(0, $exit);
         $this->assertStringContainsString('No archived workspaces to verify.', Artisan::output());
+    }
+
+    public function test_ret_stat04_a_legal_hold_is_counted_and_not_reported_as_due(): void
+    {
+        $this->lapse();
+
+        TenantContext::run($this->tenant->id, $this->workspace->id, function (): void {
+            DataHold::query()->forceCreate([
+                'id' => Uuid7::generate(),
+                'tenant_id' => $this->tenant->id,
+                'workspace_id' => $this->workspace->id,
+                'profile_id' => null,
+                'reason' => 'litigation hold',
+                'created_by' => $this->user->id,
+                'until' => null,
+            ]);
+        });
+
+        $this->travel(31)->days();
+
+        $exit = Artisan::call('retention:status', ['--json' => true]);
+        $payload = json_decode(Artisan::output(), true);
+
+        $this->assertSame(0, $exit);
+        $this->assertSame(1, $payload['held']);
+        $this->assertSame([], $payload['due']);
+        // The hold does not change the state; it only pins the transition.
+        $this->assertSame(1, $payload['states']['read_only']);
+    }
+
+    public function test_ret_stat05_a_window_inside_thirty_days_is_upcoming_not_due(): void
+    {
+        $this->lapse();
+
+        // read_only expires after 30 days; ten days in, it is upcoming.
+        $this->travel(10)->days();
+
+        $exit = Artisan::call('retention:status', ['--json' => true]);
+        $payload = json_decode(Artisan::output(), true);
+
+        $this->assertSame(0, $exit);
+        $this->assertSame([], $payload['due']);
+        $this->assertCount(1, $payload['upcoming']);
+        $this->assertSame($this->workspace->id, $payload['upcoming'][0]['workspace_id']);
+    }
+
+    private function lapse(): void
+    {
+        TenantContext::run($this->tenant->id, $this->workspace->id, function (): void {
+            app(WorkspaceLifecycle::class)->lapse($this->workspace);
+        });
     }
 }
