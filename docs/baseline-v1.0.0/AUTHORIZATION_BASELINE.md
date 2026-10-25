@@ -1,8 +1,8 @@
 # Authorization Baseline Decision Log
 
 **Baseline ID:** `AUTH-BASELINE-001`  
-**Version:** `1.3.0`  
-**Date:** 2026-10-18 (amended 2026-10-22 by `CR-001`, 2026-10-24 by `CR-003` and `CR-004`)  
+**Version:** `1.4.0`  
+**Date:** 2026-10-18 (amended 2026-10-22 by `CR-001`, 2026-10-24 by `CR-003` and `CR-004`, 2026-10-25 by `CR-005`)  
 **Status:** Frozen for implementation
 
 | Decision ID | Frozen decision | Rationale |
@@ -25,6 +25,7 @@
 | `ABD-016` | Notification preferences and self-audit visibility are **not** authorization or consent state; they never grant, widen, or withdraw data access. | Prevents channel settings from being mistaken for consent withdrawal, and stops `audit_event.read_own` from becoming a data-access path. Added in v1.1.0 by `CR-001`. |
 | `ABD-017` | Routine definitions (`care_task.template.*`) and escalation policy (`escalation_policy.*`) are **not** implied by task-read authority, task-creation authority, or workspace-settings authority. | A caregiver who may read or create one task is not automatically allowed to define a family routine or change accountability behaviour; `workspace.update` administers settings, not escalation conduct. Added in v1.2.0 by `CR-003`. |
 | `ABD-018` | Task evidence reads (`care_task.evidence.read`) require a scope of their own (`task_evidence:read`) and are **not** implied by task-read authority or task assignment. | Evidence (photos, measured values, notes) is the PHI-bearing artifact; the task is coordination metadata. Separating the scope lets a grant show task progress without disclosing evidence, while `has_photo_evidence` keeps completion possible. Added in v1.3.0 by `CR-004`. |
+| `ABD-019` | Platform capabilities (`knowledge.source.read`, `knowledge.source.review`) are granted by an explicit user flag (`users.is_platform_admin`), are **never** derived from a workspace role or workspace ownership, and every grant, revocation and use is audited. | Workspace roles are tenant/workspace-scoped, while the knowledge corpus is platform data with no workspace. Reusing a workspace role would either widen a tenant role into platform data or require a fake workspace; an explicit flag keeps the capability revocable, auditable and outside the health-data model. Added in v1.4.0 by `CR-005`. |
 
 ## Change control
 
@@ -39,7 +40,9 @@ This log records the frozen implementation baseline. It does not imply legal app
 | `1.1.0` (editorial) | 2026-10-22 | Editorial correction, no rule change: `AUTHORIZATION_TEST_PLAN.md` subsections were numbered `5.1…5.9` under section `## 6`; renumbered to `6.1…6.9` and the new set to `6.10`. `DATA_ACCESS_MATRIX.md` had no section `8`; Matrix E now occupies it. | `CR-001` |
 | `1.2.0` | 2026-10-24 | Added 6 permissions (`care_task.template.read`, `care_task.template.create`, `care_task.template.update`, `care_task.template.deactivate`, `escalation_policy.read`, `escalation_policy.update`); added six Matrix C rows; added `ABD-017`; switched the template and escalation routes off the borrowed `care_task.*` / `workspace.*` IDs. **No existing permission, role, matrix row, or test was removed, renamed, or weakened.** | `CR-003` |
 | `1.3.0` | 2026-10-24 | Added the `task_evidence` resource scope and re-mapped `care_task.evidence.read` from `tasks:read` to `task_evidence:read`; added `ABD-018`. Permission count stays 99, roles and Matrix cells unchanged. **No existing permission, role, matrix row, or test was removed, renamed, or weakened.** | `CR-004` |
+| `1.4.0` | 2026-10-25 | Added 2 platform permissions (`knowledge.source.read`, `knowledge.source.review`), the `users.is_platform_admin` flag with grant metadata, `Authorizer::authorizePlatform()`, the `platform:grant` command and two `/api/v1/admin/knowledge/*` routes; added `ABD-019`. Permission count 99 → 101; roles and Matrix cells unchanged. **No existing permission, role, matrix row, or test was removed, renamed, or weakened.** | `CR-005` |
 
 Change record location: `.ai/changes/CR-001-permission-delta-v1.1.md`
 Change record location: `.ai/changes/CR-003-permission-delta-v1.2.md`
 Change record location: `.ai/changes/CR-004-task-evidence-scope-v1.3.md`
+Change record location: `.ai/changes/CR-005-platform-knowledge-review-v1.4.md`

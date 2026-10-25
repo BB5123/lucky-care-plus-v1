@@ -1,24 +1,25 @@
 # Family Health CRM — Authorization Foundation
 
 **Baseline:** `AUTH-BASELINE-001`  
-**Version:** `1.3.0`  
+**Version:** `1.4.0`  
 **Status:** Frozen for implementation  
 **Effective date:** 2026-10-18  
-**Amended:** 2026-10-22 (`CR-001`), 2026-10-24 (`CR-003`, `CR-004`)
+**Amended:** 2026-10-22 (`CR-001`), 2026-10-24 (`CR-003`, `CR-004`), 2026-10-25 (`CR-005`)
 
-> **Directory note:** this set lives in `docs/baseline-v1.0.0/` for path stability. Its content is **v1.3.0**; the directory name is historical and is not renamed to avoid breaking references.
+> **Directory note:** this set lives in `docs/baseline-v1.0.0/` for path stability. Its content is **v1.4.0**; the directory name is historical and is not renamed to avoid breaking references.
 
 ## Documents
 
 1. `PERMISSION_CATALOG.md` — canonical action/permission identifiers.
 2. `DATA_ACCESS_MATRIX.md` — role, action, resource, and scope policy templates.
 3. `AUTHORIZATION_TEST_PLAN.md` — minimum automated test scenarios and release gates.
-4. `AUTHORIZATION_BASELINE.md` — frozen decision log (`ABD-001`…`ABD-018`) and change history.
+4. `AUTHORIZATION_BASELINE.md` — frozen decision log (`ABD-001`…`ABD-019`) and change history.
 
 Change records:
 - v1.1.0: [`../../.ai/changes/CR-001-permission-delta-v1.1.md`](../../.ai/changes/CR-001-permission-delta-v1.1.md)
 - v1.2.0: [`../../.ai/changes/CR-003-permission-delta-v1.2.md`](../../.ai/changes/CR-003-permission-delta-v1.2.md)
 - v1.3.0: [`../../.ai/changes/CR-004-task-evidence-scope-v1.3.md`](../../.ai/changes/CR-004-task-evidence-scope-v1.3.md)
+- v1.4.0: [`../../.ai/changes/CR-005-platform-knowledge-review-v1.4.md`](../../.ai/changes/CR-005-platform-knowledge-review-v1.4.md)
 
 ## Frozen v1.0.0 decisions
 
@@ -67,6 +68,20 @@ Narrowing only — **no existing permission, role, matrix row, or test was remov
 - **No permission count change:** 99 IDs, 8 roles and all Matrix cells unchanged; existing grants must add
   `task_evidence:read` before they can read evidence (fail closed)
 
+## v1.4.0 amendment (2026-10-25)
+
+Additive only — **no existing permission, role, matrix row, or test was removed, renamed, or weakened.**
+
+- **+2 platform permissions:** `knowledge.source.read`, `knowledge.source.review` (99 → 101)
+- **+ `users.is_platform_admin`** plus `platform_admin_granted_at` and `platform_admin_granted_by`
+- **+ `Authorizer::authorizePlatform()`** — platform capabilities are evaluated without a workspace and are
+  **not** available through the workspace path or from any workspace role
+- **+ `platform:grant {email} {--revoke}`** — refuses to revoke the last remaining platform administrator and
+  writes one audit row per change
+- **+ two routes:** `GET /api/v1/admin/knowledge/sources`, `POST /api/v1/admin/knowledge/sources/{id}/review`
+- **+ `ABD-019`** — platform capabilities are granted by an explicit user flag, never a workspace role, and are
+  audited on every change
+
 ## Version history
 
 | Version | Date | Summary | Change record |
@@ -75,6 +90,7 @@ Narrowing only — **no existing permission, role, matrix row, or test was remov
 | `1.1.0` | 2026-10-22 | +4 notification/self-audit permissions, Matrix E, `ABD-016` (89 → 93) | `CR-001` |
 | `1.2.0` | 2026-10-24 | +6 task-template/escalation permissions, six Matrix C rows, `ABD-017` (93 → 99) | `CR-003` |
 | `1.3.0` | 2026-10-24 | +`task_evidence` scope, evidence-read re-map, `ABD-018` (99 permissions unchanged) | `CR-004` |
+| `1.4.0` | 2026-10-25 | +2 platform knowledge permissions, platform-admin flag, `ABD-019` (99 → 101) | `CR-005` |
 
 ## Change control
 

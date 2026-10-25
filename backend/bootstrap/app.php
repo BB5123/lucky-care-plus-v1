@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAuthorized;
+use App\Http\Middleware\EnsurePlatformAuthorized;
 use App\Http\Middleware\ResolveSelfServiceContext;
 use App\Http\Middleware\ResolveWorkspaceContext;
 use App\Http\Responses\ProblemDetails;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'self.context' => ResolveSelfServiceContext::class,
             'documents.download.context' => ResolveDocumentDownloadContext::class,
             'authorize.permission' => EnsureAuthorized::class,
+            'authorize.platform' => EnsurePlatformAuthorized::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

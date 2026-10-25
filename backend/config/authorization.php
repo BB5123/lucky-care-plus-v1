@@ -7,10 +7,10 @@ return [
     | Permission catalog
     |--------------------------------------------------------------------------
     |
-    | The 99 permission IDs frozen by
-    | docs/baseline-v1.0.0/PERMISSION_CATALOG.md (v1.2.0, including the four
-    | CR-001 additions and the six CR-003 additions). This list is normative:
-    | never invent an ID here.
+    | The 101 permission IDs frozen by
+    | docs/baseline-v1.0.0/PERMISSION_CATALOG.md (v1.4.0, including the four
+    | CR-001 additions, the six CR-003 additions and the two CR-005 platform
+    | additions). This list is normative: never invent an ID here.
     | The list is sorted so drift is easy to spot in review.
     |
     */
@@ -83,6 +83,10 @@ return [
         'health_report.read',
         'integration.health_data.read',
         'integration.health_data.write',
+        // CR-005 / baseline v1.4.0: platform capabilities, granted only by the
+        // `users.is_platform_admin` flag (ABD-019), never by a workspace role.
+        'knowledge.source.read',
+        'knowledge.source.review',
         'legal_authority.verify',
         'medical_document.delete',
         'medical_document.export',

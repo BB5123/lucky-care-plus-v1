@@ -85,13 +85,13 @@ class PermissionCatalogTest extends TestCase
         return $scopes;
     }
 
-    public function test_catalog_t01_config_contains_exactly_the_99_catalog_permissions(): void
+    public function test_catalog_t01_config_contains_exactly_the_101_catalog_permissions(): void
     {
         $expected = $this->catalogPermissionIds();
         $configured = (new PermissionCatalog)->all();
 
-        $this->assertCount(99, $expected, 'The v1.2.0 catalog must contain 99 permission IDs');
-        $this->assertCount(99, $configured);
+        $this->assertCount(101, $expected, 'The v1.4.0 catalog must contain 101 permission IDs');
+        $this->assertCount(101, $configured);
 
         $sortedConfigured = $configured;
         sort($sortedConfigured, SORT_STRING);

@@ -2,17 +2,17 @@
 
 **Product:** Family Health CRM\
 **Document ID:** AUTH-DOC-001\
-**Version:** 1.2.0\
-**Status:** Frozen for implementation (v1.2.0 — amended by `CR-003`)\
+**Version:** 1.4.0\
+**Status:** Frozen for implementation (v1.4.0 — amended by `CR-005`)\
 **Applies to:** Laravel API, Web, Flutter Mobile, background jobs,
 exports, AI Gateway
 
 ## Baseline status and binding decisions
 
 - **Baseline ID:** `AUTH-BASELINE-001`
-- **Baseline version:** `1.2.0`
+- **Baseline version:** `1.4.0`
 - **Effective date:** `2026-10-18`
-- **Amended:** `2026-10-22` by `CR-001` — added `notification.preference.read`, `notification.preference.update`, `notification.delivery.read`, `audit_event.read_own`. `2026-10-24` by `CR-003` — added `care_task.template.read`, `care_task.template.create`, `care_task.template.update`, `care_task.template.deactivate`, `escalation_policy.read`, `escalation_policy.update` (93 → 99 total). No existing permission was renamed, removed, or weakened.
+- **Amended:** `2026-10-22` by `CR-001` — added `notification.preference.read`, `notification.preference.update`, `notification.delivery.read`, `audit_event.read_own`. `2026-10-24` by `CR-003` — added `care_task.template.read`, `care_task.template.create`, `care_task.template.update`, `care_task.template.deactivate`, `escalation_policy.read`, `escalation_policy.update` (93 → 99 total). `2026-10-25` by `CR-004` — added the `task_evidence` resource scope and re-mapped `care_task.evidence.read` (99 total unchanged). `2026-10-25` by `CR-005` — added `knowledge.source.read`, `knowledge.source.review` (99 → 101 total). No existing permission was renamed, removed, or weakened.
 - **Status:** **FROZEN FOR IMPLEMENTATION**
 - **Change policy:** Do not silently alter a permission, role mapping, scope rule, denial behavior, or required test. Propose a versioned change, document its security impact, update all three documents, and add/adjust tests in the same change.
 - **Approval boundary:** This is an engineering baseline for implementation, not legal certification or production-readiness approval. Product, security, and qualified legal review remain required for the open decisions explicitly listed in these documents.
@@ -552,6 +552,16 @@ to a health record (F-04, F-06). See `DATA_ACCESS_MATRIX.md` Matrix C and
   `platform.user.support`           Perform approved                  High No implicit
                                     account support                        health-data read
                                     actions                                
+
+  `knowledge.source.read`           Read the platform corpus           Low Public reference data;
+                                    and its review status                   no tenant/profile scope;
+                                                                            platform-admin flag only
+                                                                            (v1.4.0)
+
+  `knowledge.source.review`         Mark a source reviewed           Medium Platform-admin flag only;
+                                    and rebuild the corpus                  audited; never grants
+                                                                            health-data access
+                                                                            (v1.4.0)
 
   `break_glass.request`             Request                       Critical Does not itself
                                     emergency access                       grant access

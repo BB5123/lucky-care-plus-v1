@@ -114,6 +114,11 @@ final class Authorizer
         'health_report.read' => ['scope' => 'profile.basic', 'action' => 'read'],
         'integration.health_data.read' => ['scope' => 'profile.basic', 'action' => 'read'],
         'integration.health_data.write' => ['scope' => 'profile.basic', 'action' => 'update'],
+        // CR-005: platform capabilities. The null scope is deliberate; the
+        // workspace pipeline refuses these IDs and only `authorizePlatform()`
+        // may allow them (ABD-019).
+        'knowledge.source.read' => ['scope' => null, 'action' => 'read'],
+        'knowledge.source.review' => ['scope' => null, 'action' => 'update'],
         'legal_authority.verify' => ['scope' => 'profile.basic', 'action' => 'update'],
         'medical_document.delete' => ['scope' => 'documents', 'action' => 'update'],
         'medical_document.export' => ['scope' => 'documents', 'action' => 'export'],
@@ -183,6 +188,20 @@ final class Authorizer
         'notification.delivery.read',
     ];
 
+    /**
+     * Platform capabilities (baseline v1.4.0, CR-005).
+     *
+     * These IDs describe platform data, not a tenant resource. They are
+     * deliberately a closed list: `authorizePlatform()` must never become a
+     * second, weaker entry point for a workspace-scoped permission.
+     *
+     * @var list<string>
+     */
+    private const PLATFORM_PERMISSIONS = [
+        'knowledge.source.read',
+        'knowledge.source.review',
+    ];
+
     public function __construct(
         private readonly PermissionCatalog $catalog,
         private readonly GrantChecker $grants,
@@ -219,6 +238,60 @@ final class Authorizer
         }
 
         return $decision;
+    }
+
+    /**
+     * Authorize a platform capability without a workspace context (CR-005).
+     *
+     * Platform data (the public knowledge corpus) has no tenant/workspace and
+     * therefore cannot be expressed as a {@see ResourceRef}. This path is
+     * deliberately separate instead of relaxing the workspace pipeline:
+     *
+     *  - the permission must be one of {@see self::PLATFORM_PERMISSIONS};
+     *  - only the explicit `users.is_platform_admin` flag grants it;
+     *  - every completed decision still writes exactly one audit row, so a
+     *    grant, a denial, and a review are all traceable (ABD-019).
+     *
+     * A platform admin does **not** gain any workspace-scoped permission from
+     * this method: an ID outside the platform list is a hard deny.
+     *
+     * @param  array<string, mixed>  $auditContext  server-resolved fields to
+     *                                              add to the audit row
+     *                                              (e.g. source_id, reviewer)
+     */
+    public function authorizePlatform(
+        ?User $actor,
+        string $permission,
+        array $auditContext = [],
+    ): Decision {
+        try {
+            $decision = $this->evaluatePlatform($actor, $permission);
+        } catch (Throwable $e) {
+            report($e);
+
+            return Decision::deny('authorization_unavailable', 503, 'dependency_unavailable');
+        }
+
+        try {
+            $this->auditPlatformDecision($actor, $permission, $decision, $auditContext);
+        } catch (Throwable $e) {
+            report($e);
+
+            // An allow is not valid without its audit row (F-11).
+            if ($decision->allowed()) {
+                return Decision::deny('authorization_unavailable', 503, 'audit_unavailable');
+            }
+        }
+
+        return $decision;
+    }
+
+    /**
+     * True for the frozen platform capability IDs (baseline v1.4.0).
+     */
+    public function isPlatformPermission(string $permission): bool
+    {
+        return in_array($permission, self::PLATFORM_PERMISSIONS, true);
     }
 
     /**
@@ -320,6 +393,14 @@ final class Authorizer
 
         if ($mapping === null || ! $this->catalog->allowsAction($mapping['action'])) {
             return Decision::deny('unknown_permission', 500, 'permission_not_mapped');
+        }
+
+        // [2a] Platform capabilities never traverse the workspace pipeline.
+        // Even a workspace owner (or a workspace role named `platform_admin`)
+        // must not reach them through membership; only `authorizePlatform()`
+        // consults the explicit user flag (ABD-019).
+        if ($this->isPlatformPermission($permission)) {
+            return Decision::deny('forbidden', 403, 'platform_permission_requires_platform_authorizer');
         }
 
         // [2b] Self-service (`self_membership`) decisions are about the
@@ -453,6 +534,90 @@ final class Authorizer
         }
 
         return Decision::allow();
+    }
+
+    /**
+     * The platform branch: catalog, closed platform list, explicit user flag.
+     *
+     * There is no workspace, no role gate and no grant lookup. The role named
+     * `platform_admin` is a workspace membership role and is explicitly *not*
+     * consulted here; the flag on the user row is the only grant (ABD-019).
+     */
+    private function evaluatePlatform(?User $actor, string $permission): Decision
+    {
+        if ($actor === null) {
+            return Decision::deny('unauthenticated', 401, 'not_authenticated');
+        }
+
+        if (! $this->catalog->has($permission)) {
+            return Decision::deny('unknown_permission', 500, 'permission_not_in_catalog');
+        }
+
+        $mapping = $this->mappingFor($permission);
+
+        if ($mapping === null || ! $this->catalog->allowsAction($mapping['action'])) {
+            return Decision::deny('unknown_permission', 500, 'permission_not_mapped');
+        }
+
+        if (! $this->isPlatformPermission($permission)) {
+            return Decision::deny('forbidden', 403, 'not_a_platform_permission');
+        }
+
+        if (! $actor->is_platform_admin) {
+            return Decision::deny('forbidden', 403, 'platform_admin_required');
+        }
+
+        return Decision::allow();
+    }
+
+    /**
+     * One audit row for a platform decision. Platform data has no workspace,
+     * so the row is chained into the tenant directory with `workspace_id =
+     * null`, exactly like a `/me` decision. The source id and reviewer are
+     * metadata only; the source text is never copied into the ledger (N-02).
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function auditPlatformDecision(
+        ?User $actor,
+        string $permission,
+        Decision $decision,
+        array $context,
+    ): void {
+        $tenantId = Tenant::query()
+            ->orderByRaw("case when slug = 'default' then 0 else 1 end")
+            ->orderBy('id')
+            ->value('id');
+
+        if (! is_string($tenantId) || $tenantId === '') {
+            throw new \RuntimeException(
+                'Platform authorization audit requires a tenant directory row (F-11).'
+            );
+        }
+
+        $metadata = ['scope' => 'platform'];
+
+        if (isset($context['source_id']) && is_string($context['source_id']) && $context['source_id'] !== '') {
+            $metadata['source_id'] = $context['source_id'];
+        }
+
+        if (isset($context['reviewer']) && is_string($context['reviewer']) && $context['reviewer'] !== '') {
+            $metadata['reviewer'] = $context['reviewer'];
+        }
+
+        TenantContext::run($tenantId, '', function () use ($actor, $permission, $decision, $metadata): void {
+            $this->audit->record([
+                'actor_id' => $actor?->id,
+                'actor_type' => $actor === null ? 'anonymous' : 'user',
+                'action' => $permission !== '' ? $permission : 'unknown_permission',
+                'target_type' => 'platform',
+                // `target_id` is uuid in the ledger; a knowledge source is a slug.
+                'target_id' => null,
+                'result' => $decision->allowed() ? 'allow' : 'deny',
+                'reason_code' => $decision->allowed() ? null : $decision->code(),
+                'metadata' => $metadata,
+            ]);
+        });
     }
 
     /**

@@ -34,6 +34,21 @@ final class RoleGate
         'medical_document.delete',
     ];
 
+    /**
+     * Platform capabilities (baseline v1.4.0, CR-005 / ABD-019).
+     *
+     * They are granted by `users.is_platform_admin`, never derived from a
+     * workspace role. Returning false here is defence in depth: the workspace
+     * pipeline already refuses these IDs before the gate, and this list keeps
+     * a future role addition from accidentally acquiring them.
+     *
+     * @var list<string>
+     */
+    private const PLATFORM_PERMISSIONS = [
+        'knowledge.source.read',
+        'knowledge.source.review',
+    ];
+
     /** Read-only subset a viewer may ever hold (Matrix A–E). */
     private const VIEWER_READ_PERMISSIONS = [
         'workspace.read',
@@ -94,6 +109,13 @@ final class RoleGate
      */
     public function permits(string $role, string $permission, string $action): bool
     {
+        // CR-005 / ABD-019: platform capabilities are not role-derived. The
+        // flag on the user row is the only grant, even for a workspace role
+        // literally named `platform_admin`.
+        if (in_array($permission, self::PLATFORM_PERMISSIONS, true)) {
+            return false;
+        }
+
         // ABD-011 / ABD-012: deletion and break-glass are disabled in the MVP.
         if (in_array($permission, self::DELETION_PERMISSIONS, true)) {
             return false;
