@@ -69,27 +69,51 @@ How to use it, per source:
 
 ---
 
-## Group 2 — the remaining eleven sources
+## Group 2 — the remaining nine sources
 
-For these, the review is faster: confirm the source is the right authority, that the extract matches the live
+For these the review is faster: confirm the source is the right authority, that the extract still matches the live
 page, and that the topic is one a caregiver would plausibly ask about.
 
-| # | Source | Topic is plausible for a family? | Extract matches the source? | Notes |
-|---|---|---|---|---|
-| 6 | | | | |
-| 7 | | | | |
-| 8 | | | | |
-| 9 | | | | |
-| 10 | | | | |
-| 11 | | | | |
-| 12 | | | | |
-| 13 | | | | |
-| 14 | | | | |
-| 15 | | | | |
-| 16 | | | | |
+| # | id | Title (from the corpus) | Plausible for a family? | Extract matches source? | Notes |
+|---|---|---|---|---|---|
+| 6 | `ddc-disease-10` | อาหารเป็นพิษ (Food Poisoning) | | | common at home |
+| 7 | `ddc-disease-17` | มาลาเรีย (Malaria) | | | travel-related |
+| 8 | `ddc-disease-21` | โรคปอดบวม, ปอดอักเสบ (Pneumonia) | | | elderly risk |
+| 9 | `ddc-disease-23` | วัณโรค (TB, ODPC5) | | | household transmission |
+| 10 | `ddc-disease-25` | พิษสุนัขบ้า (Rabies) | | | dog-bite triage |
+| 11 | `ddc-disease-67` | ทางเดินอาหารอักเสบเฉียบพลันจากไวรัส (Viral gastroenteritis) | | | overlaps Group 1 #1? |
+| 12 | `ddc-disease-73` | การบาดเจ็บจากการจราจรทางถนน (Road traffic injury) | | | first-aid scope |
+| 13 | `ddc-disease-74` | อหิวาตกโรค (Cholera) | | | outbreak only |
+| 14 | `ddc-disease-75` | โรคหัด (Measles, Rubella) | | | vaccination |
 
-(The source ids and titles are listed in `KNOWLEDGE-REVIEW-PACK.md`; `php artisan knowledge:validate` prints the
-same list and fails if a source id or chunk is malformed.)
+The two supporting sources - `thaihealth-lepto-symptoms` and `thaihealth-pm25-symptoms` - are reviewed together
+with their Group 1 topic, because they exist to cover the symptom wording a caregiver actually types.
+
+**Current state: 0 of 16 reviewed.** Until every source is reviewed, each AI answer carries the
+"not yet reviewed by a clinician" warning (`KNOWLEDGE-BASE.md`).
+
+## Running the session (about 45 minutes, one reviewer)
+
+```bash
+cd backend
+
+# 1. give the reviewer the platform flag (authorisation is never role-derived)
+php artisan platform:grant doctor@example.test
+
+# 2. review in the console, top to bottom of this sheet
+#    https://<host>/admin/knowledge     (the warning clears per source as you go)
+
+# 3. or record a verdict from the CLI, which is faster for a batch
+php artisan knowledge:review ddc-disease-11 --reviewer="<typed name>"
+
+# 4. prove the decisions are in the corpus, not only in the browser
+php artisan knowledge:review-pack     # regenerate the pack, now showing what is reviewed
+php artisan knowledge:backup          # archive the reviewed corpus
+php artisan knowledge:restore-drill   # and prove the archive carries the review fields
+```
+
+The reviewer name is validated server-side (U+FFFD and letter-less names are rejected), so a Thai name typed into
+the console is stored intact - but it must be **typed**, never written through a shell (root `AGENTS.md` section 7).
 
 ---
 
