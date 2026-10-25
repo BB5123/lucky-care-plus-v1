@@ -19,7 +19,7 @@ A family health CRM for Thai families: several caregivers coordinate the care of
 fine-grained, revocable access to health data. Backend Laravel 13 / PHP 8.4 / PostgreSQL 16 (RLS),
 web Angular 22 + Tailwind 4, mobile Flutter (`lucky_care`).
 
-Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*` (content = **v1.3.0**)
+Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*` (content = **v1.4.0**)
 -> other `.ai/*` -> historical docs. A ticket never outranks the baseline.
 
 ---
@@ -39,13 +39,13 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | Suite | Result |
 |---|---|
 | backend `php artisan test` | **382 passed / 4,049 assertions** |
-| web `npm test` | **126 passed / 42 files** |
+| web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **116 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.893, hit@3 0.964, MRR 0.929** (15 docs / 181 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **58 merged PRs**, no open PRs.
+8 mobile feature folders, **67 merged PRs**, no open PRs.
 
 ---
 
@@ -62,7 +62,7 @@ php artisan demo:seed --reset --force    # synthetic pilot workspace; see docs/D
 bash scripts/smoke.sh --base-url=http://localhost:8080   # post-deploy check
 
 cd ../frontend
-npm test                         # 126
+npm test                         # 135
 npm run build
 npm run check:encoding           # Thai double-encoding guard
 npm run check:mojibake           # repo-wide mojibake guard (added 2026-10-25)
@@ -148,8 +148,8 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | Topic | File |
 |---|---|
 | Blueprint (design authority) | `.ai/` - start at `.ai/README.md` |
-| Authorization baseline | `docs/baseline-v1.0.0/` (v1.3.0) |
-| Change records | `.ai/changes/CR-001`, `CR-003`, `CR-004` |
+| Authorization baseline | `docs/baseline-v1.0.0/` (v1.4.0) |
+| Change records | `.ai/changes/CR-001`, `CR-003`, `CR-004`, `CR-005` |
 | G0 gate evidence | `backend/docs/G0-CHECKLIST.md` |
 | Demo data and smoke check | `backend/docs/DEMO-DATA.md`, `backend/scripts/smoke.sh` |
 | G4 live evaluation | `backend/docs/G4-LIVE-EVALUATION.md` |
