@@ -699,6 +699,47 @@ class ProviderTest extends TestCase
         );
     }
 
+    /**
+     * The OKMD gateway answers with `content: null` and the thinking in a
+     * separate `reasoning` field when the token budget runs out. That is the
+     * empty-content outcome, not a malformed body.
+     */
+    public function test_prv_t14_a_null_content_from_a_reasoning_model_is_empty_content(): void
+    {
+        $this->configureOpenAi();
+
+        Http::fake([
+            '*' => Http::response([
+                'model' => 'deepseek-v4-flash',
+                'choices' => [[
+                    'index' => 0,
+                    'message' => ['role' => 'assistant', 'content' => null, 'reasoning' => 'We are asked to reply'],
+                    'finish_reason' => 'length',
+                ]],
+                'usage' => ['prompt_tokens' => 14, 'completion_tokens' => 8],
+            ], 200),
+        ]);
+
+        $provider = $this->app->make(OpenAiCompatibleProvider::class);
+        $envelope = new PromptEnvelope(
+            system: 'system',
+            untrustedBlocks: [],
+            structuredContext: [],
+            locale: 'en',
+            maxTokens: 8,
+            temperature: 0.0,
+        );
+
+        try {
+            $provider->complete($envelope);
+            $this->fail('A null content was accepted as a completion.');
+        } catch (ProviderException $exception) {
+            $this->assertSame('provider_empty_content', $exception->errorCode);
+        }
+
+        Http::assertSentCount(1);
+    }
+
     private function path(): string
     {
         return "/api/v1/workspaces/{$this->workspace->id}/profiles/{$this->profile->id}/ai/summaries";

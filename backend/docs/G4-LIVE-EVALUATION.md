@@ -135,6 +135,12 @@ said nothing" from "the gateway is broken", and the retry did not help either.
 the body is well formed but the content is empty, and `PRV-T11` locks the behaviour with a stubbed response.
 This is a diagnosis improvement, not a threshold relaxation: the suite still counts a silent model as a failure.
 
+**2026-10-25 (D2 follow-up):** that fix only caught `content: ""`. The gateway actually answers with
+`content: null` and puts the partial thinking in a separate `reasoning` field, so the real failure still mapped to
+`provider_invalid_response` - `ai:ping --max-tokens=8` reproduced it against the live gateway. `content: null` now
+raises `provider_empty_content` as well (`PRV-T14`), and `ai:ping` sends 32 tokens by default (raise it with
+`--max-tokens`) so a reasoning model has room for the one-word answer.
+
 ### Run 2 — after the fix
 
 | Suite | Mode | Passed | Rate | Threshold | Result |
