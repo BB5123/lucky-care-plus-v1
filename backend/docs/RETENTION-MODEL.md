@@ -120,6 +120,7 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | **Archive inventory** | **yes since 2026-10-26 (P4a)** - entering `archived` writes a hashed per-table inventory (`workspace_archive_manifests`), shown and re-verified by `retention:archive-manifest` (`RET-A01..A05`) |
 | **Encrypted archive bundle** | **yes since 2026-10-26 (P4b-1)** - the archived rows are written as NDJSON, gzipped and encrypted with a **random key per archive** (wrapped by `APP_KEY`) on `RETENTION_ARCHIVE_DISK`; `retention:archive-drill` verifies the file, its hash, decryptability and the per-table counts (`RET-B01..B07`) |
 | **Per-archive keys** | **yes since 2026-10-26 (P4b-2a, keys only)** - `key_wrapped` + `key_algorithm` on the manifest; a P4b-1 bundle without a key is still read with `APP_KEY` (`RET-B06/B07`). Crypto-shred and the restore path remain |
+| **Archive access audit** | **yes since 2026-10-26** - `retention:archive-manifest` and `retention:archive-drill` write one `retention.archive_read` row (command + result, no PHI); the weekly `retention:status --verify-archives` probe is not audited, by design (`RET-AUD01`) |
 | **Restore data path** | **no** - P4b-2; until then the final `scheduled_deletion -> deleted` arrow stays closed |
 
 So until 2026-10-25 the product *hid* expired rows forever - the gap P1 closed. Rows are now removed from the
@@ -315,6 +316,11 @@ inventory and the bundle read, so counts and content cannot drift.
 
 The file name carries ids only - no profile name, no document title, no date of care (N-02) - and a test asserts the
 raw ciphertext contains neither the measurement value nor the person's name.
+
+Reading an archive from the console is audited: `retention:archive-manifest` and `retention:archive-drill` write one
+`retention.archive_read` row each (command, result, no PHI). The weekly `retention:status --verify-archives` probe is
+deliberately excluded - a health check that runs for every archived workspace would bury the human reads it is meant
+to surface (`RET-AUD01`).
 
 `retention:archive-drill {workspace}` is the verification: file present, ciphertext hash equal to the manifest's,
 decryptable (unwrap the per-archive key; a P4b-1 bundle without one is still read with `APP_KEY`), and the row count
