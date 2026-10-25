@@ -352,6 +352,12 @@ The compose PostgreSQL credentials (`luckycare` / `luckycare_dev`) and the
 runtime role password (`luckycare_app_dev`) are development defaults. Rotate
 them before a real deployment (section 10, items 4-5).
 
+**Failure alerting.** Both backup workflows end with a step that posts one line
+(the workflow name and the run URL) to a webhook when `BACKUP_ALERT_WEBHOOK` is
+set as a repository secret. Without the secret the step is a no-op, so set it
+and trigger one deliberate failure to confirm delivery. GitHub's own
+failed-workflow notifications are a second, weaker channel and should stay on.
+
 ---
 
 ## 5.1 Uploaded document objects (local disk)

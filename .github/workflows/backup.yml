@@ -222,3 +222,23 @@ jobs:
           echo "::error::Nightly backup failed: the dump was not produced, not verifiable, or not restorable with RLS intact."
           echo "Inspect the failing step above. A dump that only passes pg_dump's exit code is not a backup."
           echo "::error::If the knowledge steps failed: the corpus archive was not produced, or its restore drill failed a check (source JSON, unique ids, SQLite integrity_check, index counts, lost reviewed_by/reviewed_at, or membership drift)."
+
+      # A red badge in the Actions UI is easy to miss for a job that runs at
+      # 02:00. If the repository has a `BACKUP_ALERT_WEBHOOK` secret (Slack,
+      # Teams, an incident endpoint), post one short line with the run link.
+      # Without the secret this step is a no-op, not a failure: alerting is a
+      # deployment choice, and the workflow must not fail because it is absent.
+      - name: Alert the on-call channel
+        if: failure()
+        env:
+          BACKUP_ALERT_WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
+        run: |
+          if [ -z "${BACKUP_ALERT_WEBHOOK}" ]; then
+            echo "No BACKUP_ALERT_WEBHOOK secret set; the failed run stays in the Actions UI."
+            exit 0
+          fi
+          payload="$(printf '{"text":"Nightly backup FAILED: %s/%s/actions/runs/%s"}' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          if ! curl -fsS -m 10 -H 'Content-Type: application/json' -d "$payload" "$BACKUP_ALERT_WEBHOOK"; then
+            echo "::warning::The alert webhook could not be reached; the failed run is still visible in the Actions UI."
+          fi
