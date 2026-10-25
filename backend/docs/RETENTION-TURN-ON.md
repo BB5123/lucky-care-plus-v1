@@ -14,6 +14,22 @@ Every type reports `0 eligible` on the demo data, and `ai_conversations` reports
 failing the run — the command tells the truth about what it can and cannot purge. `--type=` and `--limit=` exist,
 so a first real run can be one type, one batch.
 
+## Live re-verification after P4b-1 (2026-10-26)
+
+The `app` image was rebuilt from `main` and the stack restarted (`app`, `queue`, `scheduler`, plus `web` for the
+nginx upstream). Then, against the demo workspace:
+
+| Command | Result |
+|---|---|
+| `retention:status --verify-archives` | `active 1`, every other state 0; dry run `true`; nothing due; `0` held; `0` upcoming; "No archived workspaces to verify"; exit 0 |
+| `retention:purge --dry-run` | every type `0 eligible`, `ai_conversations` `table_not_present`, "no rows were deleted" |
+| `app:key-fingerprint` | `AES-256-CBC`, key length 32, the same sha256 as the host `.env` (the container and the host agree on the key) |
+| `retention:archive-manifest <demo>` | exits 1 with "No archive manifest exists ... (it has never entered `archived`)" - the expected answer for an active account |
+| `schedule:list` | `retention:purge` 03:00, `retention:compact` 03:20, `retention:advance` 03:40, `retention:notices` 04:20, `retention:inactivity` 04:00 (UTC) |
+
+The archive drill itself is covered by `RET-B01..B04` with a fake disk; the demo workspace is deliberately left
+`active`, so the live stack has no bundle to drill.
+
 ## Rehearsed end to end on 2026-10-25 (live stack, synthetic row)
 
 One row dated `2021-01-15` was inserted as the database owner (RLS hides it from the app otherwise), then:

@@ -246,10 +246,11 @@ permission change record.
 **Verified at hand-off:** backend 480 passed / 2 skipped / 4,749 assertions · web 140 · mobile 129 · 102 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · P4a/P4b-1
-archive inventory + encrypted bundle tested (RET-A01..A04, RET-B01..B04) · retention:status tested (RET-STAT01..03) · document backup tested (DOC-B01..B04) ·
-APP_KEY fingerprint tested (KEY-T01..T03) · web banner (FE5-T10/T11) and mobile banner (RET-M01..M04) tested · D2
-`ai:ping` proven against the real gateway · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy`
-profile.
+archive inventory + encrypted bundle tested (RET-A01..A04, RET-B01..B04) · retention:status tested (RET-STAT01..03) ·
+document backup tested (DOC-B01..B04) · APP_KEY fingerprint tested (KEY-T01..T03) · web banner (FE5-T10/T11) and
+mobile banner (RET-M01..M04) tested · D2 `ai:ping` proven against the real gateway · malware scanning ON and
+EICAR-proven · TLS + `/ready` live in the `proxy` profile · the live stack was rebuilt from `main` on 2026-10-26 and
+`retention:status`, `retention:purge --dry-run`, `app:key-fingerprint` and `schedule:list` were re-verified there.
 
 **Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
 second slice in the same context - that is what forced the hand-off this time.
