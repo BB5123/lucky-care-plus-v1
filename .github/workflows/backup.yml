@@ -4,11 +4,14 @@ name: Nightly backup
 # *can* be restored. This workflow is the other half: it produces the dump.
 #
 # Every run dumps the seeded database, checks that the archive is readable and
-# contains the core tables, writes a sha256 next to it, uploads dump + checksum
-# as a build artifact, then downloads that artifact back and restores it into a
-# scratch database before re-running the three RLS probes. Restoring the
-# *downloaded artifact* rather than a fresh dump is deliberate: it is the only
-# way to prove the thing we kept is the thing that works.
+# contains the core tables, writes a sha256 next to it, then backs up the
+# mutable knowledge corpus (the `knowledgedata` volume holds the clinician
+# review decisions, #67) with `php artisan knowledge:backup` and proves that
+# archive with `php artisan knowledge:restore-drill`. Both archives are uploaded
+# as a build artifact, downloaded back, checksum-verified and restored (the
+# database into a scratch schema, the corpus into a temporary directory).
+# Restoring the *downloaded artifact* rather than a fresh dump is deliberate: it
+# is the only way to prove the thing we kept is the thing that works.
 #
 # This is a safety net, not a compliance backup. Artifacts expire after 7 days,
 # live in GitHub's storage, and say nothing about RPO/RTO. Off-site encrypted
@@ -135,15 +138,43 @@ jobs:
       - name: Verify the checksum file against the dump
         run: cd backups && sha256sum -c ./*.sha256
 
+      # The database is only half the mutable state. Since #67 the review
+      # decisions (reviewed_by/reviewed_at) live in the `knowledgedata` volume,
+      # not in the image, so `docker compose down -v` would erase them and
+      # silently re-enable the "not yet reviewed" warning on every answer. This
+      # step produces the corpus archive; the next one proves it is restorable.
+      #
+      # Run from the workspace root so `--to=backend/backups/knowledge` lands
+      # next to the dump and `php backend/artisan` still bootstraps from
+      # backend/ (artisan resolves base_path from its own location).
+      - name: Produce and verify the knowledge corpus archive
+        working-directory: .
+        run: php backend/artisan knowledge:backup --to=backend/backups/knowledge
+
+      - name: Restore-drill the knowledge corpus archive
+        working-directory: .
+        run: |
+          set -euo pipefail
+          archive="$(find backend/backups/knowledge -maxdepth 1 -type f -name 'knowledge-*.tar.gz' -print -quit)"
+          if [ -z "$archive" ]; then
+            echo "::error::No knowledge corpus archive was produced."
+            exit 1
+          fi
+          ( cd "$(dirname "$archive")" && sha256sum -c ./*.sha256 )
+          echo "Drilling the corpus archive: $archive"
+          php backend/artisan knowledge:restore-drill --archive="$archive"
+
       # `path` is resolved from the workspace root, not from the step's
       # working-directory, so the `backend/` prefix is required here.
-      - name: Upload the dump as a build artifact
+      - name: Upload the dump and corpus as build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: nightly-dump
           path: |
             backend/backups/luckycare-*.dump
             backend/backups/luckycare-*.dump.sha256
+            backend/backups/knowledge/knowledge-*.tar.gz
+            backend/backups/knowledge/knowledge-*.tar.gz.sha256
           retention-days: 7
           if-no-files-found: error
 
@@ -171,8 +202,23 @@ jobs:
           echo "Restoring the uploaded artifact: $dump"
           DUMP_FILE="$dump" bash ./scripts/restore-drill.sh
 
+      # Same reasoning as the database drill above: prove the *uploaded* corpus
+      # artifact, not a fresh archive taken seconds later.
+      - name: Restore-drill the downloaded corpus artifact
+        run: |
+          set -euo pipefail
+          archive="$(find artifact-dump -type f -name 'knowledge-*.tar.gz' -print -quit)"
+          if [ -z "$archive" ]; then
+            echo "::error::No knowledge corpus archive found in the downloaded artifact."
+            exit 1
+          fi
+          ( cd "$(dirname "$archive")" && sha256sum -c ./*.sha256 )
+          echo "Drilling the uploaded corpus artifact: $archive"
+          php artisan knowledge:restore-drill --archive="$archive"
+
       - name: Report failure
         if: failure()
         run: |
           echo "::error::Nightly backup failed: the dump was not produced, not verifiable, or not restorable with RLS intact."
           echo "Inspect the failing step above. A dump that only passes pg_dump's exit code is not a backup."
+          echo "::error::If the knowledge steps failed: the corpus archive was not produced, or its restore drill failed a check (source JSON, unique ids, SQLite integrity_check, index counts, lost reviewed_by/reviewed_at, or membership drift)."

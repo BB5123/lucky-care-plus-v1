@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 14:13 (Asia/Bangkok) - backend suite re-run after REVIEW-PACK (review pack
-generator + committed pack); web/mobile counts are from the previous verification
+**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after TASK G (knowledge corpus
+backup + restore drill); web/mobile counts are from the previous verification
 
 ---
 
@@ -38,7 +38,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **402 passed / 2 skipped / 4,394 assertions** (404 tests) |
+| backend `php artisan test` | **418 passed / 2 skipped / 4,451 assertions** (420 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 404 (402 passed, 2 skipped)
+php artisan test                 # 420 (418 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -123,9 +123,17 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    150 ms / 40 queries, all inside the 800/800/300 ms budgets. See `backend/docs/PERFORMANCE.md`. It is
    single-process and sequential; a real concurrent load test against the deployed stack is still a
    pre-launch task and the numbers are not capacity evidence.
-4. **Backups**: the nightly producer (`.github/workflows/backup.yml`) and the weekly restore drill exist and
-   both run in CI, but a 7-day workflow artifact is a safety net, not a production backup - encrypted
-   off-site storage, RPO/RTO and key management stay with the deployment target.
+4. **Backups**: both halves of the mutable state are now produced and drilled in CI. The database half is
+   `.github/workflows/backup.yml` -> `scripts/backup-dump.sh` (dump, verify readability, `.sha256`, prune)
+   -> `scripts/restore-drill.sh` (restore into a scratch DB, row counts, RLS probes); the **corpus half** is
+   `php artisan knowledge:backup` (archives the `knowledgedata` volume: `sources/*.json`, `health_kb.sqlite`,
+   `benchmark/`) -> `php artisan knowledge:restore-drill` (JSON, unique ids, SQLite `integrity_check`, index
+   counts, and that every `reviewed` source kept `reviewed_by`/`reviewed_at`). Both archives are uploaded as
+   one 7-day artifact and drilled again after download. **Honest note:** a 7-day workflow artifact is a
+   safety net, not a compliance backup - it lives in the CI system that produces it and is compressed, not
+   encrypted; off-site encrypted storage, RPO/RTO and key management stay with the deployment target.
+   Still **not** covered: object storage for uploaded documents, `.env`/secrets, and Redis (fine while the
+   queue is database-backed). The full table is `backend/docs/BACKUP-COVERAGE.md`.
 5. **Documents are unscanned by default.** The ClamAV adapter is wired and fail-closed
    (`backend/docs/MALWARE-SCANNING.md`), but `DOCUMENTS_SCAN_REQUIRED` is false and no deployment runs
    clamd yet; turning it on needs a shared unix socket plus the owner decision in D4.
@@ -161,7 +169,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | Knowledge review pack (generated) | `backend/docs/KNOWLEDGE-REVIEW-PACK.md` - regenerate with `php artisan knowledge:review-pack` |
 | RAG retrieval decision (lexical vs vector) | `backend/docs/RAG-VECTOR-OPTIONS.md` |
 | Local model evaluation (Pathumma/Kaggle) | `backend/docs/LOCAL-AI-PATHUMMA.md` |
-| Backup and restore | `backend/docs/QUALITY-SWEEP-2026-10-24.md`, `.github/workflows/backup.yml` (nightly producer), `.github/workflows/restore-drill.yml` (weekly drill) |
+| Backup and restore | `backend/docs/QUALITY-SWEEP-2026-10-24.md`, `backend/docs/BACKUP-COVERAGE.md` (coverage table), `.github/workflows/backup.yml` (nightly producer), `.github/workflows/restore-drill.yml` (weekly drill) |
 | First overnight run | `MORNING-REPORT.md` |
 | Second overnight run (this one) | `NIGHT-REPORT-2026-10-25.md` |
 

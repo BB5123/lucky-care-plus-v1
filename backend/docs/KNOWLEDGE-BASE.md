@@ -105,6 +105,8 @@ and text length without touching the network. `knowledge:search` is the operator
 never calls a provider. It prints a `Matched by` column (`query` or `alias: <term>`) so an operator can
 see why a hit appeared. `knowledge:review` records `reviewed_by`/`reviewed_at`, revalidates the source
 and (with `--build`) publishes the change; a source marked `reviewed` without a reviewer is rejected.
+`knowledge:backup` and `knowledge:restore-drill` cover the mutable corpus (review decisions live in a
+volume, not the image); see [`BACKUP-COVERAGE.md`](BACKUP-COVERAGE.md).
 
 ## Retrieval and Thai matching (TASK KB-2)
 
