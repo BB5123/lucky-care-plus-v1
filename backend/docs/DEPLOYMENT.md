@@ -774,13 +774,24 @@ The body names the failed dependency, for example:
 {"status":"unavailable","checks":{"database":"failed","redis":"ok"},"failed":["database"]}
 ```
 
+**The Redis half is driver-aware.** `checks.redis` is `skipped` when the deployment does not use
+Redis - when `CACHE_STORE`, `QUEUE_CONNECTION` and `SESSION_DRIVER` are all non-Redis drivers - because a probe
+that fails for a dependency the app never touches marks a healthy instance unavailable. The reference stack
+defaults to the `database` drivers, so it reports:
+
+```json
+{"status":"ok","checks":{"database":"ok","redis":"skipped"}}
+```
+
+Switch any of those three drivers to `redis` and the probe follows automatically; set
+`READINESS_CHECK_REDIS=true` to force the check even when the drivers are database-based (useful when Redis
+carries the rate limiter directly), or `false` to skip it in a deployment with no Redis at all.
+
 - `database`: `docker compose ps postgres`, then check `DB_*` in `backend/.env`
   and run `docker compose --profile app exec -T app php artisan migrate:status`.
 - `redis`: `docker compose ps redis`, `REDIS_*`, and whether `CACHE_STORE` points
-  at a reachable store.
-- If the request goes through Caddy and the response is a bare 503, Caddy has
-  already marked the upstream down after its own `/ready` probe; query
-  `http://localhost:8080/ready` to read the JSON.
+  at a reachable store. A bare `503` from Caddy means Caddy already marked the upstream down after its own
+  `/ready` probe; query `http://localhost:8080/ready` to read the JSON body.
 
 ---
 
