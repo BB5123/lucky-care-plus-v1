@@ -99,6 +99,13 @@ runs with `RETENTION_DRY_RUN=false`** - which is still not the case in this repo
    Check the scheduler is running: `docker compose ps scheduler` (the `app` profile starts it) and that
    `schedule:list` shows `retention:purge` (03:00 UTC) and `retention:compact` (03:20 UTC).
 
+   **How a bad night reports.** `retention:advance` now wraps each workspace in its own savepoint: one failed archive
+   write (full disk, read-only volume) is reported as a `failed` row, the state change for that workspace rolls back,
+   the other workspaces are still processed, and the command exits non-zero so the scheduler marks the run failed. The
+   log entry is `retention.advance.failed` with the workspace id and the exception **class only** - a database error
+   message can carry bound values, so the message is not logged (N-02). Read the table, fix the disk, re-run; the
+   transition is idempotent.
+
 ## Rehearsal recipe (the one to use before step 3)
 
 Seeding "old" rows needs a **tenant context**, because RLS hides everything without one. This is the trap: a
