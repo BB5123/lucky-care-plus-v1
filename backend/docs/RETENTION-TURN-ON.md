@@ -30,22 +30,17 @@ retention:purge --type=health_measurements --limit=100   (RETENTION_DRY_RUN=fals
 | audit | `retention.purge` / `allow` written (the earlier dry run wrote one with `reason_code = dry_run`) |
 | running it again | `0 eligible` - idempotent |
 
-### The finding: this deletes *logically*, not physically
+### The finding (2026-10-25): purge deletes *logically*, not physically - closed by P1
 
 `PurgeService` calls `$row->delete()` for models that use `SoftDeletes`, so `health_measurements` keeps its row and
-only sets `deleted_at`. Tables without soft deletes are removed with a real `DELETE`. **There is no hard-delete or
-compaction step anywhere in the codebase** (`grep forceDelete` finds nothing).
+only sets `deleted_at`. Tables without soft deletes are removed with a real `DELETE`. Until 2026-10-25 there was no
+hard-delete or compaction step anywhere in the codebase (`grep forceDelete` found nothing).
 
-For a PDPA retention obligation that matters: the product currently *hides* the record from the application but the
-data is still in the database, in backups, and in every dump. That is a decision for the owner, not a bug to fix
-silently:
-
-1. accept logical deletion (data remains, unreachable through the API), or
-2. add a hard-delete pass that runs after a further grace period (say 30 days past `deleted_at`), with its own
-   audit row and the same rehearsal discipline.
-
-Until one is chosen, do not describe retention as "data destruction" in the privacy notice - describe it as
-"removal from the service".
+That is now the `retention:compact` pass (`RETENTION-MODEL.md` section 8, P1, built 2026-10-25). It physically removes
+rows that have been soft-deleted for at least the grace period (default 30 days), writes one `retention.compact`
+audit row per batch, respects legal holds, deletes a document object before its metadata row, and is gated by the
+same `RETENTION_DRY_RUN` switch. **The privacy notice may describe "deletion" only once that pass runs with
+`RETENTION_DRY_RUN=false`** - which is still not the case in this repository.
 
 ## Order of operations
 
@@ -66,8 +61,16 @@ Until one is chosen, do not describe retention as "data destruction" in the priv
    ```bash
    RETENTION_DRY_RUN=false php artisan retention:purge --type=health_measurements --limit=100
    ```
-5. Only after that is clean, set `RETENTION_DRY_RUN=false` for the deployment and let the scheduler own it.
-   Check the scheduler is running: `docker compose ps scheduler` (the `app` profile starts it).
+5. **Compact that batch**, first as a dry run, then for real - one type, small batch:
+   ```bash
+   php artisan retention:compact --type=health_measurements --older-than=30 --dry-run
+   RETENTION_DRY_RUN=false php artisan retention:compact --type=health_measurements --older-than=30 --limit=100
+   ```
+   Use `--older-than=1` only to prove the path on a synthetic row soft-deleted yesterday; the deployment value is
+   30 days. Re-run it and expect `0 eligible`.
+6. Only after both are clean, set `RETENTION_DRY_RUN=false` for the deployment and let the scheduler own it.
+   Check the scheduler is running: `docker compose ps scheduler` (the `app` profile starts it) and that
+   `schedule:list` shows `retention:purge` (03:00 UTC) and `retention:compact` (03:20 UTC).
 
 ## Rehearsal recipe (the one to use before step 3)
 
@@ -91,6 +94,32 @@ Then, for the type under test:
 
 If the audit counter does not move, **stop** — a silent deletion is worse than none, and that is the one thing this
 project has consistently refused to accept.
+
+## Compaction: rehearsed end to end on 2026-10-25 (live stack, synthetic rows)
+
+Rows were inserted as the database superuser (RLS hides them from the app otherwise) into the demo workspace, with
+`deleted_at` set to controlled ages. The `app` image was rebuilt first, so the container ran the branch's code.
+
+| Step | Expected | Observed |
+|---|---|---|
+| `retention:compact --type=health_measurements --older-than=30 --dry-run` | 1 eligible, 0 compacted | `Eligible 1 / Compacted 0 / dry run yes` |
+| `RETENTION_DRY_RUN=false retention:compact --type=health_measurements --older-than=30` | the 40-day row is physically gone | 1 compacted; `select` for that id returns **0 rows** (no `deleted_at`, no row) |
+| the row soft-deleted 5 days ago | untouched (inside the grace) | still present with its `deleted_at` |
+| the live row dated 2021 (never deleted) | untouched | still present, `deleted_at` null |
+| audit | +1 `retention.compact` row, counts only | `{"compacted":1,"evaluated":1,"grace_days":30,"dry_run":false}` |
+| the dry run | audited too, `reason_code = dry_run` | `{"compacted":0,"evaluated":1,...,"dry_run":true}` |
+| run it again | `0 eligible` | `0 / 0 / 0` |
+| a profile-level legal hold + a 40-day row | held, not deleted | `Held 1`, row still present; after releasing the hold the same run compacts it |
+| `retention:compact --dry-run` (every type) | truthful skip list | `task_events`/`task_evidence` = `no_soft_deletes`, `ai_conversations` = `table_not_present`, the rest `done` |
+| the demo data | unchanged | 180 live measurements before and after; the synthetic rows were deleted by hand afterwards |
+
+Two operational notes from the run:
+
+- The order is **purge, then compact**. The purge sets `deleted_at` today; compaction only removes rows whose
+  `deleted_at` is already older than the grace, so the same night's deletion can never be compacted by accident.
+- Compaction is gated by `RETENTION_DRY_RUN` exactly like the purge. With the default (`true`) it reports
+  `Eligible` and deletes nothing - that is the state of this repository today, and it is why the notice still must
+  not promise physical deletion.
 
 ## Rollback
 

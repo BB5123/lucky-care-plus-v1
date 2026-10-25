@@ -110,18 +110,19 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | Per-tenant override within bounds | **yes** (`RET-T03`) |
 | Idempotent re-run | **yes** (`RET-T07`) |
 | Export for the member | **yes** (data export, web + mobile) |
-| **Hard delete / compaction** | **no** - nothing in the codebase (`grep forceDelete` finds nothing) |
+| **Hard delete / compaction** | **yes since 2026-10-25** - `retention:compact` physically removes rows soft-deleted past the grace period, audited and rehearsed on the live stack (`RET-C01..C07`) |
 | **The five states above** | **no** - there is only "purged or not" |
 | **Notices (30/7/1 day)** | **no** |
 | **Archive store** | **no** |
 
-So today the product *hides* expired rows forever. That is the gap this document proposes to close.
+So until 2026-10-25 the product *hid* expired rows forever - the gap P1 closed. Rows are now removed from the
+database, but they still live in backups for up to the backup window (the privacy notice says so).
 
 ## 8. Implementation, phased
 
 | Phase | Work | Effort | Unblocks |
 |---|---|---|---|
-| **P1** | `retention:compact --older-than=<grace>` : physical delete of rows already soft-deleted, audit row, legal hold respected, idempotent | ~1 day | "we actually delete" |
+| **P1** | `retention:compact --older-than=<grace>` : physical delete of rows already soft-deleted, audit row, legal hold respected, idempotent - **built 2026-10-25** | ~1 day | "we actually delete" |
 | **P2** | `retention_state` column + the five states + the lapse trigger | ~2 days | plan windows |
 | **P3** | Notices (email + in-app), export push, the cancellation choice screen | ~2 days | the notices and the choice |
 | **P4** | Archive store + restore action + access audit | ~3 days | the long windows |
@@ -129,24 +130,37 @@ So today the product *hides* expired rows forever. That is the gap this document
 P1 is the honest minimum: without it, no wording of the privacy notice is true. **Do P1 before publishing the
 notice**, then P2-P4 behind their own review.
 
-### P1 implementation notes (for whoever writes it)
+### P1 implementation notes (as built, 2026-10-25)
 
-Everything needed is already in `app/Modules/Retention/Services/PurgeService.php`:
+`PurgeService::compactBatch(string $type, int $graceDays, int $limit = 500): array` returns
+`['compacted' => n, 'held' => n, 'skipped' => ?string, 'evaluated' => n, 'dry_run' => bool]`; `compactAll()` fans a
+batch out over every tenant/workspace, and `retention:compact {--type=} {--older-than=30} {--limit=500} {--dry-run}`
+drives it. The scheduler runs it at 03:20 UTC, after the 03:00 purge, so the same night's soft deletes can never be
+compacted by accident.
 
-- `TYPE_SPECS` (private const) maps each type to `{table, date_column, model, soft_deletes, objects?}`. Only the
-  entries with `soft_deletes: true` can ever have compactable rows - for the rest, purge already hard-deletes.
-- Per-type work happens per **workspace**, and holds are read with `$this->holds->activeHolds($workspaceId)`; a
-  hold with `profile_id === null` is workspace-wide and must skip the whole workspace.
-- The append-only trigger on `task_events` only allows DELETE when `set_config('app.retention_purge', 'on')` has
-  been set for the connection - the compaction must do the same or it will fail on that table.
-- Object-backed rows (`objects: true`) must delete the private object before the row, and keep the row when the
-  object delete fails, so the next run can retry (fail closed) - same rule as purge.
+Three details differ from the sketch above, each for a reason:
 
-Signature to add: `compactBatch(string $type, int $graceDays, int $limit = 500): array` returning
-`['compacted' => n, 'held' => n, 'skipped' => ?string]`, plus a `retention:compact {--type=} {--older-than=30}
-{--limit=500}` command that refuses `--older-than` below 1 day and writes one audit row per batch
-(`action = retention.compact`). Tests mirror `RET-T01/T02/T05/T07`: inside the grace window nothing is removed,
-past it the row is gone, an active hold blocks it, a second run removes nothing.
+- **Compaction is schema-driven, not `TYPE_SPECS`-driven.** `TYPE_SPECS` marks only `health_measurements` as
+  `soft_deletes: true`, but eight of the tables behind those types carry `deleted_at` (health measurements, health
+  conditions, allergies, medication plans, medication records, care tasks, appointments, medical documents), because
+  their models use `SoftDeletes`. A row a member deletes through the API is soft-deleted even when the purge never
+  touched it, so the test is `Schema::hasColumn($table, 'deleted_at')` and the clock is always `deleted_at`, never
+  the retention `date_column`. Types without the column report `skipped = no_soft_deletes`.
+- **`retention.dry_run` gates compaction too.** The switch means "nothing is deleted"; a compaction pass that ignored
+  it would be a bypass around the operator's global stop, which is worse than the gap it closes. `--dry-run` forces
+  it on for one run.
+- **A failed object delete is reported, not thrown.** Purge throws so the batch stops; compaction keeps that one
+  metadata row, compacts the rest, returns `skipped = object_delete_failed`, and the command exits non-zero so the
+  next run is paged for. A partial deletion is audited with the rows it did remove - never silent.
+
+Every skip that never started (`not_yet_implemented`, `table_not_present`, `no_soft_deletes`) writes no audit row,
+exactly like a skipped purge batch; a batch that was blocked by a hold is audited with its `held` count.
+
+Tests are `RET-C01..C07` in `backend/tests/Feature/Retention/RetentionCompactionTest.php`: inside the grace window
+nothing is removed; past it the row is physically gone and one `retention.compact` audit row is written; a profile
+hold and a workspace-wide hold both block it; a second run removes nothing; the dry-run switch removes nothing; a
+document object is deleted before its metadata row; a failed object delete keeps the row; and a batch never touches
+another workspace's rows (RLS, F-09).
 
 ## 9. Notice copy (Thai, for the privacy notice)
 
