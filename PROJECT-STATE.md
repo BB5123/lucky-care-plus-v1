@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-26 (Asia/Bangkok) - concurrent HTTP load run on the reference stack (3 clients / 60 s);
-backend and web counts are from the previous runs; mobile counts are from the previous verification
+**Last verified:** 2026-10-26 (Asia/Bangkok) - backend suite re-run after P4a (the archive inventory); web and mobile
+counts are from the previous runs
 
 ---
 
@@ -38,14 +38,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **469 passed / 2 skipped / 4,698 assertions** (471 tests) |
+| backend `php artisan test` | **473 passed / 2 skipped / 4,715 assertions** (475 tests) |
 | web `npm test` | **140 passed / 43 files** |
 | mobile `flutter test` | **129 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
-**Repo shape:** 15 backend modules, 52 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **99 merged PRs**, no open PRs.
+**Repo shape:** 15 backend modules, 53 migrations, 88 API routes, 22 web feature folders,
+8 mobile feature folders, **100 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 471 (469 passed, 2 skipped)
+php artisan test                 # 475 (473 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -151,7 +151,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    defaults to true; clamd is reached over `tcp://clamav:3310` (sharing the unix socket does not work with the
    clamav image). The gate is proven with EICAR, and a deployment that forgets `--profile scan` fails closed
    with 503 rather than storing unscanned bytes - see `backend/docs/MALWARE-SCANNING.md`.
-6. **Retention P1/P2/P2b/P3a/P3b are built; P3c and P4 are not.** `retention:compact` physically deletes rows
+6. **Retention P1/P2/P2b/P3a/P3b/P4a are built; P3c and P4b are not.** `retention:compact` physically deletes rows
    soft-deleted longer than the 28-day grace (R8), audited, with holds respected and objects removed before their
    metadata row (`RETENTION-TURN-ON.md`). The five account states exist on `workspaces.retention_state`, with audited
    transitions (`retention:lapse` / `restore` / nightly `advance`) and an HTTP gate: read_only refuses writes,
@@ -159,13 +159,14 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    **P2b:** scheduled work starts from `Workspace::acceptingBackgroundWork()`, and a queued notification re-checks the
    state at delivery. **P3a:** `retention:notices` sends the 30/7/1-day notices in-app **and by email**, overrides
    channel preferences (legal notice), reaches the lapsed account through the documented job exception, and is
-   idempotent through the delivery ledger. **P3b:** a lapse sends an in-app export offer on day 1. **Web/mobile:** a
-   `read_only`/`archived`/`scheduled_deletion` account gets one banner in the shell (web links to the export card;
-   mobile shows the same copy above the tabs); the API's 409 stays the authority. `RETENTION_DRY_RUN`
-   is still `true` here on purpose (`RetentionDecisionPackTest` fails if it is flipped). **Still open:** plan-specific
-   windows (D5), the cancellation choice screen (P3c - blocked on a permission change record), the final
-   `scheduled_deletion -> deleted` arrow (P4), the separate archive store (P4) and the self-service restore/export
-   screens.
+   idempotent through the delivery ledger. **P3b:** a lapse sends an in-app export offer on day 1. **P4a:** entering
+   `archived` writes a hashed per-table inventory (`workspace_archive_manifests`), shown and verified by
+   `retention:archive-manifest`. **Web/mobile:** a `read_only`/`archived`/`scheduled_deletion` account gets one banner
+   in the shell (web links to the export card; mobile shows the same copy above the tabs); the API's 409 stays the
+   authority. `RETENTION_DRY_RUN` is still `true` here on purpose (`RetentionDecisionPackTest` fails if it is
+   flipped). **Still open:** plan-specific windows (D5), the cancellation choice screen (P3c - blocked on a permission
+   change record), the final `scheduled_deletion -> deleted` arrow (P4b), the encrypted separate archive store and
+   restore data path (P4b), and the self-service restore screens.
 7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
    works**: the measurements list is cursor-paginated with an idempotent loadMore, dedupe by id and a
    footer that keeps the rows when a page fails.
@@ -218,28 +219,29 @@ sitting through `/admin/knowledge`, then regenerate the pack with `php artisan k
 
 ---
 
-## Start here (next session, 2026-10-26 00:45)
+## Start here (next session, 2026-10-26 01:30)
 
-**Where the work stopped:** **retention P1/P2/P2b/P3a/P3b are built**, the **document-object backup producer** closes
-the last unproduced part of gap 4 for the local disk, and the **web shell shows the account state** (one banner for
-read_only/archived/scheduled_deletion with a link to the export card). Notices go out in-app + email at 30/7/1 days, a
-lapse offers the export on day 1, and `documents:backup` fails when a metadata row has no object.
-P3c (the cancellation choice screen) is blocked on a permission change record.
+**Where the work stopped:** **retention P1/P2/P2b/P3a/P3b/P4a are built.** `retention:notices` sends the 30/7/1-day
+notices in-app + email; a lapse offers the export on day 1; both shells show the account state; entering `archived`
+writes a hashed inventory (`retention:archive-manifest` shows and verifies it); the document objects have a backup
+producer and the APP_KEY has a fingerprint check; the load test exists with its numbers. P3c (the cancellation choice
+screen) is blocked on a permission change record.
 
 **Do this first, in order:**
 
-1. **P4** - the separate archive store + restore action + access audit; only then does the final
-   `scheduled_deletion -> deleted` arrow become honest.
-2. **Load test (gap 3)** - a real concurrent run against the deployed stack, keeping inside the per-user rate limits
-   (the current harness is single-process by design).
-3. **P3c** once the owner approves a "cancel my account" permission change record.
+1. **P4b** - the encrypted, separate archive store and the restore data path; only then does the final
+   `scheduled_deletion -> deleted` arrow become honest. P4a's inventory is the fact the store starts from.
+2. **P3c** once the owner approves a "cancel my account" permission change record.
+3. **Mobile export link** from the retention banner (it currently says to contact support; the mobile IA has no
+   export route from the banner yet).
 4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 469 passed / 2 skipped / 4,698 assertions · web 140 · mobile 129 · 99 merged PRs ·
+**Verified at hand-off:** backend 473 passed / 2 skipped / 4,715 assertions · web 140 · mobile 129 · 100 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
-tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · document
-backup tested (DOC-B01..B04) · web retention banner tested (FE5-T10/T11) · D2 `ai:ping` proven against the real
-gateway · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy` profile.
+tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · P4a
+archive inventory tested (RET-A01..A04) · document backup tested (DOC-B01..B04) · APP_KEY fingerprint tested
+(KEY-T01..T03) · web banner (FE5-T10/T11) and mobile banner (RET-M01..M04) tested · D2 `ai:ping` proven against the
+real gateway · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy` profile.
 
 **Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
 second slice in the same context - that is what forced the hand-off this time.

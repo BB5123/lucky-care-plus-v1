@@ -58,6 +58,7 @@ final class WorkspaceLifecycle
     public function __construct(
         private readonly LegalHold $holds,
         private readonly SecurityAuditLogger $audit,
+        private readonly ArchiveManifestService $manifests,
     ) {}
 
     public function state(Workspace $workspace): RetentionState
@@ -147,13 +148,22 @@ final class WorkspaceLifecycle
             return null;
         }
 
-        return $this->apply(
+        $workspace = $this->apply(
             $workspace,
             $next,
             $now->copy()->addDays($this->windowDays($workspace, $next)),
             'window_elapsed',
             $now,
         );
+
+        // Entering `archived` records what the account holds before the data is
+        // excluded from the app (P4a). A failure here aborts the transition: an
+        // archive without an inventory would be a claim we cannot verify.
+        if ($next === RetentionState::Archived) {
+            $this->manifests->createFor($workspace, $now);
+        }
+
+        return $workspace;
     }
 
     /**
