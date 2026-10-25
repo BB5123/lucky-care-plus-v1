@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Http\Responses\ProblemDetails;
+use App\Modules\Retention\Services\WorkspaceStateGate;
 use App\Modules\Workspace\Models\Workspace;
 use App\Modules\Workspace\Models\WorkspaceMembership;
 use App\Modules\Workspace\Services\WorkspaceResolver;
@@ -25,10 +26,17 @@ use Throwable;
  * sets it. On success the transaction commits; on an exception it rolls back.
  * The context is cleared in `finally` as defence in depth (including for
  * connection reuse in tests and long-lived workers).
+ *
+ * The retention state gate runs here, after membership is proven and before any
+ * controller or authorizer decision: a read-only or archived account must not
+ * reach a handler that would otherwise write or serve data (P2).
  */
 final class ResolveWorkspaceContext
 {
-    public function __construct(private readonly WorkspaceResolver $workspaces) {}
+    public function __construct(
+        private readonly WorkspaceResolver $workspaces,
+        private readonly WorkspaceStateGate $gate,
+    ) {}
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -66,6 +74,14 @@ final class ResolveWorkspaceContext
 
                 $request->attributes->set('workspace', $workspace);
                 $request->attributes->set('membership', $membership);
+
+                // A lapsed/archived/deleted account is refused here, before any
+                // route-specific permission or controller runs.
+                $blocked = $this->gate->check($workspace, $request);
+
+                if ($blocked !== null) {
+                    return $blocked;
+                }
 
                 return $next($request);
             } finally {

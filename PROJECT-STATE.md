@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after the D3 sign-off (R8 grace 28) and the D2
-`ai:ping` fix; web/mobile counts are from the previous verification
+**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after P2 (the five retention states + the
+workspace state gate); web/mobile counts are from the previous verification
 
 ---
 
@@ -32,20 +32,20 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **1 - Core MVP** | backend + web complete | health vault, medication, care tasks, appointments, dashboard, notifications, timeline, family |
 | **2 - Coordination** | complete | recurring templates, escalation ladder, doctor brief, documents + photo evidence, quality sweep |
 | **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 16-document knowledge base with a measured benchmark, web + mobile AI surfaces |
-| **4 - Scale/compliance** | not started - P1 retention compaction is the first piece | |
+| **4 - Scale/compliance** | in progress - P1 (physical deletion) + P2 (five states + state gate) built | `backend/docs/RETENTION-MODEL.md` sections 7-8 |
 
-**Verified test counts (2026-10-25 22:00):**
+**Verified test counts (2026-10-25 22:40):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **434 passed / 2 skipped / 4,537 assertions** (436 tests) |
+| backend `php artisan test` | **449 passed / 2 skipped / 4,600 assertions** (451 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
-**Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **89 merged PRs**, no open PRs.
+**Repo shape:** 15 backend modules, 52 migrations, 88 API routes, 22 web feature folders,
+8 mobile feature folders, **90 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 436 (434 passed, 2 skipped)
+php artisan test                 # 451 (449 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -140,13 +140,16 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    defaults to true; clamd is reached over `tcp://clamav:3310` (sharing the unix socket does not work with the
    clamav image). The gate is proven with EICAR, and a deployment that forgets `--profile scan` fails closed
    with 503 rather than storing unscanned bytes - see `backend/docs/MALWARE-SCANNING.md`.
-6. **Retention is signed but off in the repository.** `retention:compact` physically deletes rows that were
-   soft-deleted longer than the 28-day grace (R8), with one `retention.compact` audit row per batch, legal holds
-   respected and objects removed before their metadata row - rehearsed on the live stack (see
-   `backend/docs/RETENTION-TURN-ON.md`). `RETENTION_DRY_RUN` is still `true` here on purpose (`RetentionDecisionPackTest`
-   fails if it is flipped); a deployment turns it on with `RETENTION_DRY_RUN=false`, and none has yet. The five
-   retention states, the 30/7/1-day notices and the archive store are still ahead (P2-P4 in
-   `backend/docs/RETENTION-MODEL.md`).
+6. **Retention P1 + P2 are built; P3/P4 and the job filter are not.** `retention:compact` physically deletes rows
+   soft-deleted longer than the 28-day grace (R8), audited, with holds respected and objects removed before their
+   metadata row (`RETENTION-TURN-ON.md`). The five account states now exist on `workspaces.retention_state`, with
+   audited transitions (`retention:lapse` / `restore` / nightly `advance`) and an HTTP gate: read_only refuses
+   writes, archived/scheduled_deletion refuse reads except export + the workspace metadata read, deleted answers 410.
+   `RETENTION_DRY_RUN` is still `true` here on purpose (`RetentionDecisionPackTest` fails if it is flipped).
+   **Still open:** plan-specific windows (D5), the final `scheduled_deletion -> deleted` arrow (P3/P4), the 30/7/1-day
+   notices (P3), the separate archive store (P4), and **background jobs do not read the state yet** - reminders, task
+   materialisation and escalation still scan by date, so a read_only account can still receive a reminder or a
+   generated task. That job filter is the next slice (P2b).
 7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
    works**: the measurements list is cursor-paginated with an idempotent loadMore, dedupe by id and a
    footer that keeps the rows when a page fails.
@@ -199,25 +202,29 @@ sitting through `/admin/knowledge`, then regenerate the pack with `php artisan k
 
 ---
 
-## Start here (next session, 2026-10-25 22:40)
+## Start here (next session, 2026-10-25 23:05)
 
-**Where the work stopped:** **D3 is signed** (R1-R7 + R8 = 28-day grace, recorded in `RETENTION-MODEL.md` section
-11); P1 is built, tested and rehearsed; the repository keeps `RETENTION_DRY_RUN=true` on purpose and a deployment
-turns it on with `RETENTION_DRY_RUN=false`. **D2 is done**: the owner rotated the key and `ai:ping` now really
-exercises it (it forces `AI_ENABLED` for one run, fails with `provider_not_configured` instead of pinging the stub,
-and maps the gateway's `content: null` to `provider_empty_content`). The configured key answers: `ok openai_compatible
-/ deepseek-v4-flash 2620ms in=27 out=27`.
+**Where the work stopped:** **P2 (the five retention states) is built** on top of the signed model: the state lives
+on `workspaces.retention_state`, only `WorkspaceLifecycle` writes it, every transition is audited, a legal hold pins
+the account in `read_only`, and an HTTP gate enforces each state on every workspace route (409/410 with stable
+codes). `retention:lapse` / `retention:restore` are the audited support paths and `retention:advance` runs nightly at
+03:40 UTC. Plan-specific windows (D5), notices (P3), the archive store (P4) and the final delete arrow are still
+open - and **background jobs do not read the state yet**, which is the next slice.
 
 **Do this first, in order:**
 
-1. **P2** - the five retention states (`read_only`, `archived`, ...) and the lapse trigger, behind the R1/R2 sign-off
-   that is now on record. `RETENTION-MODEL.md` section 8 is the plan; do not start P3/P4 before it.
-2. Then **F** (16 sources) once the clinician is available - `KNOWLEDGE-REVIEW-SHEET.md` is the script to follow.
-3. Then **D1** (send `DPA-REQUEST-OKMD.md`, file the answer, only then `AI_ENABLED=true` in staging).
+1. **P2b** - make the scheduled jobs respect the state: reminders (`notifications:send-due`,
+   `notifications:send-appointment-reminders`), `tasks:materialise`, `tasks:escalate` and `retention:inactivity`
+   must skip workspaces that are not `active` (a read_only account gets no reminders and no generated work). Add the
+   filter in one shared place, not in five commands.
+2. Then **P3** - the 30/7/1-day notices, the export push and the cancellation choice screen (owner-approved R7).
+3. Then **P4** - the separate archive store + restore action + access audit; only then does the final
+   `scheduled_deletion -> deleted` arrow become honest.
+4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 434 passed / 2 skipped / 4,537 assertions · web 135 · mobile 125 · 89 merged PRs ·
-CI green · P1 rehearsed on the live stack · D2 `ai:ping` proven against the real gateway · malware scanning ON and
-EICAR-proven · TLS + `/ready` live in the `proxy` profile.
+**Verified at hand-off:** backend 449 passed / 2 skipped / 4,600 assertions · web 135 · mobile 125 · 90 merged PRs ·
+CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · D2 `ai:ping`
+proven against the real gateway · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy` profile.
 
 **Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
 second slice in the same context - that is what forced the hand-off this time.

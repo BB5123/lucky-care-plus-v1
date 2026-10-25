@@ -111,7 +111,8 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | Idempotent re-run | **yes** (`RET-T07`) |
 | Export for the member | **yes** (data export, web + mobile) |
 | **Hard delete / compaction** | **yes since 2026-10-25** - `retention:compact` physically removes rows soft-deleted past the grace period (28 days, R8), audited and rehearsed on the live stack (`RET-C01..C08`) |
-| **The five states above** | **no** - there is only "purged or not" |
+| **The five states above** | **yes since 2026-10-25** - `workspaces.retention_state` + `WorkspaceLifecycle`; the state is enforced on every workspace route (`RET-S01..S08`, `RET-G01..G07`) |
+| Lapse trigger | **manual, audited (2026-10-25)** - `retention:lapse` is the support entry point and `retention:advance` moves due accounts nightly. Billing (D5) does not exist yet, so nothing lapses automatically |
 | **Notices (30/7/1 day)** | **no** |
 | **Archive store** | **no** |
 
@@ -123,7 +124,7 @@ database, but they still live in backups for up to the backup window (the privac
 | Phase | Work | Effort | Unblocks |
 |---|---|---|---|
 | **P1** | `retention:compact --older-than=<grace>` : physical delete of rows already soft-deleted, audit row, legal hold respected, idempotent - **built and signed 2026-10-25 (R8: grace 28 days)** | ~1 day | "we actually delete" |
-| **P2** | `retention_state` column + the five states + the lapse trigger | ~2 days | plan windows |
+| **P2** | `retention_state` column + the five states + the lapse trigger - **built 2026-10-25 (P2a; plan windows wait for D5)** | ~2 days | plan windows |
 | **P3** | Notices (email + in-app), export push, the cancellation choice screen | ~2 days | the notices and the choice |
 | **P4** | Archive store + restore action + access audit | ~3 days | the long windows |
 
@@ -162,6 +163,55 @@ nothing is removed; past it the row is physically gone and one `retention.compac
 hold and a workspace-wide hold both block it; a second run removes nothing; the dry-run switch removes nothing; a
 document object is deleted before its metadata row; a failed object delete keeps the row; a batch never touches
 another workspace's rows (RLS, F-09); and the scheduled run uses the signed 28-day grace, not a hard-coded argument.
+
+### P2 implementation notes (as built, 2026-10-25)
+
+`workspaces` gains `retention_state` (five values, NOT NULL, default `active`), `retention_state_changed_at`,
+`retention_expires_at` and `lapsed_at`. The column is deliberately **not mass-assignable**: a request body can never
+move an account between states (N-01). A check constraint rejects any sixth value.
+
+`WorkspaceLifecycle` is the only writer. It enforces the arrows, refuses a deleted account, pins a workspace with an
+active legal hold in `read_only`, and requires the matching tenant/workspace context (a context-less call would see
+zero holds - fail closed, F-09). Every transition writes one `retention.state` audit row with `from`, `to`, `reason`
+and the new deadline.
+
+| Command | When | What it does |
+|---|---|---|
+| `retention:lapse {workspace} {--reason=}` | support / payment / heir | `active -> read_only`, sets `lapsed_at` and the read-only deadline. Idempotent |
+| `retention:restore {workspace} {--reason=}` | payment, support, heir | any state except `deleted` -> `active`, clears the deadline and `lapsed_at` |
+| `retention:advance [--dry-run]` | scheduled 03:40 UTC | `read_only -> archived -> scheduled_deletion` when the window elapsed; skips held workspaces and reports `waiting` at `scheduled_deletion` |
+
+`WorkspaceStateGate` runs inside `ResolveWorkspaceContext`, after membership and before any authorizer/controller:
+
+| State | Allowed | Refused |
+|---|---|---|
+| `active` | everything | - |
+| `read_only` | GET/HEAD + export | every write: `409 workspace_read_only` |
+| `archived` | export + `GET /workspaces/{id}` | everything else: `409 workspace_archived` |
+| `scheduled_deletion` | export + `GET /workspaces/{id}` | everything else: `409 workspace_scheduled_deletion` |
+| `deleted` | nothing | `410 workspace_deleted` |
+
+The export exception is keyed on the route's own `data_export.request` / `data_export.download` permission, so it
+cannot drift from the route file. Each refusal writes one `workspace.retention_block` deny row. Responses are RFC 9457
+`application/problem+json` and carry `retention_state` plus `retention_expires_at` so a client can offer restore/export.
+
+**What P2 does not do yet (honest):**
+
+1. **Plan-specific windows.** Billing does not exist (D5), so every workspace uses the Free-with-health-data floor:
+   30 days read-only + 11 months archived, or the 60-day row when the workspace never held health data. The windows
+   live in `retention.state_windows_days`, so assigning a plan later is configuration plus a lookup, not a rewrite.
+2. **The final arrow.** `scheduled_deletion -> deleted` is not automated: the member's "delete now" is P3 and the
+   archive deletion is P4. `retention:advance` reports `waiting` and leaves the account in place, because marking it
+   deleted while its data still exists would be a lie.
+3. **Background jobs do not read the state yet.** Reminders, task materialisation and escalation still scan by date,
+   not by workspace state, so a `read_only` account can still receive a reminder or a generated task. The HTTP gate
+   covers every member-facing path; the job filter is the next slice (P2b) and is listed in PROJECT-STATE's gaps.
+4. **No notices** (P3), **no separate archive store** (P4), and no self-service "pay to restore" screen - restore is
+   the audited support command.
+
+Tests are `RET-S01..S08` (`RetentionStateTest`: windows, arrows, hold pinning, restore, terminal state, commands) and
+`RET-G01..G07` (`WorkspaceStateGateTest`: 409/410 per state, export exception, metadata read, audit row, isolation
+between workspaces).
 
 ## 9. Notice copy (Thai, for the privacy notice)
 

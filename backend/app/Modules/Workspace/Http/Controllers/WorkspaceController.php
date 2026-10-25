@@ -49,6 +49,12 @@ final class WorkspaceController extends Controller
                 'slug' => $workspace->slug,
                 'role' => $membership?->role,
                 'break_glass_enabled' => $workspace->break_glass_enabled,
+                // The state read is allowed in every non-deleted state precisely
+                // so a client can show "read-only/archived" and offer restore or
+                // export. It carries no health data.
+                'retention_state' => $workspace->retentionState()->value,
+                'retention_expires_at' => $workspace->retention_expires_at?->toIso8601String(),
+                'lapsed_at' => $workspace->lapsed_at?->toIso8601String(),
             ],
         ]);
     }
