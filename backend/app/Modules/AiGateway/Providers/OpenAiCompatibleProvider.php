@@ -185,8 +185,15 @@ final class OpenAiCompatibleProvider implements LlmProvider
 
         $content = $message['content'] ?? null;
 
-        if (! is_string($content) || trim($content) === '') {
+        if (! is_string($content)) {
             throw ProviderException::invalidResponse();
+        }
+
+        if (trim($content) === '') {
+            // A reasoning model can spend the whole token budget thinking and return an
+            // empty `content`. That is a distinct, retryable outcome - not a malformed
+            // body - and the G4 live run needs to be able to tell the two apart.
+            throw ProviderException::emptyContent();
         }
 
         $model = $data['model'] ?? null;

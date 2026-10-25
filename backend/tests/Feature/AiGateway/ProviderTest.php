@@ -666,6 +666,39 @@ class ProviderTest extends TestCase
             ->sole();
     }
 
+    /**
+     * A reasoning model can return an empty `content` with a valid 200 body.
+     * The G4 live run on 2026-10-25 lost three cases to exactly that and the log
+     * could not distinguish it from a broken gateway, so it gets its own code.
+     */
+    public function test_prv_t11_empty_content_has_its_own_error_code(): void
+    {
+        $this->configureOpenAi();
+
+        Http::fake([
+            '*' => Http::response([
+                'model' => 'deepseek-v4-flash',
+                'choices' => [[
+                    'index' => 0,
+                    'message' => ['role' => 'assistant', 'content' => '', 'reasoning' => 'thinking...'],
+                    'finish_reason' => 'length',
+                ]],
+                'usage' => ['prompt_tokens' => 20, 'completion_tokens' => 1500],
+            ], 200),
+        ]);
+
+        Sanctum::actingAs($this->owner);
+
+        $response = $this->postJson($this->path())
+            ->assertStatus(503)
+            ->assertJsonPath('code', 'provider_empty_content');
+
+        $this->assertSame(
+            config('ai.provider_messages.provider_empty_content'),
+            $response->json('detail'),
+        );
+    }
+
     private function path(): string
     {
         return "/api/v1/workspaces/{$this->workspace->id}/profiles/{$this->profile->id}/ai/summaries";

@@ -65,6 +65,25 @@ final class ProviderException extends RuntimeException
         );
     }
 
+    /**
+     * The provider answered with a well-formed body but **no content**.
+     *
+     * Reasoning models can spend the whole `max_tokens` budget on their internal
+     * reasoning and return `content: ""`. That is not a malformed response, and
+     * conflating the two hides a measurable model behaviour: the G4 live run on
+     * 2026-10-25 lost three injection/grounding cases to exactly this, and the
+     * failure log could not tell it apart from a broken gateway.
+     */
+    public static function emptyContent(): self
+    {
+        return new self(
+            'provider_empty_content',
+            503,
+            self::message('provider_empty_content', 'ระบบ AI ไม่ได้ให้คำตอบสำหรับคำขอนี้ กรุณาลองใหม่ภายหลัง'),
+            true,
+        );
+    }
+
     public static function refused(): self
     {
         return new self(
