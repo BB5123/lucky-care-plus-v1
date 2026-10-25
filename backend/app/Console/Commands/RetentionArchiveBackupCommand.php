@@ -32,6 +32,7 @@ final class RetentionArchiveBackupCommand extends Command
 {
     protected $signature = 'retention:archive-backup
         {--output= : Archive path (default: storage/app/backups/archives-<UTC>.zip)}
+        {--keep-days=14 : Prune archive bundles older than this many days}
         {--json : Machine-readable summary}';
 
     protected $description = 'Archive the encrypted retention bundles and verify each against its manifest';
@@ -50,8 +51,20 @@ final class RetentionArchiveBackupCommand extends Command
             return self::FAILURE;
         }
 
+        $keepDays = filter_var(
+            $this->option('keep-days'),
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]],
+        );
+
+        if ($keepDays === false) {
+            $this->error('The --keep-days option must be a positive integer.');
+
+            return self::FAILURE;
+        }
+
         try {
-            $summary = $this->archive($diskName, (string) ($this->option('output') ?: ''), $registry);
+            $summary = $this->archive($diskName, (string) ($this->option('output') ?: ''), $registry, $keepDays);
         } catch (Throwable $exception) {
             $this->error('Archive backup failed: '.$exception->getMessage());
             report($exception);
@@ -98,7 +111,7 @@ final class RetentionArchiveBackupCommand extends Command
      *     mismatched: list<string>
      * }
      */
-    private function archive(string $diskName, string $requestedOutput, ArchiveBundleRegistry $registry): array
+    private function archive(string $diskName, string $requestedOutput, ArchiveBundleRegistry $registry, int $keepDays): array
     {
         $disk = Storage::disk($diskName);
 
@@ -175,6 +188,8 @@ final class RetentionArchiveBackupCommand extends Command
         $sha256 = (string) hash_file('sha256', $output);
         file_put_contents($output.'.sha256', $sha256.'  '.basename($output).PHP_EOL);
 
+        $this->prune($directory, $output, $keepDays);
+
         return [
             'archive' => $output,
             'sha256' => $sha256,
@@ -183,5 +198,27 @@ final class RetentionArchiveBackupCommand extends Command
             'missing' => $missing,
             'mismatched' => $mismatched,
         ];
+    }
+
+    private function prune(string $directory, string $current, int $keepDays): void
+    {
+        $cutoff = now()->subDays($keepDays)->getTimestamp();
+        $candidates = glob($directory.'/archives-*.zip') ?: [];
+
+        // Keep the newest archive even when it is older than the window, so a
+        // clock jump or a long outage cannot delete the only copy.
+        usort($candidates, static fn (string $a, string $b): int => filemtime($b) <=> filemtime($a));
+        $newest = $candidates[0] ?? null;
+
+        foreach ($candidates as $path) {
+            if ($path === $current || $path === $newest || ! is_file($path)) {
+                continue;
+            }
+
+            if (filemtime($path) < $cutoff) {
+                @unlink($path);
+                @unlink($path.'.sha256');
+            }
+        }
     }
 }

@@ -201,6 +201,45 @@ class ArchiveBackupTest extends TestCase
         $this->assertStringContainsString('missing from the archive', $out);
     }
 
+    public function test_ret_ab05_old_archives_are_pruned_but_the_newest_is_kept(): void
+    {
+        $this->measurement();
+        $this->archive();
+
+        $directory = sys_get_temp_dir().'/retention-prune-'.Uuid7::generate();
+        $this->assertTrue(mkdir($directory));
+
+        $old = $directory.'/archives-20200101T000000Z.zip';
+        $recent = $directory.'/archives-20260101T000000Z.zip';
+        file_put_contents($old, 'old');
+        file_put_contents($old.'.sha256', 'old');
+        file_put_contents($recent, 'recent');
+        touch($old, now()->subDays(30)->getTimestamp());
+        touch($recent, now()->subDays(5)->getTimestamp());
+        clearstatcache();
+
+        $this->temporary[] = $old;
+        $this->temporary[] = $recent;
+
+        $output = $directory.'/archives.zip';
+        $this->temporary[] = $output;
+
+        $this->assertSame(0, Artisan::call('retention:archive-backup', [
+            '--output' => $output,
+            '--keep-days' => 14,
+        ]));
+
+        clearstatcache();
+
+        $this->assertFileDoesNotExist($old);
+        $this->assertFileDoesNotExist($old.'.sha256');
+        $this->assertFileExists($recent);
+        $this->assertFileExists($output);
+
+        // An invalid window is refused before anything is written.
+        $this->assertSame(1, Artisan::call('retention:archive-backup', ['--keep-days' => 0]));
+    }
+
     private function archive(): WorkspaceArchiveManifest
     {
         $lifecycle = app(WorkspaceLifecycle::class);

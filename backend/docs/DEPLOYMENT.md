@@ -432,7 +432,7 @@ archives the archive disk as well:
 # Producer: every manifest with a bundle, checked against its sha256, zipped
 # with a manifest (ids and hashes only) and a .sha256 next to it.
 docker compose --profile app exec -T app \
-  php artisan retention:archive-backup --output=/var/www/html/storage/app/backups/archives.zip
+  php artisan retention:archive-backup --output=/var/www/html/storage/app/backups/archives.zip --keep-days=14
 
 # Prove the uploaded archive: outer checksum + every entry re-hashed,
 # and fail if the database has a bundle the archive is missing.
