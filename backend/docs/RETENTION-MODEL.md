@@ -141,11 +141,11 @@ compacted by accident.
 Three details differ from the sketch above, each for a reason:
 
 - **Compaction is schema-driven, not `TYPE_SPECS`-driven.** `TYPE_SPECS` marks only `health_measurements` as
-  `soft_deletes: true`, but eight tables carry `deleted_at` (health measurements, health conditions, allergies,
-  medication plans, medication records, care tasks, appointments, medical documents), because their models use
-  `SoftDeletes`. A row a member deletes through the API is soft-deleted even when the purge never touched it, so the
-  test is `Schema::hasColumn($table, 'deleted_at')` and the clock is always `deleted_at`, never the retention
-  `date_column`. Types without the column report `skipped = no_soft_deletes`.
+  `soft_deletes: true`, but eight of the tables behind those types carry `deleted_at` (health measurements, health
+  conditions, allergies, medication plans, medication records, care tasks, appointments, medical documents), because
+  their models use `SoftDeletes`. A row a member deletes through the API is soft-deleted even when the purge never
+  touched it, so the test is `Schema::hasColumn($table, 'deleted_at')` and the clock is always `deleted_at`, never
+  the retention `date_column`. Types without the column report `skipped = no_soft_deletes`.
 - **`retention.dry_run` gates compaction too.** The switch means "nothing is deleted"; a compaction pass that ignored
   it would be a bypass around the operator's global stop, which is worse than the gap it closes. `--dry-run` forces
   it on for one run.

@@ -98,7 +98,7 @@ project has consistently refused to accept.
 ## Compaction: rehearsed end to end on 2026-10-25 (live stack, synthetic rows)
 
 Rows were inserted as the database superuser (RLS hides them from the app otherwise) into the demo workspace, with
-`deleted_at` set to controlled ages. The `app` image was rebuilt first, so the container ran the merged code.
+`deleted_at` set to controlled ages. The `app` image was rebuilt first, so the container ran the branch's code.
 
 | Step | Expected | Observed |
 |---|---|---|
