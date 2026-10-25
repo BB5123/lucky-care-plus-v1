@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after the D2 `ai:ping` fix (web/mobile counts
-are from the previous verification)
+**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after the D3 sign-off (R8 grace 28) and the D2
+`ai:ping` fix; web/mobile counts are from the previous verification
 
 ---
 
@@ -38,14 +38,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **433 passed / 2 skipped / 4,533 assertions** (435 tests) |
+| backend `php artisan test` | **434 passed / 2 skipped / 4,537 assertions** (436 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **88 merged PRs**, no open PRs.
+8 mobile feature folders, **89 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 435 (433 passed, 2 skipped)
+php artisan test                 # 436 (434 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -90,10 +90,9 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 - A local model can be scored with the same suites:
   `php artisan ai:evaluate --live --base-url=<tunnel>/v1 --model=<name>` (see `backend/docs/LOCAL-AI-PATHUMMA.md`).
 - Credentials live only in `backend/.env` (gitignored). No key is tracked in git.
-- **D2 (key rotation) status on 2026-10-25:** `ai:ping` now really contacts the provider (it forces `AI_ENABLED`
-  for that one run and fails with `provider_not_configured` instead of reporting ok against the stub). The key in
-  `backend/.env` answers: `ok openai_compatible / deepseek-v4-flash 2620ms in=27 out=27`. Whether that is the
-  rotated key is the owner's record; if it is the leaked one, rotate at the provider and re-run `ai:ping`.
+- **D2 (key rotation) is done (2026-10-25):** the owner rotated the key, and `ai:ping` now really contacts the
+  provider (it forces `AI_ENABLED` for that one run and fails with `provider_not_configured` instead of reporting ok
+  against the stub). The rotated key answers: `ok openai_compatible / deepseek-v4-flash 2620ms in=27 out=27`.
 
 ---
 
@@ -102,8 +101,8 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | # | Decision | Blocking what |
 |---|---|---|
 | D1 | **Provider + DPA (AIG-010)**: which vendor, and written confirmation the data is not used for training. The letter is ready to send: `backend/docs/DPA-REQUEST-OKMD.md` (5 questions, EN + TH) | G4 sign-off, `AI_ENABLED=true` |
-| D2 | **API keys rotated** after they appeared in a chat transcript - checkable: `php artisan ai:ping` (exit 0/1, key never printed; it forces `AI_ENABLED` for the one run and fails with `provider_not_configured` instead of reporting ok against the stub) | security hygiene, not a blocker |
-| D3 | Retention numbers + privacy notice (Q-12) - `retention.dry_run` is still true | turning retention on |
+| D2 | ~~API keys rotated~~ - **done 2026-10-25**: rotated by the owner and verified with `php artisan ai:ping` against the real gateway (exit 0, 2.6 s, tokens counted). The command now forces `AI_ENABLED` for that one run and fails with `provider_not_configured` instead of reporting ok against the stub | done |
+| D3 | ~~Retention numbers + privacy notice (Q-12)~~ - **signed 2026-10-25**: R1-R7 approved, R8 = 28-day grace (`retention.compact_grace_days`) so the notice's "within 30 days" holds. The repository keeps `retention.dry_run=true` by design; a deployment turns it on with `RETENTION_DRY_RUN=false` | done (the switch is per deployment) |
 | D4 | ~~ClamAV before production~~ - **decided 2026-10-25: ON.** `DOCUMENTS_SCAN_REQUIRED` defaults to true, the app reaches clamd over `tcp://clamav:3310`, and the gate is proven with EICAR (422 + audit row), fail-closed (503), and a clean upload (201). Start with `--profile app --profile scan` | done |
 | D5 | Pricing / plan entitlements (Q-2) | billing, quota tiers |
 
@@ -141,11 +140,12 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    defaults to true; clamd is reached over `tcp://clamav:3310` (sharing the unix socket does not work with the
    clamav image). The gate is proven with EICAR, and a deployment that forgets `--profile scan` fails closed
    with 503 rather than storing unscanned bytes - see `backend/docs/MALWARE-SCANNING.md`.
-6. **Retention deletion is implemented but not switched on.** `retention:compact` physically deletes rows that were
-   soft-deleted longer than the grace (default 30 days), with one `retention.compact` audit row per batch, legal
-   holds respected and objects removed before their metadata row - rehearsed on the live stack (see
-   `backend/docs/RETENTION-TURN-ON.md`). `RETENTION_DRY_RUN` is still `true`, so no real deployment has deleted
-   anything yet. The five retention states, the 30/7/1-day notices and the archive store are still ahead (P2-P4 in
+6. **Retention is signed but off in the repository.** `retention:compact` physically deletes rows that were
+   soft-deleted longer than the 28-day grace (R8), with one `retention.compact` audit row per batch, legal holds
+   respected and objects removed before their metadata row - rehearsed on the live stack (see
+   `backend/docs/RETENTION-TURN-ON.md`). `RETENTION_DRY_RUN` is still `true` here on purpose (`RetentionDecisionPackTest`
+   fails if it is flipped); a deployment turns it on with `RETENTION_DRY_RUN=false`, and none has yet. The five
+   retention states, the 30/7/1-day notices and the archive store are still ahead (P2-P4 in
    `backend/docs/RETENTION-MODEL.md`).
 7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
    works**: the measurements list is cursor-paginated with an idempotent loadMore, dedupe by id and a
@@ -199,27 +199,23 @@ sitting through `/admin/knowledge`, then regenerate the pack with `php artisan k
 
 ---
 
-## Start here (next session, 2026-10-25 22:05)
+## Start here (next session, 2026-10-25 22:40)
 
-**Where the work stopped:** **P1 (physical deletion) is built, tested and rehearsed**, and **D2's verification tool
-is fixed**: `ai:ping` used to report "ok" in 0 ms from the in-process stub because `AI_ENABLED` is false by
-default; it now forces the flag for the one run, fails with `provider_not_configured` when no real provider is
-configured, and the OKMD gateway's `content: null` (a reasoning model that spent its budget) is classified as
-`provider_empty_content` instead of `provider_invalid_response`. The configured key answers: `ok openai_compatible /
-deepseek-v4-flash 2620ms in=27 out=27`. `RETENTION_DRY_RUN` is still `true`, so nothing has been deleted outside
-the documented rehearsal.
+**Where the work stopped:** **D3 is signed** (R1-R7 + R8 = 28-day grace, recorded in `RETENTION-MODEL.md` section
+11); P1 is built, tested and rehearsed; the repository keeps `RETENTION_DRY_RUN=true` on purpose and a deployment
+turns it on with `RETENTION_DRY_RUN=false`. **D2 is done**: the owner rotated the key and `ai:ping` now really
+exercises it (it forces `AI_ENABLED` for one run, fails with `provider_not_configured` instead of pinging the stub,
+and maps the gateway's `content: null` to `provider_empty_content`). The configured key answers: `ok openai_compatible
+/ deepseek-v4-flash 2620ms in=27 out=27`.
 
 **Do this first, in order:**
 
-1. **D3 sign-off** - the R1-R7 table in `backend/docs/RETENTION-MODEL.md` is still unsigned, and section 9 now has a
-   concrete R3 question: with the 30-day grace, physical deletion lands 30-32 days after the retention period ends,
-   while the draft notice promises "within 30 days". Either grace 28 or reworded notice; both are owner decisions.
-   P1 unblocks the deletion sentence; the operational half is step 1-6 of `RETENTION-TURN-ON.md`.
+1. **P2** - the five retention states (`read_only`, `archived`, ...) and the lapse trigger, behind the R1/R2 sign-off
+   that is now on record. `RETENTION-MODEL.md` section 8 is the plan; do not start P3/P4 before it.
 2. Then **F** (16 sources) once the clinician is available - `KNOWLEDGE-REVIEW-SHEET.md` is the script to follow.
-3. Then **D2** (rotate the leaked key at the provider, update `backend/.env`, re-run `php artisan ai:ping`) and
-   **D1** (send `DPA-REQUEST-OKMD.md`).
+3. Then **D1** (send `DPA-REQUEST-OKMD.md`, file the answer, only then `AI_ENABLED=true` in staging).
 
-**Verified at hand-off:** backend 433 passed / 2 skipped / 4,533 assertions · web 135 · mobile 125 · 88 merged PRs ·
+**Verified at hand-off:** backend 434 passed / 2 skipped / 4,537 assertions · web 135 · mobile 125 · 89 merged PRs ·
 CI green · P1 rehearsed on the live stack · D2 `ai:ping` proven against the real gateway · malware scanning ON and
 EICAR-proven · TLS + `/ready` live in the `proxy` profile.
 

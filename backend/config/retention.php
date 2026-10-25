@@ -64,6 +64,12 @@ return [
     // Reminder offsets (days before the purge due date), from ADR-016.
     'notification_days_before' => [30, 14, 7],
 
+    // P1 grace: how long a row must have been soft-deleted before the physical
+    // delete runs (RETENTION-MODEL.md section 8). 28 days + up to 24 h of purge
+    // lag + up to 24 h of compaction lag keeps the notice's "within 30 days"
+    // true (R8). Changing this changes a promise, not just a speed.
+    'compact_grace_days' => 28,
+
     // Forced on for the first 30 days of a deployment (ADR-016 §5).
     'dry_run' => filter_var(env('RETENTION_DRY_RUN', true), FILTER_VALIDATE_BOOLEAN),
 

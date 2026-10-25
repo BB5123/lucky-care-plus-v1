@@ -1,7 +1,12 @@
 # Retention decision pack (D3 / Q-12)
 
-Retention is implemented and **has never deleted anything**: `retention.dry_run` is `true`. This document is
-what the owner needs in order to turn it on: the current policy, what the dry run proves today, the exact
+> **Update 2026-10-25:** the owner approved R1-R7 of [`RETENTION-MODEL.md`](RETENTION-MODEL.md) (the successor to this
+> pack's R1-R5) and added **R8: a 28-day grace** before physical deletion, so the notice's "within 30 days" holds.
+> P1 (physical deletion) is built and rehearsed. `retention.dry_run` is still `true` **in the repository** on purpose
+> - a deployment turns it on with `RETENTION_DRY_RUN=false`; see `RETENTION-TURN-ON.md`.
+
+Retention is implemented and **has never deleted anything in any deployment**: `retention.dry_run` is `true`. This
+document is what the owner needs in order to turn it on: the current policy, what the dry run proves today, the exact
 decisions required, and the notice that must accompany them.
 
 Nothing here changes the policy. It is a decision aid, and `RetentionDecisionPackTest` fails if the numbers in
@@ -44,6 +49,9 @@ and it is not a technical question.
 
 ## 3. Decisions required from the owner (D3)
 
+> **Superseded** by R1-R7 (approved 2026-10-25) plus R8 (28-day grace) in [`RETENTION-MODEL.md`](RETENTION-MODEL.md)
+> section 11. Kept here as the history of what was asked.
+
 | # | Decision | Why it cannot be guessed |
 |---|---|---|
 | R1 | Confirm the default months per type, or set different ones within the ranges above | The ranges exist so a tenant cannot accidentally destroy a record the law expects to keep; the *value* inside the range is a clinical and legal judgement |
@@ -58,12 +66,18 @@ and it is not a technical question.
 2. Run `php artisan retention:purge --type=<one type> --limit=100` for a single type first, and read the audit
    rows (`reason_code` will be null on a real delete).
 3. Verify with `php artisan retention:purge --dry-run` that nothing is left in that type.
-4. Only then let the scheduler run all types.
+4. Rehearse the physical delete the same way: `php artisan retention:compact --type=<one type> --dry-run`, then for
+   real with `RETENTION_DRY_RUN=false`. Read the `retention.compact` audit row and prove a second run finds nothing
+   (the full recipe is in `RETENTION-TURN-ON.md`).
+5. Only then let the scheduler run all types.
 
 Step 2 is deliberately manual: the failure mode of getting this wrong is irreversible deletion of a family's
 health history.
 
 ## 5. Privacy-notice text (draft, needs R3 approval)
+
+> **Superseded** by the notice draft in [`RETENTION-MODEL.md`](RETENTION-MODEL.md) section 9, which adds the
+> per-plan windows and the 30/7/1-day notices. Kept here as the simpler earlier draft.
 
 > เราเก็บข้อมูลสุขภาพของสมาชิกในครอบครัวตามระยะเวลาที่จำเป็นต่อการดูแล เช่น ค่าที่วัดได้และบันทึกการทานยา
 > เก็บ 5 ปี งานที่ได้รับมอบหมายเก็บ 3 ปี และเอกสารยืนยันตัวตนเก็บ 1 ปีนับจากสิ้นสุดการมอบอำนาจ
@@ -74,8 +88,10 @@ health history.
 The notice is written in Thai because it is user-facing (the repository rule: product copy is Thai, technical
 docs are English).
 
-## 6. Why this is still off
+## 6. Why the repository still ships it off
 
-`dry_run = true` is not an oversight. It is the honest state of a system whose deletion rules have not been
-approved by the people accountable for them. Turning it on is a one-line change with a permanent consequence,
-so it waits for R1-R5 rather than for an engineering convenience.
+`dry_run = true` is not an oversight. The repository must never delete health data on its own: a checkout, a test run
+or a demo stack has no business destroying records, and `RetentionDecisionPackTest` fails if the committed default is
+flipped. The approved policy is turned on **per deployment** with `RETENTION_DRY_RUN=false` (section 4), after the
+rehearsal in `RETENTION-TURN-ON.md` - that keeps the decision with the people accountable for the data instead of
+with a clone.
