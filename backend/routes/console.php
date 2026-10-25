@@ -14,6 +14,14 @@ Schedule::command('retention:purge')
     ->timezone('UTC')
     ->withoutOverlapping();
 
+// P1 (RETENTION-MODEL.md §8): physical deletion runs on its own clock - a row
+// must have been soft-deleted for the grace period before it is removed - so
+// it runs after the purge and never compacts the same night's soft deletes.
+Schedule::command('retention:compact')
+    ->dailyAt('03:20')
+    ->timezone('UTC')
+    ->withoutOverlapping();
+
 Schedule::command('retention:inactivity')
     ->dailyAt('04:00')
     ->timezone('UTC')

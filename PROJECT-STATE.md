@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after TASK G (knowledge corpus
-backup + restore drill); web/mobile counts are from the previous verification
+**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after P1 (retention compaction); web/mobile
+counts are from the previous verification
 
 ---
 
@@ -32,20 +32,20 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **1 - Core MVP** | backend + web complete | health vault, medication, care tasks, appointments, dashboard, notifications, timeline, family |
 | **2 - Coordination** | complete | recurring templates, escalation ladder, doctor brief, documents + photo evidence, quality sweep |
 | **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 16-document knowledge base with a measured benchmark, web + mobile AI surfaces |
-| **4 - Scale/compliance** | not started | |
+| **4 - Scale/compliance** | not started - P1 retention compaction is the first piece | |
 
-**Verified test counts (2026-10-25 19:50):**
+**Verified test counts (2026-10-25 21:30):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **422 passed / 2 skipped / 4,463 assertions** (424 tests) |
+| backend `php artisan test` | **428 passed / 2 skipped / 4,517 assertions** (430 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **81 merged PRs**, no open PRs.
+8 mobile feature folders, **87 merged PRs**, no open PRs.
 
 ---
 
@@ -53,10 +53,11 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 420 (418 passed, 2 skipped)
+php artisan test                 # 430 (428 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
+php artisan retention:compact --dry-run  # P1: physical deletion; dry run by default
 ./vendor/bin/pint --test
 php artisan demo:seed --reset --force    # synthetic pilot workspace; see docs/DEMO-DATA.md
 bash scripts/smoke.sh --base-url=http://localhost:8080   # post-deploy check
@@ -136,7 +137,12 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    defaults to true; clamd is reached over `tcp://clamav:3310` (sharing the unix socket does not work with the
    clamav image). The gate is proven with EICAR, and a deployment that forgets `--profile scan` fails closed
    with 503 rather than storing unscanned bytes - see `backend/docs/MALWARE-SCANNING.md`.
-6. **Retention has never deleted anything** (`dry_run = true`).
+6. **Retention deletion is implemented but not switched on.** `retention:compact` physically deletes rows that were
+   soft-deleted longer than the grace (default 30 days), with one `retention.compact` audit row per batch, legal
+   holds respected and objects removed before their metadata row - rehearsed on the live stack (see
+   `backend/docs/RETENTION-TURN-ON.md`). `RETENTION_DRY_RUN` is still `true`, so no real deployment has deleted
+   anything yet. The five retention states, the 30/7/1-day notices and the archive store are still ahead (P2-P4 in
+   `backend/docs/RETENTION-MODEL.md`).
 7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
    works**: the measurements list is cursor-paginated with an idempotent loadMore, dedupe by id and a
    footer that keeps the rows when a page fails.
@@ -170,6 +176,8 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | Knowledge review pack (generated) | `backend/docs/KNOWLEDGE-REVIEW-PACK.md` - regenerate with `php artisan knowledge:review-pack` |
 | RAG retrieval decision (lexical vs vector) | `backend/docs/RAG-VECTOR-OPTIONS.md` |
 | Local model evaluation (Pathumma/Kaggle) | `backend/docs/LOCAL-AI-PATHUMMA.md` |
+| Retention model (states, plan windows, P1) | `backend/docs/RETENTION-MODEL.md` |
+| Retention runbook + rehearsal results | `backend/docs/RETENTION-TURN-ON.md` |
 | Backup and restore | `backend/docs/BACKUP-COVERAGE.md`, `backend/docs/QUALITY-SWEEP-2026-10-24.md`, `backend/docs/BACKUP-COVERAGE.md` (coverage table), `.github/workflows/backup.yml` (nightly producer), `.github/workflows/restore-drill.yml` (weekly drill) |
 | First overnight run | `MORNING-REPORT.md` |
 | Second overnight run (this one) | `NIGHT-REPORT-2026-10-25.md` |
@@ -187,22 +195,26 @@ sitting through `/admin/knowledge`, then regenerate the pack with `php artisan k
 
 ---
 
-## Start here (next session, 2026-10-25 21:00)
+## Start here (next session, 2026-10-25 21:45)
 
-**Where the work stopped:** D3 is designed and rehearsed, but **P1 (physical deletion) is not written yet**.
-Model + sign-off table: `backend/docs/RETENTION-MODEL.md` (section 8 phases, R1-R7). The P1 implementation notes
-are in that file - read them before writing code; they were taken from `PurgeService` itself.
+**Where the work stopped:** **P1 (physical deletion) is built, tested and rehearsed.** `retention:compact` runs
+`PurgeService::compactBatch()/compactAll()`, writes one `retention.compact` audit row per batch, respects legal
+holds, removes a document object before its metadata row, and is scheduled at 03:20 UTC after the purge. Evidence:
+`RET-C01..C06` in `backend/tests/Feature/Retention/RetentionCompactionTest.php` and the live-stack rehearsal table
+in `backend/docs/RETENTION-TURN-ON.md`. `RETENTION_DRY_RUN` is still `true`, so nothing has been deleted outside
+that rehearsal.
 
 **Do this first, in order:**
 
-1. **P1** - `PurgeService::compactBatch()` + `retention:compact` + `RET-C01..C04` + a live rehearsal
-   (`RETENTION-TURN-ON.md` shows the exact rehearsal that already worked once). This is what makes the deletion
-   sentence in the privacy notice true, so R6 says it ships before the notice.
+1. **Turn D3 on, or leave it off deliberately.** P1 unblocks the deletion sentence in the privacy notice, but the
+   sign-off table (R1-R7) in `backend/docs/RETENTION-MODEL.md` is still unsigned and `RETENTION_DRY_RUN` is still
+   true. The operational half is step 1-6 of `RETENTION-TURN-ON.md` (back up, rehearse, then flip the switch).
 2. Then **F** (16 sources) once the clinician is available - `KNOWLEDGE-REVIEW-SHEET.md` is the script to follow.
 3. Then **D2** (rotate keys, verify each with `php artisan ai:ping`) and **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 422 passed / 2 skipped / 4,463 assertions · web 135 · mobile 125 · 86 merged PRs ·
-CI green · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy` profile.
+**Verified at hand-off:** backend 428 passed / 2 skipped / 4,517 assertions · web 135 · mobile 125 · 87 merged PRs ·
+CI green · P1 rehearsed on the live stack · malware scanning ON and EICAR-proven · TLS + `/ready` live in the
+`proxy` profile.
 
 **Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
 second slice in the same context - that is what forced the hand-off this time.
