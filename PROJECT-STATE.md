@@ -40,12 +40,12 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 |---|---|
 | backend `php artisan test` | **402 passed / 2 skipped / 4,394 assertions** (404 tests) |
 | web `npm test` | **135 passed / 43 files** |
-| mobile `flutter test` | **116 passed** |
+| mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **67 merged PRs**, no open PRs.
+8 mobile feature folders, **71 merged PRs**, no open PRs.
 
 ---
 
@@ -70,7 +70,7 @@ npx prettier --check "src/**/*.{ts,html,css}"
 
 cd ../mobile
 flutter analyze
-flutter test                     # 116
+flutter test                     # 125
 ```
 
 Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr checks --watch` ->
@@ -130,8 +130,9 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    (`backend/docs/MALWARE-SCANNING.md`), but `DOCUMENTS_SCAN_REQUIRED` is false and no deployment runs
    clamd yet; turning it on needs a shared unix socket plus the owner decision in D4.
 6. **Retention has never deleted anything** (`dry_run = true`).
-7. **Mobile** closed its write gaps on 2026-10-25: appointments create/edit/cancel, family invites and
-   OCR scan-and-confirm now exist. What remains read-only is **history pagination** on long lists.
+7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
+   works**: the measurements list is cursor-paginated with an idempotent loadMore, dedupe by id and a
+   footer that keeps the rows when a page fails.
 8. **AI and export surfaces are at parity** (summary, knowledge answers, OCR, data export) on web and mobile.
    Mobile's download hands the short-lived URL to the clipboard because `url_launcher` is not a dependency.
 9. **No knowledge source is reviewed yet.** The review path exists in the product (`/admin/knowledge`,
