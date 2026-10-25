@@ -318,7 +318,10 @@ mismatch, so an archive that was never verified is not reported as one that was 
 **What P4b-1 does not do:** it does not restore rows, does not use a per-archive key, and does not delete the archive
 when the account is deleted. Those are P4b-2, and until they exist the final `scheduled_deletion -> deleted` arrow
 stays closed. The archive disk is **not** part of the nightly database dump; a deployment must back it up separately
-(`BACKUP-COVERAGE.md`).
+(`BACKUP-COVERAGE.md`). The P4b-2 design - move versus copy, per-archive keys, restore, crypto-shred,
+export-from-bundle and its acceptance tests - is in `RETENTION-ARCHIVE-DESIGN.md`; it waits on two owner decisions:
+whether archiving moves the rows out of the active tables, and whether an archived account may be absent from them for
+the whole window.
 
 ## 9. Notice copy (Thai, for the privacy notice)
 

@@ -233,8 +233,9 @@ permission change record.
 **Do this first, in order:**
 
 1. **P4b-2** - the restore data path, per-archive keys and the move-out/delete semantics. The bundle is currently a
-   **copy**: the active rows stay in the database, so nothing can prove a restore or an archive deletion yet. Design
-   first: moving rows out changes the deletion promise and needs the restore drill to run on the moved state.
+   **copy**: the active rows stay in the database, so nothing can prove a restore or an archive deletion yet. The
+   design (move-vs-copy, keys, crypto-shred, export-from-bundle, `ARC-*` tests) is in
+   `backend/docs/RETENTION-ARCHIVE-DESIGN.md`; it waits on two owner decisions before code.
 2. **P3c** once the owner approves a "cancel my account" permission change record.
 3. **Mobile export link** from the retention banner (it currently says to contact support; the mobile IA has no
    export route from the banner yet).
