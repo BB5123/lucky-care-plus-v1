@@ -8,7 +8,7 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after P3b (the lapse export offer);
+**Last verified:** 2026-10-25 (Asia/Bangkok) - backend suite re-run after the document-object backup producer;
 web/mobile counts are from the previous verification
 
 ---
@@ -38,14 +38,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **462 passed / 2 skipped / 4,664 assertions** (464 tests) |
+| backend `php artisan test` | **466 passed / 2 skipped / 4,689 assertions** (468 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 52 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **93 merged PRs**, no open PRs.
+8 mobile feature folders, **94 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 464 (462 passed, 2 skipped)
+php artisan test                 # 468 (466 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -130,12 +130,15 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    150 ms / 40 queries, all inside the 800/800/300 ms budgets. See `backend/docs/PERFORMANCE.md`. It is
    single-process and sequential; a real concurrent load test against the deployed stack is still a
    pre-launch task and the numbers are not capacity evidence.
-4. **Backups cover the database and the corpus, and both are proven restorable.** The nightly workflow dumps
+4. **Backups cover the database, the corpus and the local document objects.** The nightly workflow dumps
    PostgreSQL (row counts + RLS probes on the restored copy) and archives the knowledge corpus
    (`knowledge:backup` -> `knowledge:restore-drill`: source JSON, unique ids, SQLite integrity, index counts,
-   review fields, membership), uploads both as one 7-day artifact and drills the downloaded copy. Still **not**
-   covered: uploaded document objects, `.env`/`APP_KEY` escrow, off-site encryption, RPO/RTO, and alerting on a
-   failed night - see `backend/docs/BACKUP-COVERAGE.md`.
+   review fields, membership), uploads both as one 7-day artifact and drills the downloaded copy. Uploaded
+   document objects on the local disk now have a producer too: `documents:backup` archives every object key the
+   database expects and **fails when a metadata row has no object**, and `documents:restore-drill` re-reads the
+   archive against its manifest. Still **not** covered: S3/MinIO buckets (the command refuses a non-local driver;
+   mirror the bucket instead), `.env`/`APP_KEY` escrow, off-site encryption, RPO/RTO, and alerting on a failed
+   night - see `backend/docs/BACKUP-COVERAGE.md`.
 5. **Documents are scanned before they are stored** (since 2026-10-25). `DOCUMENTS_SCAN_REQUIRED`
    defaults to true; clamd is reached over `tcp://clamav:3310` (sharing the unix socket does not work with the
    clamav image). The gate is proven with EICAR, and a deployment that forgets `--profile scan` fails closed
@@ -205,26 +208,28 @@ sitting through `/admin/knowledge`, then regenerate the pack with `php artisan k
 
 ---
 
-## Start here (next session, 2026-10-26 00:05)
+## Start here (next session, 2026-10-26 00:20)
 
-**Where the work stopped:** **P3a + P3b are built.** `retention:notices` sends the 30/7/1-day notices in-app **and by
-email** (legal override of preferences, reaches the lapsed account, idempotent through the ledger), and a lapse now
-sends `retention.export_offer` in-app on day 1 via the `WorkspaceLapsed` event. The email channel is new in the ledger
-(`EmailSender`, retention templates only). P2/P2b (states + job filter) are the foundation.
+**Where the work stopped:** **retention P1/P2/P2b/P3a/P3b are built**, and the **document-object backup producer** now
+closes the last unproduced part of gap 4 for the local disk. Notices go out in-app + email at 30/7/1 days, a lapse
+offers the export on day 1, and `documents:backup` fails when a metadata row has no object (with
+`documents:restore-drill` verifying the archive). P3c (the cancellation choice screen) is blocked on a permission
+change record.
 
 **Do this first, in order:**
 
-1. **P3c is blocked on a permission change record.** The cancellation choice screen needs a "cancel my account"
-   permission ID; the baseline catalog has no such ID (`workspace.update` is configuration, not cancellation) and
-   inventing one is forbidden. Open an owner-approved change record first, then build the screen.
-2. **P4** - the separate archive store + restore action + access audit; only then does the final
+1. **P4** - the separate archive store + restore action + access audit; only then does the final
    `scheduled_deletion -> deleted` arrow become honest.
-3. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
+2. **Load test (gap 3)** - a real concurrent run against the deployed stack, keeping inside the per-user rate limits
+   (the current harness is single-process by design).
+3. **P3c** once the owner approves a "cancel my account" permission change record.
+4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 462 passed / 2 skipped / 4,664 assertions · web 135 · mobile 125 · 93 merged PRs ·
+**Verified at hand-off:** backend 466 passed / 2 skipped / 4,689 assertions · web 135 · mobile 125 · 94 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
-tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · D2 `ai:ping`
-proven against the real gateway · malware scanning ON and EICAR-proven · TLS + `/ready` live in the `proxy` profile.
+tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · document
+backup tested (DOC-B01..B04) · D2 `ai:ping` proven against the real gateway · malware scanning ON and EICAR-proven ·
+TLS + `/ready` live in the `proxy` profile.
 
 **Session habit that worked:** one slice per session, verified by running the suite, then merged. Do not carry a
 second slice in the same context - that is what forced the hand-off this time.
