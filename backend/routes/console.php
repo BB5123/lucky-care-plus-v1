@@ -34,6 +34,14 @@ Schedule::command('retention:advance')
     ->timezone('UTC')
     ->withoutOverlapping();
 
+// P3 (R7): the 30/7/1-day notices for accounts scheduled for deletion. The
+// notices are legal, not preference-driven: they reach a lapsed account and
+// force the email channel as well as in-app.
+Schedule::command('retention:notices')
+    ->dailyAt('04:20')
+    ->timezone('UTC')
+    ->withoutOverlapping();
+
 Schedule::command('retention:inactivity')
     ->dailyAt('04:00')
     ->timezone('UTC')

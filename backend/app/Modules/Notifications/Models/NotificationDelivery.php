@@ -26,8 +26,26 @@ class NotificationDelivery extends Model
 
     public const CHANNEL_LINE = 'line';
 
+    public const CHANNEL_EMAIL = 'email';
+
     /** @var list<string> */
-    public const CHANNELS = [self::CHANNEL_IN_APP, self::CHANNEL_PUSH, self::CHANNEL_LINE];
+    public const CHANNELS = [
+        self::CHANNEL_IN_APP,
+        self::CHANNEL_PUSH,
+        self::CHANNEL_LINE,
+        self::CHANNEL_EMAIL,
+    ];
+
+    /**
+     * Channels a normal notification may use.
+     *
+     * Email is deliberately excluded: it is reserved for the legal retention
+     * notices, which override the user's channel preferences because PDPA
+     * requires telling someone before deleting their account (R7).
+     *
+     * @var list<string>
+     */
+    public const DEFAULT_CHANNELS = [self::CHANNEL_IN_APP, self::CHANNEL_PUSH, self::CHANNEL_LINE];
 
     public const STATUS_QUEUED = 'queued';
 

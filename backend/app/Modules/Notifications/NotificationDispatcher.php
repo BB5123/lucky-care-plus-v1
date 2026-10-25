@@ -9,6 +9,7 @@ use App\Modules\Notifications\Contracts\ChannelSender;
 use App\Modules\Notifications\Domain\NotificationPayloadException;
 use App\Modules\Notifications\Models\CommunicationPreference;
 use App\Modules\Notifications\Models\NotificationDelivery;
+use App\Modules\Notifications\Senders\EmailSender;
 use App\Modules\Notifications\Senders\InAppSender;
 use App\Modules\Notifications\Senders\LineSender;
 use App\Modules\Notifications\Senders\PushSender;
@@ -63,11 +64,13 @@ final class NotificationDispatcher
         InAppSender $inApp,
         PushSender $push,
         LineSender $line,
+        EmailSender $email,
     ) {
         $this->senders = [
             $inApp->channel() => $inApp,
             $push->channel() => $push,
             $line->channel() => $line,
+            $email->channel() => $email,
         ];
     }
 
@@ -80,7 +83,8 @@ final class NotificationDispatcher
      *     subject_type?: string|null,
      *     subject_id?: string|null,
      *     scheduled_for?: mixed,
-     *     timezone?: string
+     *     timezone?: string,
+     *     channels?: list<string>
      * }  $options
      * @return array{
      *     sent: int,
@@ -176,6 +180,13 @@ final class NotificationDispatcher
         $scheduledFor = $options['scheduled_for'] ?? null;
         $scheduledAt = $scheduledFor === null ? null : Carbon::parse($scheduledFor);
 
+        $channels = $this->channelsOption($options);
+
+        // An explicit channel list is a server-side legal decision (the
+        // retention notices), not a user preference: those channels are
+        // attempted even when the stored preference says otherwise.
+        $forcedChannels = array_key_exists('channels', $options);
+
         $tenantId = TenantContext::tenantId();
         $workspaceId = TenantContext::workspaceId();
 
@@ -189,8 +200,8 @@ final class NotificationDispatcher
                 continue;
             }
 
-            foreach (NotificationDelivery::CHANNELS as $channel) {
-                if (! $preference->channelEnabled($channel)) {
+            foreach ($channels as $channel) {
+                if (! $forcedChannels && ! $preference->channelEnabled($channel)) {
                     $summary['skipped']++;
 
                     continue;
@@ -281,7 +292,9 @@ final class NotificationDispatcher
         ?Carbon $scheduledAt,
         string $timezone,
     ): ?Carbon {
-        if ($channel === NotificationDelivery::CHANNEL_IN_APP) {
+        // In-app never interrupts, and email is read at the recipient's own
+        // pace: quiet hours only defer push/LINE, which do interrupt.
+        if (in_array($channel, [NotificationDelivery::CHANNEL_IN_APP, NotificationDelivery::CHANNEL_EMAIL], true)) {
             return null;
         }
 
@@ -385,6 +398,43 @@ final class NotificationDispatcher
         $value = $options[$key] ?? null;
 
         return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    /**
+     * Channels this dispatch may use.
+     *
+     * Defaults to the configurable channels (in-app, push, LINE). A caller may
+     * add `email`, but only for a message the product must deliver regardless
+     * of preferences - the legal retention notices, forced server-side by
+     * `RetentionNoticeService`. Anything outside the catalog is a server bug,
+     * not a client value: the options are never built from request input.
+     *
+     * @param  array<string, mixed>  $options
+     * @return list<string>
+     */
+    private function channelsOption(array $options): array
+    {
+        $requested = $options['channels'] ?? null;
+
+        if ($requested === null) {
+            return NotificationDelivery::DEFAULT_CHANNELS;
+        }
+
+        if (! is_array($requested) || $requested === []) {
+            throw new InvalidArgumentException('Notification channels must be a non-empty list.');
+        }
+
+        $channels = [];
+
+        foreach ($requested as $channel) {
+            if (! is_string($channel) || ! in_array($channel, NotificationDelivery::CHANNELS, true)) {
+                throw new InvalidArgumentException('Unknown notification channel requested.');
+            }
+
+            $channels[$channel] = true;
+        }
+
+        return array_keys($channels);
     }
 
     /**

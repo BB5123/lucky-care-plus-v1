@@ -51,6 +51,22 @@ final class DispatchNotificationJob implements ShouldQueue
         public array $params,
         public ?string $subjectType = null,
         public ?string $subjectId = null,
+        /**
+         * Only the legal retention notices may reach a lapsed/archived account:
+         * they are the one message whose entire purpose is to warn a workspace
+         * that is no longer processed (P3, R7). The flag is set server-side by
+         * RetentionNoticeService, never from request input.
+         */
+        public bool $reachLapsedAccounts = false,
+        /**
+         * Server-selected channels; empty means the user preferences decide.
+         *
+         * The legal notices force `in_app` + `email` here, which is also what
+         * makes them independent of a disabled preference.
+         *
+         * @var list<string>
+         */
+        public array $channels = [],
     ) {}
 
     public function handle(NotificationDispatcher $dispatcher): void
@@ -62,14 +78,15 @@ final class DispatchNotificationJob implements ShouldQueue
 
                     // Re-check at delivery time, not only at dispatch time: the
                     // job may have been queued before the account lapsed, and a
-                    // read_only/archived account must not receive it (P2b). The
-                    // job is dropped, not retried - retrying could never succeed.
+                    // read_only/archived account must not receive ordinary mail
+                    // (P2b). The job is dropped, not retried - retrying could
+                    // never succeed. Legal notices opt out of this guard.
                     $stateValue = $workspace instanceof Workspace
                         ? $workspace->retentionState()->value
                         : 'unknown';
 
                     if (! $workspace instanceof Workspace
-                        || ! $workspace->retentionState()->acceptsBackgroundWork()) {
+                        || (! $this->reachLapsedAccounts && ! $workspace->retentionState()->acceptsBackgroundWork())) {
                         Log::info('notification.dispatch.skipped_workspace_state', [
                             'template_key' => $this->templateKey,
                             'subject_type' => $this->subjectType,
@@ -79,16 +96,22 @@ final class DispatchNotificationJob implements ShouldQueue
                         return;
                     }
 
+                    $options = [
+                        'tenant_id' => $this->tenantId,
+                        'workspace_id' => $this->workspaceId,
+                        'subject_type' => $this->subjectType,
+                        'subject_id' => $this->subjectId,
+                    ];
+
+                    if ($this->channels !== []) {
+                        $options['channels'] = $this->channels;
+                    }
+
                     $dispatcher->dispatch(
                         $this->templateKey,
                         $this->recipientUserIds,
                         $this->params,
-                        [
-                            'tenant_id' => $this->tenantId,
-                            'workspace_id' => $this->workspaceId,
-                            'subject_type' => $this->subjectType,
-                            'subject_id' => $this->subjectId,
-                        ],
+                        $options,
                     );
                 });
             });
