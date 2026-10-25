@@ -70,6 +70,18 @@ return [
     // true (R8). Changing this changes a promise, not just a speed.
     'compact_grace_days' => 28,
 
+    // P2 state windows (RETENTION-MODEL.md section 3), in days. Until billing
+    // assigns a plan (D5), every workspace uses the Free-with-health-data floor
+    // of 12 months: 30 days read-only + 11 months archived. A workspace with no
+    // health data gets the 60-day row. Plan-specific windows are a follow-up
+    // when plans exist; changing a number here changes a promise in the notice.
+    'state_windows_days' => [
+        'read_only' => 30,
+        'archived_with_health_data' => 335,
+        'archived_without_health_data' => 30,
+        'scheduled_deletion' => 30,
+    ],
+
     // Forced on for the first 30 days of a deployment (ADR-016 §5).
     'dry_run' => filter_var(env('RETENTION_DRY_RUN', true), FILTER_VALIDATE_BOOLEAN),
 

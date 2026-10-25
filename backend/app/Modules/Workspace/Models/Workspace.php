@@ -3,6 +3,7 @@
 namespace App\Modules\Workspace\Models;
 
 use App\Modules\People\Models\Person;
+use App\Modules\Retention\Domain\RetentionState;
 use App\Support\Id\Uuid7;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +28,12 @@ class Workspace extends Model
         return [
             'settings' => 'array',
             'break_glass_enabled' => 'boolean',
+            // Lifecycle state is server-managed only; it is not fillable, so a
+            // request body can never move an account between states (N-01).
+            'retention_state' => RetentionState::class,
+            'retention_state_changed_at' => 'datetime',
+            'retention_expires_at' => 'datetime',
+            'lapsed_at' => 'datetime',
         ];
     }
 
@@ -34,6 +41,10 @@ class Workspace extends Model
     {
         static::creating(function (Workspace $workspace) {
             $workspace->id ??= Uuid7::generate();
+            // Every workspace starts active. The database default says the same
+            // thing; setting it here keeps the in-memory model consistent before
+            // a reload (and the lifecycle service refuses a null state).
+            $workspace->retention_state ??= RetentionState::Active;
         });
     }
 

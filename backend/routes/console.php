@@ -24,6 +24,16 @@ Schedule::command('retention:compact')
     ->timezone('UTC')
     ->withoutOverlapping();
 
+// P2: the retention states advance on their own clock - read_only -> archived
+// -> scheduled_deletion - with the windows in retention.state_windows_days.
+// The final deletion belongs to the member's "delete now" (P3) or the archive
+// deletion (P4), so the command reports it as waiting instead of faking it, and
+// a legal hold pins the account in read_only.
+Schedule::command('retention:advance')
+    ->dailyAt('03:40')
+    ->timezone('UTC')
+    ->withoutOverlapping();
+
 Schedule::command('retention:inactivity')
     ->dailyAt('04:00')
     ->timezone('UTC')
