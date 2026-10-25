@@ -6,7 +6,7 @@ import { provideRouter } from '@angular/router';
 import { EMPTY } from 'rxjs';
 import { AuthUser, MembershipSummary } from '../../../core/auth/auth.models';
 import { AuthService } from '../../../core/auth/auth.service';
-import { WorkspaceService } from '../../../core/workspace/workspace.service';
+import { RetentionState, WorkspaceService } from '../../../core/workspace/workspace.service';
 import { AppShell } from './app-shell';
 
 const USER: AuthUser = {
@@ -37,14 +37,17 @@ function authStub(): Partial<AuthService> {
   };
 }
 
-function workspaceStub(): Partial<WorkspaceService> {
+function workspaceStub(state: RetentionState | null = null): Partial<WorkspaceService> {
   const current = signal<MembershipSummary | null>(WORKSPACE);
   const list = signal<MembershipSummary[]>([WORKSPACE]);
+  const retention = signal<RetentionState | null>(state);
 
   return {
     activeWorkspaces: list.asReadonly(),
     currentWorkspace: current.asReadonly(),
     hasWorkspace: computed(() => current() !== null),
+    retentionState: retention.asReadonly(),
+    loadLifecycle: () => Promise.resolve(),
     load: () => Promise.resolve(),
     select: () => true,
     reset: () => undefined,
@@ -95,9 +98,7 @@ function installLocalStorage(): void {
 describe('AppShell', () => {
   let httpMock: HttpTestingController;
 
-  beforeEach(() => {
-    installLocalStorage();
-
+  function configureShell(state: RetentionState | null = null): void {
     TestBed.configureTestingModule({
       imports: [AppShell],
       providers: [
@@ -105,11 +106,16 @@ describe('AppShell', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: AuthService, useValue: authStub() },
-        { provide: WorkspaceService, useValue: workspaceStub() },
+        { provide: WorkspaceService, useValue: workspaceStub(state) },
       ],
     });
 
     httpMock = TestBed.inject(HttpTestingController);
+  }
+
+  beforeEach(() => {
+    installLocalStorage();
+    configureShell();
   });
 
   afterEach(() => {
@@ -154,5 +160,56 @@ describe('AppShell', () => {
     ) as HTMLAnchorElement | null;
 
     expect(link?.getAttribute('href')).toBe('/notifications');
+  });
+
+  it('FE5-T10 the shell shows a retention banner for a read-only account', async () => {
+    TestBed.resetTestingModule();
+    configureShell('read_only');
+
+    const fixture = TestBed.createComponent(AppShell);
+
+    fixture.detectChanges();
+    await nextTick();
+
+    for (const request of httpMock.match(
+      (item) =>
+        item.url.includes('/me/notifications/deliveries') &&
+        item.urlWithParams.includes('unread=true'),
+    )) {
+      request.flush({ data: [], meta: { next_cursor: null, limit: 100 } });
+    }
+
+    await nextTick();
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector(
+      '[data-testid="retention-banner"]',
+    ) as HTMLElement | null;
+
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toContain('อ่านอย่างเดียว');
+    expect(banner?.querySelector('a')?.getAttribute('href')).toBe('/family');
+  });
+
+  it('FE5-T11 the shell shows no banner for an active account', async () => {
+    const fixture = TestBed.createComponent(AppShell);
+
+    fixture.detectChanges();
+    await nextTick();
+
+    for (const request of httpMock.match(
+      (item) =>
+        item.url.includes('/me/notifications/deliveries') &&
+        item.urlWithParams.includes('unread=true'),
+    )) {
+      request.flush({ data: [], meta: { next_cursor: null, limit: 100 } });
+    }
+
+    await nextTick();
+    fixture.detectChanges();
+
+    const banner = fixture.nativeElement.querySelector('[data-testid="retention-banner"]');
+
+    expect(banner).toBeNull();
   });
 });

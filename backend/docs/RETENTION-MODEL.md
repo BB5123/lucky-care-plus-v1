@@ -115,6 +115,7 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | Lapse trigger | **manual, audited (2026-10-25)** - `retention:lapse` is the support entry point and `retention:advance` moves due accounts nightly. Billing (D5) does not exist yet, so nothing lapses automatically |
 | **Notices (30/7/1 day)** | **yes since 2026-10-25 (P3a)** - `retention:notices` sends in-app + email at day 30/7/1, idempotent through the delivery ledger |
 | **Export offer at lapse** | **yes since 2026-10-25 (P3b)** - `retention.export_offer` in-app when the account enters `read_only` |
+| **UI banner for non-active states** | **yes since 2026-10-26** - the app shell reads `GET /workspaces/{id}` and shows the state with a link to the export card (`FE5-T10/T11`); the API's 409 remains the authority |
 | **Cancellation choice screen** | **no** - needs a permission ID ("cancel my account") that the baseline does not have; waits for an owner-approved change record |
 | **Archive store** | **no** |
 
@@ -261,6 +262,14 @@ time the job runs, so the P2b guard would otherwise drop it, and forcing in-app 
 
 The event fires only on a real transition: a second lapse is a no-op and sends nothing (`RET-N08`). This is the
 "export offered on day 1" promise of §4 case 1; the 30-day notice then repeats the offer by email.
+
+### UI surface (2026-10-26)
+
+The web app reads the state from the workspace metadata endpoint it is already allowed to call in every non-deleted
+state (`WorkspaceService.loadLifecycle()`), and the shell renders one banner for `read_only`, `archived` or
+`scheduled_deletion` with a link to the export card in `/family`. An unknown state or a failed read shows no banner -
+the client never invents a state - and the server's 409/410 stays the authority: the banner explains the refusal, it
+does not replace it (`FE5-T10/T11`).
 
 **Still open for P3:** the cancellation choice screen (P3c). It needs a permission ID for "cancel my account" that the
 baseline catalog does not contain - `workspace.update` is configuration, not cancellation - so it waits for an

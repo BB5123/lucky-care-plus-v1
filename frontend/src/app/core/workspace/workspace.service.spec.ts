@@ -138,4 +138,60 @@ describe('WorkspaceService', () => {
     expect(service.currentWorkspace()).toBeNull();
     expect(window.localStorage.getItem('luckycare.workspace')).toBeNull();
   });
+
+  it('reads the account lifecycle and flags a restricted account', async () => {
+    const loading = service.load();
+    httpMock.expectOne('/api/v1/me').flush({ data: meResponse() });
+    await loading;
+
+    const lifecycle = service.loadLifecycle();
+
+    httpMock.expectOne('/api/v1/workspaces/ws-2').flush({
+      data: {
+        id: 'ws-2',
+        retention_state: 'read_only',
+        retention_expires_at: '2026-11-24T00:00:00+00:00',
+      },
+    });
+
+    await lifecycle;
+
+    expect(service.retentionState()).toBe('read_only');
+    expect(service.isRestricted()).toBe(true);
+    expect(service.lifecycle()?.retention_expires_at).toBe('2026-11-24T00:00:00+00:00');
+  });
+
+  it('ignores an unknown lifecycle value instead of guessing a state', async () => {
+    const loading = service.load();
+    httpMock.expectOne('/api/v1/me').flush({ data: meResponse() });
+    await loading;
+
+    const lifecycle = service.loadLifecycle();
+
+    httpMock.expectOne('/api/v1/workspaces/ws-2').flush({
+      data: { id: 'ws-2', retention_state: 'mystery', retention_expires_at: 42 },
+    });
+
+    await lifecycle;
+
+    expect(service.retentionState()).toBeNull();
+    expect(service.isRestricted()).toBe(false);
+  });
+
+  it('leaves the lifecycle unknown when the state read fails', async () => {
+    const loading = service.load();
+    httpMock.expectOne('/api/v1/me').flush({ data: meResponse() });
+    await loading;
+
+    const lifecycle = service.loadLifecycle();
+
+    httpMock
+      .expectOne('/api/v1/workspaces/ws-2')
+      .flush({ code: 'out_of_scope' }, { status: 404, statusText: 'Not Found' });
+
+    await lifecycle;
+
+    expect(service.retentionState()).toBeNull();
+    expect(service.isRestricted()).toBe(false);
+  });
 });
