@@ -300,6 +300,78 @@ them before a real deployment (section 10).
 
 ---
 
+## 5.1 Knowledge corpus (mutable state)
+
+The knowledge corpus is **not** immutable application code. It has two parts:
+
+| Path (inside the container) | What it is |
+|---|---|
+| `database/knowledge/sources/*.json` | One public source per file. `review_status`, `reviewed_by` and `reviewed_at` are written by the platform-admin review API and by `php artisan knowledge:review`. |
+| `database/knowledge/health_kb.sqlite` | The SQLite FTS5 index rebuilt from those sources after a review. |
+
+Both live on the named volume `knowledgedata`, which `docker-compose.yml`
+mounts at `/var/www/html/database/knowledge` on `app`, `queue` and `scheduler`.
+Only `app` writes; the workers read the same files. The image ships an immutable
+copy at `database/knowledge-seed` and the container entrypoint copies it into
+the volume **once, only when the volume is empty**. The first boot logs
+`knowledge corpus: seeded from image`; every later start logs
+`knowledge corpus: existing corpus kept` and leaves review decisions untouched.
+Rebuilding the image therefore never resets a review. A new image's seed does
+**not** update an existing volume: if a release ships changed sources, copy the
+specific files in deliberately (or rebuild the whole volume and re-review).
+
+**The volume is the only copy of the review decisions.** Removing it destroys
+them:
+
+```bash
+# DESTRUCTIVE: deletes PostgreSQL, Redis, uploads and every knowledge review.
+docker compose --profile app down -v
+```
+
+A plain `docker compose --profile app down` (without `-v`) keeps the volume. A
+rebuild (`docker compose --profile app up -d --build app web queue scheduler`)
+also keeps it and re-runs the entrypoint, which detects the populated volume.
+
+Back up and restore the corpus with a throw-away container (do not copy from a
+running `app` container if a review may be in flight):
+
+```bash
+# Back up the volume to a host tarball.
+docker run --rm \
+  -v lucky-care-plus_knowledgedata:/data:ro \
+  -v "$PWD":/backup \
+  alpine:3.20 \
+  tar czf /backup/knowledgedata-$(date +%F).tar.gz -C /data .
+
+# Restore into a fresh volume (stop the app first so no request writes).
+docker compose --profile app stop app queue scheduler
+docker run --rm \
+  -v lucky-care-plus_knowledgedata:/data \
+  -v "$PWD":/backup \
+  alpine:3.20 \
+  sh -c 'rm -rf /data/* && tar xzf /backup/knowledgedata-YYYY-MM-DD.tar.gz -C /data'
+docker compose --profile app start app queue scheduler
+```
+
+The compose project name is `lucky-care-plus`, so the volume is
+`lucky-care-plus_knowledgedata` (check with `docker volume ls`). If the volume
+is recreated while a backup holds old sources, run
+`docker compose --profile app exec -T app php artisan knowledge:build` to
+rebuild the SQLite index from the restored sources.
+
+A review that cannot write the corpus returns `503 knowledge_corpus_readonly`
+(Thai message, one failed `security_audit_logs` row with
+`reason_code=corpus_readonly`). That means the volume is read-only, full, or
+owned by another user - it is a deployment fault, not a validation error. Check
+ownership and free space:
+
+```bash
+docker compose --profile app exec -T app sh -c \
+  'id; ls -ld /var/www/html/database/knowledge; df -h /var/www/html/database/knowledge'
+```
+
+---
+
 ## 6. Malware scanning (ClamAV)
 
 Scanning is **fail-closed but disabled by default** (owner decision D4). The

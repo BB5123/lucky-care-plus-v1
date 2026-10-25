@@ -24,6 +24,13 @@
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="DB_CONNECTION" value="pgsql"/>
+        <!--
+            Without this, the test suite inherits DB_DATABASE from .env and
+            `RefreshDatabase` wipes the developer's own database - which is what
+            destroyed the demo family twice on 2026-10-25 while a Docker stack was
+            using it. CI already points at lucky_care_plus_test; local runs must too.
+        -->
+        <env name="DB_DATABASE" value="lucky_care_plus_test"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

@@ -2,8 +2,11 @@
 
 namespace App\Modules\AiGateway\Knowledge\Application;
 
+use App\Modules\AiGateway\Knowledge\Domain\KnowledgeCorpusReadonlyException;
 use App\Modules\AiGateway\Knowledge\Domain\KnowledgeSourceInvalidException;
 use App\Modules\AiGateway\Knowledge\Domain\KnowledgeSourceNotFoundException;
+use ErrorException;
+use PDOException;
 use RuntimeException;
 
 /**
@@ -76,6 +79,7 @@ final class KnowledgeSourceService
      *
      * @throws KnowledgeSourceNotFoundException
      * @throws KnowledgeSourceInvalidException
+     * @throws KnowledgeCorpusReadonlyException
      */
     public function review(string $id, string $reviewer, bool $build = true, string $status = 'reviewed'): array
     {
@@ -146,14 +150,46 @@ final class KnowledgeSourceService
             throw new RuntimeException('Could not encode the source.');
         }
 
-        if (file_put_contents($path, $encoded."\n") === false) {
-            throw new RuntimeException('Could not write the source file.');
+        $temporary = $path.'.'.bin2hex(random_bytes(6)).'.tmp';
+
+        try {
+            $written = file_put_contents($temporary, $encoded."\n");
+        } catch (ErrorException|RuntimeException $exception) {
+            // Laravel's error handler turns the "permission denied" warning
+            // into an ErrorException. A read-only volume, a full disk or a
+            // directory this process does not own all end up here.
+            @unlink($temporary);
+
+            throw KnowledgeCorpusReadonlyException::from($exception);
+        }
+
+        if ($written === false) {
+            @unlink($temporary);
+
+            throw new KnowledgeCorpusReadonlyException('The knowledge corpus is not writable.');
+        }
+
+        // Write into the same directory and rename atomically. Writing the
+        // source in place would succeed even when the directory is read-only
+        // (the existing file itself is still writable) and leave a half-
+        // updated source behind when the SQLite rebuild fails.
+        if (! @rename($temporary, $path)) {
+            @unlink($temporary);
+
+            throw new KnowledgeCorpusReadonlyException('The knowledge corpus is not writable.');
         }
 
         $stats = null;
 
         if ($build) {
-            $stats = $this->builder->build($this->directory(), (string) config('knowledge.sqlite_path'));
+            try {
+                $stats = $this->builder->build($this->directory(), (string) config('knowledge.sqlite_path'));
+            } catch (ErrorException|PDOException $exception) {
+                // A PDOException opened before the builder's own transaction
+                // guard, or a filesystem warning raised while writing the
+                // SQLite file, is the same deployment condition.
+                throw KnowledgeCorpusReadonlyException::from($exception);
+            }
         }
 
         return ['source' => $this->present($source), 'stats' => $stats];
