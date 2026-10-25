@@ -117,8 +117,8 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | **Export offer at lapse** | **yes since 2026-10-25 (P3b)** - `retention.export_offer` in-app when the account enters `read_only` |
 | **UI banner for non-active states** | **yes since 2026-10-26** - the web and mobile shells read the state and show it with a link to the export card (`FE5-T10/T11`, `RET-M01..M07`); the API's 409 remains the authority |
 | **Cancellation choice screen** | **no** - needs a permission ID ("cancel my account") that the baseline does not have; waits for an owner-approved change record |
-| **Archive inventory** | **yes since 2026-10-26 (P4a)** - entering `archived` writes a hashed per-table inventory (`workspace_archive_manifests`), shown and re-verified by `retention:archive-manifest` (`RET-A01..A04`) |
-| **Encrypted archive bundle** | **yes since 2026-10-26 (P4b-1)** - the archived rows are written as NDJSON, gzipped and encrypted with `APP_KEY` on `RETENTION_ARCHIVE_DISK`; `retention:archive-drill` verifies the file, its hash, decryptability and the per-table counts (`RET-B01..B04`) |
+| **Archive inventory** | **yes since 2026-10-26 (P4a)** - entering `archived` writes a hashed per-table inventory (`workspace_archive_manifests`), shown and re-verified by `retention:archive-manifest` (`RET-A01..A05`) |
+| **Encrypted archive bundle** | **yes since 2026-10-26 (P4b-1)** - the archived rows are written as NDJSON, gzipped and encrypted with `APP_KEY` on `RETENTION_ARCHIVE_DISK`; `retention:archive-drill` verifies the file, its hash, decryptability and the per-table counts (`RET-B01..B05`) |
 | **Restore data path + per-archive keys** | **no** - P4b-2; until then the final `scheduled_deletion -> deleted` arrow stays closed |
 
 So until 2026-10-25 the product *hid* expired rows forever - the gap P1 closed. Rows are now removed from the
@@ -296,7 +296,7 @@ A restore keeps the manifest; a second lapse and archive appends a second one, s
 overwrite. A failure to write the manifest aborts the archive transition: an archive without an inventory would be a
 claim nobody can verify.
 
-Tests: `RET-A01..A04` (manifest on archive with the fixture counts, command + tamper detection, restore keeps it and a
+Tests: `RET-A01..A05` (manifest on archive with the fixture counts, command + tamper detection, machine-readable output, restore keeps it and a
 second archive appends, read_only/active have none).
 
 ### P4b-1: the encrypted bundle (as built, 2026-10-26)
@@ -314,7 +314,7 @@ raw ciphertext contains neither the measurement value nor the person's name.
 
 `retention:archive-drill {workspace}` is the verification: file present, ciphertext hash equal to the manifest's,
 decryptable with the current `APP_KEY`, and the row count per table equal to the inventory. It exits non-zero on any
-mismatch, so an archive that was never verified is not reported as one that was (`RET-B01..B04`). The two migrations
+mismatch, so an archive that was never verified is not reported as one that was (`RET-B01..B05`). The two migrations
 (`workspace_archive_manifests`, then its bundle columns) were rolled back and re-applied on the development database
 on 2026-10-26, so `down()` is exercised, not only written.
 
