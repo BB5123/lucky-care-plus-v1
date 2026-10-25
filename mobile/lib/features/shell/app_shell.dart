@@ -113,6 +113,9 @@ class AppShell extends ConsumerWidget {
             _RetentionBanner(
               title: retention.bannerTitle!,
               detail: retention.bannerDetail ?? '',
+              // The export card lives in the family tab; the banner cannot
+              // restore or export on its own.
+              onExport: () => navigationShell.goBranch(4),
             ),
           Expanded(child: navigationShell),
         ],
@@ -172,15 +175,21 @@ class AppShell extends ConsumerWidget {
 
 /// The one-line account-state banner (P3/P4): read-only, archived or
 /// scheduled-deletion. It explains the state before the member tries a write;
-/// it never offers an action, because restoring is a support decision and the
-/// export screen lives under the family tab.
+/// the only action is a jump to the export card in the family tab, because
+/// restoring is a support decision.
 class _RetentionBanner extends StatelessWidget {
-  const _RetentionBanner({required this.title, required this.detail});
+  const _RetentionBanner({
+    required this.title,
+    required this.detail,
+    this.onExport,
+  });
 
   final String title;
   final String detail;
+  final VoidCallback? onExport;
 
   static const Key bannerKey = Key('retention-banner');
+  static const Key exportKey = Key('retention-banner-export');
 
   @override
   Widget build(BuildContext context) {
@@ -210,6 +219,18 @@ class _RetentionBanner extends StatelessWidget {
                   detail,
                   style: const TextStyle(color: AppColors.textPrimary),
                 ),
+                if (onExport != null)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      key: exportKey,
+                      onPressed: onExport,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.warning,
+                      ),
+                      child: const Text('ส่งออกข้อมูล'),
+                    ),
+                  ),
               ],
             ),
           ),

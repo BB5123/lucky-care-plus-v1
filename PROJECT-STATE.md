@@ -239,9 +239,9 @@ permission change record.
    design (move-vs-copy, keys, crypto-shred, export-from-bundle, `ARC-*` tests) is in
    `backend/docs/RETENTION-ARCHIVE-DESIGN.md`; it waits on two owner decisions before code.
 2. **P3c** once the owner approves a "cancel my account" permission change record.
-3. **Mobile export link** from the retention banner (it currently says to contact support; the mobile IA has no
-   export route from the banner yet).
-4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
+3. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
+4. **Owner/deployment items:** archive-disk backup + key escrow (P4b-2 depends on them), the `BACKUP_ALERT_WEBHOOK`
+   secret, S3/MinIO document mirroring, and D5 plan windows.
 
 **Verified at hand-off:** backend 480 passed / 2 skipped / 4,749 assertions · web 140 · mobile 129 · 102 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
