@@ -210,6 +210,11 @@ docker run --rm -i \
 
 96 requests, **0 failed, 0 throttled**, 27 iterations, 3 VUs.
 
+**Re-run after the final build (2026-10-26, same command and config):** dashboard p95 **368 ms**, timeline
+**374 ms**, care-tasks **372 ms**; 0 failed, 0 throttled, 27 iterations. The three routes are within ~70 ms of each
+other in both runs, and care-tasks crosses its 300 ms gate again - so the crossing is stable, not a one-off, and the
+conclusion below holds.
+
 ### Finding: the care-tasks HTTP path is ~350 ms p95
 
 The same run with `APP_DEBUG=true` measured care-tasks p95 **348 ms**, so debug mode is not the cause. Single
