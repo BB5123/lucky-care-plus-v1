@@ -1,6 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
 import { guestGuard } from './core/auth/guest.guard';
+import { platformAdminGuard } from './core/auth/platform-admin.guard';
 
 export const routes: Routes = [
   {
@@ -100,6 +101,16 @@ export const routes: Routes = [
         title: 'ครอบครัวและสิทธิ์ | LuckyCare+',
         data: { title: 'ครอบครัวและสิทธิ์' },
         loadComponent: () => import('./features/family/family.page').then((m) => m.FamilyPage),
+      },
+      {
+        // Platform data, not workspace data: `platformAdminGuard` reads the
+        // explicit flag from `/me` before the page is ever created (CR-005-UI).
+        path: 'admin/knowledge',
+        title: 'ตรวจแหล่งความรู้ | LuckyCare+',
+        data: { title: 'ตรวจแหล่งความรู้' },
+        canActivate: [platformAdminGuard],
+        loadComponent: () =>
+          import('./features/admin/knowledge-admin.page').then((m) => m.KnowledgeAdminPage),
       },
     ],
   },

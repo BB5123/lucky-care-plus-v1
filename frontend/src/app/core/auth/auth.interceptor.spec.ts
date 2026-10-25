@@ -19,6 +19,7 @@ const AUTH_RESPONSE: AuthResponse = {
     email: 'user@example.test',
     phone: null,
     phone_verified_at: null,
+    is_platform_admin: false,
   },
   token: 'token-123',
   token_type: 'Bearer',

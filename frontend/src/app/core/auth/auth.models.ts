@@ -4,6 +4,11 @@ export interface AuthUser {
   email: string;
   phone: string | null;
   phone_verified_at: string | null;
+  /**
+   * CR-005: explicit platform capability (ABD-019). It is the caller's own
+   * record and never derived from a workspace role.
+   */
+  is_platform_admin: boolean;
 }
 
 export interface MembershipSummary {

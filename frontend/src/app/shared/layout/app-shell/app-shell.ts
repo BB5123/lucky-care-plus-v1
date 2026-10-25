@@ -34,6 +34,7 @@ export class AppShell {
   protected readonly elderMode = inject(ElderModeService);
 
   protected readonly user = this.auth.user;
+  protected readonly isPlatformAdmin = this.auth.isPlatformAdmin;
   protected readonly workspaces = this.workspace.activeWorkspaces;
   protected readonly currentWorkspace = this.workspace.currentWorkspace;
   protected readonly unreadCount = this.notifications.unreadCount;
