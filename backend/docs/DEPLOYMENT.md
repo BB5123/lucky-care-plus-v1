@@ -165,6 +165,11 @@ If you terminate TLS, the same request through the terminator must return 200.
 Set `APP_URL` to the external HTTPS URL so signed document/export links use the
 public host.
 
+For a demo or pilot workspace with realistic synthetic data (and the exact
+login steps), run `docker compose --profile app exec -T app php artisan demo:seed`
+- see [`DEMO-DATA.md`](DEMO-DATA.md). The full post-deploy check is
+`bash backend/scripts/smoke.sh --base-url=http://localhost:8080` (section 4).
+
 ---
 
 ## 3. Verify the queue and the scheduler are actually running
@@ -213,8 +218,11 @@ running.
 
 ## 4. Smoke check after every deploy
 
-Run this short block after the first install and after every upgrade. It checks
-the HTTP path, the auth surface, the database schema and the queue backend.
+The packaged post-deploy check is
+`bash backend/scripts/smoke.sh --base-url=http://localhost:8080` (it needs the
+demo accounts from `demo:seed`; see [`DEMO-DATA.md`](DEMO-DATA.md)).
+The manual block below checks the HTTP path, the auth surface, the database
+schema and the queue backend.
 
 ```bash
 set -euo pipefail

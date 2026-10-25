@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-25 03:18 (Asia/Bangkok) - backend suite re-run; web/mobile counts are from the
-previous verification
+**Last verified:** 2026-10-25 09:30 (Asia/Bangkok) - backend suite re-run after DEPLOY-2 (demo seed + smoke
+check); web/mobile counts are from the previous verification
 
 ---
 
@@ -34,11 +34,11 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 15-document knowledge base with a measured benchmark, web + mobile AI surfaces |
 | **4 - Scale/compliance** | not started | |
 
-**Verified test counts (2026-10-25 06:10):**
+**Verified test counts (2026-10-25 09:30):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **377 passed / 3,983 assertions** |
+| backend `php artisan test` | **382 passed / 4,049 assertions** |
 | web `npm test` | **126 passed / 42 files** |
 | mobile `flutter test` | **116 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
@@ -53,11 +53,13 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 377
+php artisan test                 # 382
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
 ./vendor/bin/pint --test
+php artisan demo:seed --reset --force    # synthetic pilot workspace; see docs/DEMO-DATA.md
+bash scripts/smoke.sh --base-url=http://localhost:8080   # post-deploy check
 
 cd ../frontend
 npm test                         # 126
@@ -132,6 +134,12 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    Mobile's download hands the short-lived URL to the clipboard because `url_launcher` is not a dependency.
 9. **Knowledge sources cannot be reviewed from the product.** `knowledge:review` is a console command, so a
    clinician needs shell access to mark 15 sources as reviewed - and until then every answer warns.
+10. **The demo smoke check uses password login, not OTP as the first step.** `/auth/otp/request` and
+    `/auth/otp/verify` require an existing bearer token, so `scripts/smoke.sh` logs in with the seeded demo
+    password, then exercises the OTP round-trip with that token. With `OTP_DEMO_MODE=true` it verifies the
+    code; with the safe default (`false`) it reports that step as skipped. There is also no
+    `GET /api/v1/workspaces` collection route: the script reads the workspace list from `/me` and then
+    proves `GET /api/v1/workspaces/{id}`. See `backend/docs/DEMO-DATA.md`.
 
 ---
 
@@ -143,6 +151,7 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 | Authorization baseline | `docs/baseline-v1.0.0/` (v1.3.0) |
 | Change records | `.ai/changes/CR-001`, `CR-003`, `CR-004` |
 | G0 gate evidence | `backend/docs/G0-CHECKLIST.md` |
+| Demo data and smoke check | `backend/docs/DEMO-DATA.md`, `backend/scripts/smoke.sh` |
 | G4 live evaluation | `backend/docs/G4-LIVE-EVALUATION.md` |
 | Knowledge base | `backend/docs/KNOWLEDGE-BASE.md` |
 | RAG retrieval decision (lexical vs vector) | `backend/docs/RAG-VECTOR-OPTIONS.md` |
