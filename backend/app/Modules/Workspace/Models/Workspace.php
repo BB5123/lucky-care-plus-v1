@@ -8,6 +8,7 @@ use App\Support\Id\Uuid7;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
 class Workspace extends Model
 {
@@ -51,6 +52,30 @@ class Workspace extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class, 'tenant_id');
+    }
+
+    /**
+     * The retention state as an enum, failing closed when the model is stale.
+     *
+     * The column is NOT NULL with a default, so a null here means the instance
+     * was built without the column; guessing `active` would silently open an
+     * account that might be read-only or archived (F-09).
+     */
+    public function retentionState(): RetentionState
+    {
+        $state = $this->retention_state;
+
+        if ($state instanceof RetentionState) {
+            return $state;
+        }
+
+        if ($state === null || $state === '') {
+            throw new LogicException(
+                'Workspace has no retention state loaded; reload the model before reading its lifecycle.'
+            );
+        }
+
+        return RetentionState::from((string) $state);
     }
 
     public function memberships(): HasMany

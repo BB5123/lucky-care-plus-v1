@@ -92,17 +92,7 @@ final class WorkspaceStateGate
 
     private function state(Workspace $workspace): RetentionState
     {
-        $state = $workspace->retention_state;
-
-        if ($state instanceof RetentionState) {
-            return $state;
-        }
-
-        if ($state === null || $state === '') {
-            throw new \LogicException('Workspace has no retention state loaded; refusing the request (F-09).');
-        }
-
-        return RetentionState::from((string) $state);
+        return $workspace->retentionState();
     }
 
     /**

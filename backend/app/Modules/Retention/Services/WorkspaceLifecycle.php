@@ -61,22 +61,7 @@ final class WorkspaceLifecycle
 
     public function state(Workspace $workspace): RetentionState
     {
-        $state = $workspace->retention_state;
-
-        if ($state instanceof RetentionState) {
-            return $state;
-        }
-
-        // The column is NOT NULL with a default, so a null here means a stale
-        // model instance, not a real state. Fail closed instead of guessing
-        // "active" for a row we do not actually know.
-        if ($state === null || $state === '') {
-            throw new LogicException(
-                'Workspace has no retention state loaded; reload the model before changing its lifecycle.'
-            );
-        }
-
-        return RetentionState::from((string) $state);
+        return $workspace->retentionState();
     }
 
     /**
