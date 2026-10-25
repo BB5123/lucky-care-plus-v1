@@ -267,9 +267,10 @@ The event fires only on a real transition: a second lapse is a no-op and sends n
 
 The web app reads the state from the workspace metadata endpoint it is already allowed to call in every non-deleted
 state (`WorkspaceService.loadLifecycle()`), and the shell renders one banner for `read_only`, `archived` or
-`scheduled_deletion` with a link to the export card in `/family`. An unknown state or a failed read shows no banner -
-the client never invents a state - and the server's 409/410 stays the authority: the banner explains the refusal, it
-does not replace it (`FE5-T10/T11`).
+`scheduled_deletion` with a link to the export card in `/family`. The mobile app does the same through
+`workspaceRetentionProvider` and a banner above the tab shell. An unknown state or a failed read shows no banner - the
+client never invents a state - and the server's 409/410 stays the authority: the banner explains the refusal, it does
+not replace it (`FE5-T10/T11`, `RET-M01..M04`).
 
 **Still open for P3:** the cancellation choice screen (P3c). It needs a permission ID for "cancel my account" that the
 baseline catalog does not contain - `workspace.update` is configuration, not cancellation - so it waits for an

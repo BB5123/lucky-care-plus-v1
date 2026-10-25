@@ -40,12 +40,12 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 |---|---|
 | backend `php artisan test` | **469 passed / 2 skipped / 4,698 assertions** (471 tests) |
 | web `npm test` | **140 passed / 43 files** |
-| mobile `flutter test` | **125 passed** |
+| mobile `flutter test` | **129 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 52 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **98 merged PRs**, no open PRs.
+8 mobile feature folders, **99 merged PRs**, no open PRs.
 
 ---
 
@@ -159,9 +159,9 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    **P2b:** scheduled work starts from `Workspace::acceptingBackgroundWork()`, and a queued notification re-checks the
    state at delivery. **P3a:** `retention:notices` sends the 30/7/1-day notices in-app **and by email**, overrides
    channel preferences (legal notice), reaches the lapsed account through the documented job exception, and is
-   idempotent through the delivery ledger. **P3b:** a lapse sends an in-app export offer on day 1. **Web:** a
-   `read_only`/`archived`/`scheduled_deletion` account gets one banner in the shell (with a link to the export card);
-   the API's 409 stays the authority. `RETENTION_DRY_RUN`
+   idempotent through the delivery ledger. **P3b:** a lapse sends an in-app export offer on day 1. **Web/mobile:** a
+   `read_only`/`archived`/`scheduled_deletion` account gets one banner in the shell (web links to the export card;
+   mobile shows the same copy above the tabs); the API's 409 stays the authority. `RETENTION_DRY_RUN`
    is still `true` here on purpose (`RetentionDecisionPackTest` fails if it is flipped). **Still open:** plan-specific
    windows (D5), the cancellation choice screen (P3c - blocked on a permission change record), the final
    `scheduled_deletion -> deleted` arrow (P4), the separate archive store (P4) and the self-service restore/export
@@ -235,7 +235,7 @@ P3c (the cancellation choice screen) is blocked on a permission change record.
 3. **P3c** once the owner approves a "cancel my account" permission change record.
 4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 469 passed / 2 skipped / 4,698 assertions · web 140 · mobile 125 · 98 merged PRs ·
+**Verified at hand-off:** backend 469 passed / 2 skipped / 4,698 assertions · web 140 · mobile 129 · 99 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · document
 backup tested (DOC-B01..B04) · web retention banner tested (FE5-T10/T11) · D2 `ai:ping` proven against the real
