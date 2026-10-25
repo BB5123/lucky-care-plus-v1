@@ -65,6 +65,39 @@ php artisan ai:evaluate --live --max-calls=30 \
 `--base-url` / `--model` are new: they override the config **in memory for that command only**, so you never
 have to edit `.env` and never risk accidentally pointing production at a laptop.
 
+## The Ollama route (measured 2026-10-25)
+
+Running `llama-server` by hand works but is repetitive. `backend/scripts/ollama-kaggle-agent.py` is the
+battle-tested version of that notebook: Ollama + ngrok, tuned for an agent rather than a chat demo.
+
+```bash
+python backend/scripts/ollama-kaggle-agent.py --dry-run   # print the resolved plan, no GPU needed
+python backend/scripts/ollama-kaggle-agent.py             # install, pull, alias, tunnel, verify, hand over
+```
+
+It is deliberately idempotent (`--skip-pull`, aliases recreated only when their parameters changed), retries
+429/5xx because ngrok's free plan rate-limits bursts, and **verifies** that the loaded model really has the
+requested `num_ctx` - a silently truncated context is the worst failure for an agent, because the prompt is
+accepted and quietly cut. It also writes `ollama-agent.env` / `ollama-agent.json` to `HDIR`, so the endpoint can
+be consumed without copy-paste. `backend/scripts/ollama-kaggle-agent-selfcheck.py` exercises every pure helper
+(config padding, Modelfile, interstitial detection, token stripping, handover, smoke-case wiring) with no GPU and
+no network.
+
+### Two things this project learned the hard way
+
+1. **`qwen3.8-27b` reasons by default.** With `max_tokens: 32` it returned `content: ""` and
+   `finish_reason: length` - every token spent thinking. That is the failure mode `provider_empty_content`
+   exists for (see `G4-LIVE-EVALUATION.md`). Send `reasoning_effort: "none"` (OpenAI-compatible) or
+   `"think": false` (Ollama API), and give it a real token budget.
+2. **Host PHP may not reach an ngrok tunnel** even when `curl.exe` and the app container can. On this machine PHP
+   curl 8.12.1 / OpenSSL 3.0.18 failed with `Error in the HTTP2 framing layer` while the container's curl 8.22.0
+   negotiated HTTP/3 and worked. Run `ai:evaluate --live` **inside the container**:
+   `docker compose --profile app exec -T -e AI_API_KEY=<any> app php artisan ai:evaluate --live ...`
+
+A production-shaped call through our own adapter measured **45 s** for 158 in / 538 out tokens, and the reply
+carried the mandatory disclaimer - so the guardrail prompt works with this model. The latency, not the quality,
+is what rules it out for interactive use.
+
 ## What to compare
 
 Use `backend/docs/G4-LIVE-EVALUATION.md` as the baseline. The interesting columns are:

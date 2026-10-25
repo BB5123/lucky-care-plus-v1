@@ -111,6 +111,14 @@ jobs:
       - name: Run test suite
         run: php artisan test
 
+      # The Ollama/Kaggle helper is Python, so the PHP suite never exercises it.
+      # Its self-check needs no GPU, no Ollama and no network - it covers the pure
+      # helpers (config padding, Modelfile, interstitial detection, token handling,
+      # handover) that used to be inline and untested.
+      - name: Self-check the Ollama/Kaggle helper
+        working-directory: .
+        run: python3 backend/scripts/ollama-kaggle-agent-selfcheck.py
+
       # Supply chain: a known-vulnerable dependency must fail the pull request, not
       # be discovered after a deployment. `composer audit` exits non-zero on any
       # advisory it knows about.
