@@ -117,3 +117,20 @@ jobs:
         run: |
           echo "::error::Restore drill failed. A backup that cannot be restored is not a backup."
           echo "Inspect the step log above: row-count mismatches, or an RLS probe that returned rows it should not."
+
+      # Same optional alert as the nightly producer: one line with the run link
+      # when `BACKUP_ALERT_WEBHOOK` is configured, a no-op otherwise.
+      - name: Alert the on-call channel
+        if: failure()
+        env:
+          BACKUP_ALERT_WEBHOOK: ${{ secrets.BACKUP_ALERT_WEBHOOK }}
+        run: |
+          if [ -z "${BACKUP_ALERT_WEBHOOK}" ]; then
+            echo "No BACKUP_ALERT_WEBHOOK secret set; the failed run stays in the Actions UI."
+            exit 0
+          fi
+          payload="$(printf '{"text":"Restore drill FAILED: %s/%s/actions/runs/%s"}' \
+            "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          if ! curl -fsS -m 10 -H 'Content-Type: application/json' -d "$payload" "$BACKUP_ALERT_WEBHOOK"; then
+            echo "::warning::The alert webhook could not be reached; the failed run is still visible in the Actions UI."
+          fi
