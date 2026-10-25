@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Modules\Retention\Models\WorkspaceArchiveManifest;
+use App\Modules\Retention\Services\ArchiveAccessAuditor;
 use App\Modules\Retention\Services\ArchiveBundleService;
 use App\Modules\Retention\Services\ArchiveManifestService;
 use App\Modules\Workspace\Models\Workspace;
@@ -30,6 +31,7 @@ final class RetentionArchiveDrillCommand extends Command
         WorkspaceResolver $resolver,
         ArchiveBundleService $bundles,
         ArchiveManifestService $manifests,
+        ArchiveAccessAuditor $auditor,
     ): int {
         $workspace = $resolver->resolve((string) $this->argument('workspace'));
 
@@ -65,6 +67,12 @@ final class RetentionArchiveDrillCommand extends Command
         $result = $bundles->verify($manifest);
         $inventoryVerified = $manifests->verify($manifest);
         $ok = $result['ok'] && $inventoryVerified;
+
+        TenantContext::run(
+            $workspace->tenant_id,
+            $workspace->id,
+            fn (): mixed => $auditor->read($workspace, 'archive-drill', $ok),
+        );
 
         if ((bool) $this->option('json')) {
             $this->line(json_encode([

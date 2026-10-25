@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Modules\Retention\Models\WorkspaceArchiveManifest;
+use App\Modules\Retention\Services\ArchiveAccessAuditor;
 use App\Modules\Retention\Services\ArchiveManifestService;
 use App\Modules\Workspace\Models\Workspace;
 use App\Modules\Workspace\Services\WorkspaceResolver;
@@ -26,8 +27,11 @@ final class RetentionArchiveManifestCommand extends Command
 
     protected $description = 'Show the latest archive inventory (counts + hash) for a workspace';
 
-    public function handle(WorkspaceResolver $resolver, ArchiveManifestService $manifests): int
-    {
+    public function handle(
+        WorkspaceResolver $resolver,
+        ArchiveManifestService $manifests,
+        ArchiveAccessAuditor $auditor,
+    ): int {
         $workspace = $resolver->resolve((string) $this->argument('workspace'));
 
         if (! $workspace instanceof Workspace) {
@@ -40,11 +44,19 @@ final class RetentionArchiveManifestCommand extends Command
             $manifest = TenantContext::run(
                 $workspace->tenant_id,
                 $workspace->id,
-                fn (): ?WorkspaceArchiveManifest => WorkspaceArchiveManifest::query()
-                    ->where('workspace_id', $workspace->id)
-                    ->orderByDesc('archived_at')
-                    ->orderByDesc('id')
-                    ->first(),
+                function () use ($workspace, $auditor): ?WorkspaceArchiveManifest {
+                    $manifest = WorkspaceArchiveManifest::query()
+                        ->where('workspace_id', $workspace->id)
+                        ->orderByDesc('archived_at')
+                        ->orderByDesc('id')
+                        ->first();
+
+                    if ($manifest instanceof WorkspaceArchiveManifest) {
+                        $auditor->read($workspace, 'archive-manifest');
+                    }
+
+                    return $manifest;
+                },
             );
         } catch (Throwable $exception) {
             $this->error('Could not read the archive manifest: '.$exception->getMessage());
