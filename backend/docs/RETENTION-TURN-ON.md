@@ -14,7 +14,38 @@ Every type reports `0 eligible` on the demo data, and `ai_conversations` reports
 failing the run — the command tells the truth about what it can and cannot purge. `--type=` and `--limit=` exist,
 so a first real run can be one type, one batch.
 
-**Not yet verified: an actual deletion.** The rehearsal below is the missing half.
+## Rehearsed end to end on 2026-10-25 (live stack, synthetic row)
+
+One row dated `2021-01-15` was inserted as the database owner (RLS hides it from the app otherwise), then:
+
+```
+retention:purge --type=health_measurements --limit=100   (RETENTION_DRY_RUN=false)
+| health_measurements | 1 eligible | 1 purged | 0 held | dry run: no | done |
+```
+
+| Check | Result |
+|---|---|
+| the old row no longer counts as live | `deleted_at` set: 1 soft-deleted, 180 live |
+| recent rows untouched | 180 live, unchanged |
+| audit | `retention.purge` / `allow` written (the earlier dry run wrote one with `reason_code = dry_run`) |
+| running it again | `0 eligible` - idempotent |
+
+### The finding: this deletes *logically*, not physically
+
+`PurgeService` calls `$row->delete()` for models that use `SoftDeletes`, so `health_measurements` keeps its row and
+only sets `deleted_at`. Tables without soft deletes are removed with a real `DELETE`. **There is no hard-delete or
+compaction step anywhere in the codebase** (`grep forceDelete` finds nothing).
+
+For a PDPA retention obligation that matters: the product currently *hides* the record from the application but the
+data is still in the database, in backups, and in every dump. That is a decision for the owner, not a bug to fix
+silently:
+
+1. accept logical deletion (data remains, unreachable through the API), or
+2. add a hard-delete pass that runs after a further grace period (say 30 days past `deleted_at`), with its own
+   audit row and the same rehearsal discipline.
+
+Until one is chosen, do not describe retention as "data destruction" in the privacy notice - describe it as
+"removal from the service".
 
 ## Order of operations
 
