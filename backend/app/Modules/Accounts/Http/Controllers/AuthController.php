@@ -128,6 +128,10 @@ final class AuthController extends Controller
             'email' => $user->email,
             'phone' => $user->phone,
             'phone_verified_at' => $user->phone_verified_at?->toIso8601String(),
+            // CR-005-UI: the caller's own platform capability. Workspace roles
+            // say nothing about it (ABD-019), so the web app cannot hide the
+            // review screen without this explicit boolean.
+            'is_platform_admin' => $user->isPlatformAdmin(),
         ];
     }
 }

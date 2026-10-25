@@ -58,6 +58,11 @@ export class AuthService {
   readonly user = this.userState.asReadonly();
   readonly memberships = this.membershipsState.asReadonly();
   readonly isAuthenticated = computed(() => this.tokenState() !== null);
+  /**
+   * Platform capability from the `/me` cache. Workspace arrival alone never
+   * grants it, so a stale or partial user object fails closed.
+   */
+  readonly isPlatformAdmin = computed(() => this.userState()?.is_platform_admin === true);
 
   login(credentials: LoginRequest): Observable<AuthUser> {
     const body: LoginRequest = {

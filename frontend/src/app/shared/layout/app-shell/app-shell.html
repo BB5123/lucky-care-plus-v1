@@ -120,6 +120,18 @@
             {{ item.label }}
           </a>
         }
+
+        @if (isPlatformAdmin()) {
+          <a
+            class="flex min-h-12 items-center rounded-md px-3 text-sm text-ink-muted hover:bg-surface-muted"
+            routerLink="/admin/knowledge"
+            routerLinkActive="bg-surface-muted font-medium text-info"
+            [routerLinkActiveOptions]="{ exact: true }"
+            data-testid="shell-admin-knowledge-link"
+          >
+            ตรวจแหล่งความรู้
+          </a>
+        }
       </nav>
     </aside>
 

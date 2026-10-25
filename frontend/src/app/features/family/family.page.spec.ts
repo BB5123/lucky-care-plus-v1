@@ -41,6 +41,7 @@ function authStub(userId: string): Partial<AuthService> {
     email: 'me@example.test',
     phone: null,
     phone_verified_at: null,
+    is_platform_admin: false,
   });
 
   return { user: user.asReadonly() };

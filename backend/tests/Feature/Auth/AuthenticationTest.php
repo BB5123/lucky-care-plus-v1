@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\User;
+use App\Modules\Workspace\Models\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 /**
@@ -29,5 +32,37 @@ class AuthenticationTest extends TestCase
             ->assertStatus(401)
             ->assertHeader('Content-Type', 'application/problem+json')
             ->assertJsonPath('code', 'unauthenticated');
+    }
+
+    /**
+     * CR-005-UI: `/me` is the caller's own record, so the explicit platform
+     * flag is exposed for the web app to hide the review screen. It is false
+     * for a normal user and becomes true after `platform:grant`.
+     */
+    public function test_me_exposes_the_platform_admin_flag_after_platform_grant(): void
+    {
+        Tenant::query()->create([
+            'name' => 'Default',
+            'slug' => 'default',
+        ]);
+
+        $user = User::factory()->create();
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/me')
+            ->assertOk()
+            ->assertJsonPath('data.user.is_platform_admin', false);
+
+        $this->artisan('platform:grant', ['email' => $user->email])
+            ->assertExitCode(0);
+
+        // The CLI wrote another model instance; a real request re-resolves the
+        // actored user, so the test does the same before the second call.
+        Sanctum::actingAs($user->fresh());
+
+        $this->getJson('/api/v1/me')
+            ->assertOk()
+            ->assertJsonPath('data.user.is_platform_admin', true);
     }
 }

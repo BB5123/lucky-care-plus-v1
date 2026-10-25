@@ -24,6 +24,7 @@ const USER: AuthUser = {
   email: 'user@example.test',
   phone: null,
   phone_verified_at: null,
+  is_platform_admin: false,
 };
 
 function workspaceStub(): Partial<WorkspaceService> {

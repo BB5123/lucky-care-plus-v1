@@ -15,6 +15,7 @@ const USER: AuthUser = {
   email: 'member@example.com',
   phone: null,
   phone_verified_at: '2026-10-01T00:00:00+00:00',
+  is_platform_admin: false,
 };
 
 const WORKSPACE: MembershipSummary = {
@@ -31,6 +32,7 @@ function authStub(): Partial<AuthService> {
 
   return {
     user: user.asReadonly(),
+    isPlatformAdmin: computed(() => user()?.is_platform_admin === true),
     logout: () => EMPTY,
   };
 }

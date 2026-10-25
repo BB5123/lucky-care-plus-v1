@@ -1,0 +1,234 @@
+<section class="mx-auto w-full max-w-4xl">
+  <header class="mb-4">
+    <h1 class="text-2xl">ตรวจแหล่งความรู้</h1>
+    <p class="mt-1 text-sm text-ink-muted">
+      ตรวจทานแหล่งข้อมูลสาธารณะที่ใช้ตอบคำถามสุขภาพ หน้านี้สำหรับผู้ดูแลแพลตฟอร์มเท่านั้น
+    </p>
+  </header>
+
+  @if (!isPlatformAdmin()) {
+    <div class="card" role="status" data-testid="knowledge-admin-not-admin">
+      <h2 class="text-xl">หน้านี้สำหรับผู้ดูแลแพลตฟอร์มเท่านั้น</h2>
+      <p class="mt-2 text-sm text-ink-muted">กำลังพาคุณกลับไปยังหน้าแรก</p>
+    </div>
+  } @else if (forbidden()) {
+    <div class="card" role="status" data-testid="knowledge-admin-forbidden">
+      <h2 class="text-xl">ไม่สามารถเปิดหน้านี้ได้</h2>
+      <p class="mt-2 text-sm text-ink-muted">
+        สิทธิ์ผู้ดูแลแพลตฟอร์มของคุณอาจถูกเพิกถอนหรือเซสชันหมดอายุแล้ว
+        กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่ หรือติดต่อผู้ดูแลระบบ
+      </p>
+    </div>
+  } @else {
+    @if (successMessage(); as message) {
+      <div class="alert alert-success mb-4" role="status" data-testid="knowledge-admin-success">
+        {{ message }}
+      </div>
+    }
+
+    <section class="card mb-4" aria-label="ตัวกรองแหล่งความรู้">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div class="flex flex-col gap-2 sm:w-[220px]">
+          <label class="field-label" for="knowledge-admin-status">สถานะการตรวจทาน</label>
+          <select
+            id="knowledge-admin-status"
+            class="field-input"
+            data-testid="knowledge-admin-status-filter"
+            [value]="statusFilter()"
+            (change)="onStatusChange($event)"
+          >
+            @for (option of statusOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="flex flex-1 flex-col gap-2">
+          <label class="field-label" for="knowledge-admin-search">ค้นหาแหล่งความรู้</label>
+          <input
+            id="knowledge-admin-search"
+            class="field-input"
+            type="search"
+            data-testid="knowledge-admin-search"
+            placeholder="ค้นหาจากชื่อเรื่องหรือผู้เผยแพร่"
+            [value]="searchInput()"
+            (input)="onSearchInput($event)"
+          />
+        </div>
+      </div>
+    </section>
+
+    @if (reviewTarget(); as target) {
+      <section
+        class="card mb-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="knowledge-admin-review-heading"
+        data-testid="knowledge-admin-review-dialog"
+      >
+        <h2 id="knowledge-admin-review-heading" class="text-xl">ตรวจทานแหล่งความรู้</h2>
+        <p class="mt-1 text-sm text-ink-muted">แหล่ง: {{ target.title }}</p>
+
+        <form class="mt-3" (submit)="submitReview($event)" novalidate>
+          <div class="field">
+            <label class="field-label" for="knowledge-admin-reviewer">
+              ชื่อผู้ตรวจทาน (อย่างน้อย 3 ตัวอักษร)
+            </label>
+            <input
+              id="knowledge-admin-reviewer"
+              class="field-input"
+              type="text"
+              autocomplete="name"
+              data-testid="knowledge-admin-reviewer"
+              [value]="reviewer()"
+              (input)="setReviewer($event)"
+              [attr.aria-invalid]="reviewerError() === null ? null : 'true'"
+              [attr.aria-describedby]="
+                reviewerError() === null ? null : 'knowledge-admin-reviewer-error'
+              "
+            />
+            @if (reviewerError(); as message) {
+              <p
+                id="knowledge-admin-reviewer-error"
+                class="field-error"
+                role="alert"
+                data-testid="knowledge-admin-reviewer-error"
+              >
+                {{ message }}
+              </p>
+            }
+            <p class="field-hint">ชื่อนี้จะถูกบันทึกไว้กับแหล่งความรู้เพื่อการตรวจสอบย้อนหลัง</p>
+          </div>
+
+          <label class="mb-4 flex min-h-12 cursor-pointer items-center gap-2 text-sm text-ink">
+            <input
+              class="h-4 w-4"
+              type="checkbox"
+              data-testid="knowledge-admin-rebuild"
+              [checked]="rebuild()"
+              (change)="setRebuild($event)"
+            />
+            <span>สร้างฐานความรู้ใหม่หลังบันทึก</span>
+          </label>
+
+          @if (reviewError(); as message) {
+            <div
+              class="alert alert-error mb-4"
+              role="alert"
+              data-testid="knowledge-admin-review-error"
+            >
+              {{ message }}
+            </div>
+          }
+
+          <div class="flex flex-wrap gap-2">
+            <button
+              class="btn btn-primary"
+              type="submit"
+              data-testid="knowledge-admin-review-submit"
+              [disabled]="reviewSubmitting()"
+            >
+              @if (reviewSubmitting()) {
+                <span class="spinner" aria-hidden="true"></span>
+                <span>กำลังบันทึก...</span>
+              } @else {
+                <span>บันทึกการตรวจทาน</span>
+              }
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              data-testid="knowledge-admin-review-cancel"
+              (click)="closeReview()"
+              [disabled]="reviewSubmitting()"
+            >
+              ยกเลิก
+            </button>
+          </div>
+        </form>
+      </section>
+    }
+
+    @if (loading() && sources().length === 0) {
+      <div class="flex flex-col gap-3" aria-busy="true" data-testid="knowledge-admin-loading">
+        <p class="sr-only" role="status">กำลังโหลดแหล่งความรู้</p>
+        <div class="h-12 animate-pulse rounded-lg bg-surface-muted"></div>
+        <div class="h-32 animate-pulse rounded-lg bg-surface-muted"></div>
+      </div>
+    } @else if (error(); as message) {
+      <div class="alert alert-error" role="alert" data-testid="knowledge-admin-error">
+        <p>{{ message }}</p>
+        <button class="btn btn-secondary mt-3" type="button" (click)="retry()">ลองอีกครั้ง</button>
+      </div>
+    } @else if (sources().length === 0) {
+      <div class="card" data-testid="knowledge-admin-empty">
+        <h2 class="text-xl">ไม่พบแหล่งความรู้</h2>
+        <p class="mt-2 text-sm text-ink-muted">ลองเปลี่ยนตัวกรองสถานะหรือคำค้นหา แล้วลองอีกครั้ง</p>
+      </div>
+    } @else {
+      <section class="card overflow-x-auto" aria-labelledby="knowledge-admin-list-heading">
+        <h2 id="knowledge-admin-list-heading" class="text-xl">แหล่งความรู้ทั้งหมด</h2>
+
+        <table
+          class="mt-3 w-full min-w-[640px] border-collapse text-left text-sm"
+          data-testid="knowledge-admin-table"
+        >
+          <thead>
+            <tr class="border-b border-line text-xs text-ink-muted">
+              <th class="py-2 pr-3 font-medium" scope="col">หัวข้อ</th>
+              <th class="py-2 pr-3 font-medium" scope="col">ผู้เผยแพร่</th>
+              <th class="py-2 pr-3 font-medium" scope="col">วันที่ดึงข้อมูล</th>
+              <th class="py-2 pr-3 font-medium" scope="col">สถานะ</th>
+              <th class="py-2 font-medium" scope="col">การจัดการ</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (source of sources(); track source.id) {
+              <tr
+                class="border-b border-line last:border-b-0"
+                data-testid="knowledge-admin-row"
+                [attr.data-source-id]="source.id"
+              >
+                <td class="py-3 pr-3">
+                  <p class="font-medium text-ink">{{ source.title }}</p>
+                </td>
+                <td class="py-3 pr-3 text-ink-muted">{{ source.publisher }}</td>
+                <td class="py-3 pr-3 text-ink-muted numeric-tabular">
+                  {{ formatFetched(source.fetchedAt) }}
+                </td>
+                <td class="py-3 pr-3">
+                  <span
+                    class="badge"
+                    data-testid="knowledge-admin-status"
+                    [class.text-success]="source.reviewStatus === 'reviewed'"
+                  >
+                    {{ statusLabel(source.reviewStatus) }}
+                  </span>
+                  @if (source.stale) {
+                    <span class="badge ml-2 text-warning" data-testid="knowledge-admin-stale">
+                      เก่า
+                    </span>
+                  }
+                </td>
+                <td class="py-3">
+                  <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-testid="knowledge-admin-review"
+                    (click)="openReview(source)"
+                  >
+                    ตรวจทาน
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        <p class="mt-3 text-sm text-ink-muted" data-testid="knowledge-admin-count">
+          แสดง {{ sources().length }} จาก {{ total() }} แหล่ง
+        </p>
+      </section>
+    }
+  }
+</section>
