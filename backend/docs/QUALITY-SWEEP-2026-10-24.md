@@ -146,6 +146,13 @@ the tests expect.
    defined by it. A production backup — encrypted storage away from the database host, key management,
    restore drills against production data, agreed RPO/RTO numbers — still belongs to the deployment
    target (D3/Q-12 in `PROJECT-STATE.md`).
+6. ~~**The knowledge corpus has no backup.**~~ **Closed 2026-10-25.** Since the corpus is a volume (#67)
+   and holds the clinician review decisions, the nightly workflow now also runs
+   `php artisan knowledge:backup` and proves the archive with `php artisan knowledge:restore-drill`
+   (source JSON, unique ids, SQLite `integrity_check`, index counts, lost `reviewed_by`/`reviewed_at`,
+   membership drift), then uploads and downloads it back like the dump. The full covered/not-covered
+   table — object storage for uploaded documents, `.env`/secrets, Redis, off-site storage, monitoring —
+   is in [`BACKUP-COVERAGE.md`](BACKUP-COVERAGE.md).
 
 ---
 

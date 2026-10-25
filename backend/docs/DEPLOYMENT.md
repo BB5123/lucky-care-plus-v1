@@ -370,6 +370,70 @@ Rebuilding the image therefore never resets a review. A new image's seed does
 **not** update an existing volume: if a release ships changed sources, copy the
 specific files in deliberately (or rebuild the whole volume and re-review).
 
+### Back up the corpus by hand
+
+`php artisan knowledge:backup` archives `sources/*.json`, `health_kb.sqlite` and
+the `benchmark/` directory into a gzipped tar, writes a `.sha256` next to it,
+verifies the archive is readable and prunes old copies:
+
+```bash
+# Default destination: storage/app/backups/knowledge
+docker compose --profile app exec -T app php artisan knowledge:backup
+
+# Or an explicit host-visible directory, keeping 30 days of archives:
+docker compose --profile app exec -T app \
+  php artisan knowledge:backup --to=storage/app/backups/knowledge --keep-days=30
+```
+
+The command prints one summary line (path, size, sha256, member count) and
+`--json` emits the same as JSON. It exits non-zero and removes a partial archive
+on any failure, and it refuses to prune if that would leave zero archives behind.
+
+### Prove a corpus archive before trusting it
+
+`php artisan knowledge:restore-drill` extracts an archive into a temporary
+directory (never over the live corpus) and checks, in order: every source parses
+as JSON with `id`/`title`/`url`/`text`, source ids are unique, the SQLite index
+passes `PRAGMA integrity_check`, the index has rows and its `meta` build record
+agrees with the tables, every `reviewed` source still carries `reviewed_by` and
+`reviewed_at`, and the source set matches the indexed documents.
+
+```bash
+docker compose --profile app exec -T app \
+  php artisan knowledge:restore-drill --archive=storage/app/backups/knowledge/knowledge-YYYYMMDDTHHMMSSZ.tar.gz
+```
+
+It prints a table (or JSON with `--json`), exits non-zero on the first failure,
+and always removes the temporary directory. Run it after every backup: the
+nightly CI workflow does exactly this.
+
+### Restore the corpus into a running deployment
+
+Stop the writers first so no review is in flight, restore the archive into the
+volume, then rebuild the SQLite index from the restored sources:
+
+```bash
+# 1. Stop the writers.
+docker compose --profile app stop app queue scheduler
+
+# 2. Repack the archive's contents (it holds sources/, health_kb.sqlite and
+#    benchmark/ at its root) into the volume.
+docker run --rm \
+  -v lucky-care-plus_knowledgedata:/data \
+  -v "$PWD":/backup \
+  alpine:3.20 \
+  sh -c 'rm -rf /data/* && tar xzf /backup/knowledge-YYYYMMDDTHHMMSSZ.tar.gz -C /data'
+
+# 3. Start again and rebuild the index from the restored sources.
+docker compose --profile app start app queue scheduler
+docker compose --profile app exec -T app php artisan knowledge:build
+docker compose --profile app exec -T app php artisan knowledge:validate
+```
+
+The corpus archive is a gzipped tar built from the two paths above; its member
+layout (`sources/…`, `health_kb.sqlite`, `benchmark/…`) matches the volume
+layout, so a plain `tar xzf … -C /data` is enough.
+
 **The volume is the only copy of the review decisions.** Removing it destroys
 them:
 
@@ -381,6 +445,22 @@ docker compose --profile app down -v
 A plain `docker compose --profile app down` (without `-v`) keeps the volume. A
 rebuild (`docker compose --profile app up -d --build app web queue scheduler`)
 also keeps it and re-runs the entrypoint, which detects the populated volume.
+
+### Retention of the CI artifact
+
+`.github/workflows/backup.yml` runs nightly (19:00 UTC = 02:00 Asia/Bangkok)
+and on demand: it produces the corpus archive with `knowledge:backup`, drills it
+with `knowledge:restore-drill`, uploads it alongside the database dump as the
+`nightly-dump` artifact with **7-day retention**, downloads that artifact back
+and drills the downloaded copy. A 7-day workflow artifact is a safety net, not a
+compliance backup — it lives in the same CI system that produces it, and the
+archive is compressed but **not encrypted**. Off-site encrypted storage and
+RPO/RTO stay with the deployment target. `--keep-days` only governs the local
+copy on the runner/volume, not the artifact.
+
+> The throw-away-container commands below are the path to use when you need to
+> copy the raw volume instead of producing a fresh archive from inside a
+> running container.
 
 Back up and restore the corpus with a throw-away container (do not copy from a
 running `app` container if a review may be in flight):
