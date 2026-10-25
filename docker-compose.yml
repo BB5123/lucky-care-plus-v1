@@ -17,6 +17,15 @@ x-app-environment: &app-environment
   REDIS_CLIENT: phpredis
   REDIS_HOST: redis
   REDIS_PORT: "6379"
+  # Malware scanning (ADR-014). clamd is reached over the private compose network
+  # (`tcp://clamav:3310`), which is simpler than sharing a unix socket: the clamav
+  # image appends LocalSocket entries instead of replacing them, so a socket
+  # override silently keeps listening on /tmp/clamd.sock. Enforcement stays off
+  # unless DOCUMENTS_SCAN_REQUIRED=true for the deployment - that switch is the
+  # owner's decision (see backend/docs/MALWARE-SCANNING.md).
+  DOCUMENTS_SCANNER: clamav
+  DOCUMENTS_CLAMAV_SOCKET: tcp://clamav:3310
+  DOCUMENTS_SCAN_REQUIRED: ${DOCUMENTS_SCAN_REQUIRED:-false}
 
 # Bounded log retention for every container. `docker compose logs` is the only
 # log store in the reference stack, so a laptop or a small host must not let a

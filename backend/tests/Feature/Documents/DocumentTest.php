@@ -2,7 +2,10 @@
 
 namespace Tests\Feature\Documents;
 
+use App\Modules\Audit\Models\SecurityAuditLog;
 use App\Modules\Documents\Application\DocumentService;
+use App\Modules\Documents\Infrastructure\Scanning\MalwareScanner;
+use App\Modules\Documents\Infrastructure\Scanning\ScanVerdict;
 use App\Modules\Documents\Jobs\DeleteDocumentObject;
 use App\Modules\Documents\Models\MedicalDocument;
 use App\Modules\Retention\Models\DataHold;
@@ -392,6 +395,53 @@ class DocumentTest extends DocumentTestCase
                 'errors.document_id.0',
                 'The document is not available for this task profile.',
             );
+    }
+
+    /**
+     * An infected upload must be rejected **and** leave a trail.
+     *
+     * The infected path had no HTTP-level test at all before 2026-10-25, which is
+     * why a reviewer (me) could suspect the deny row was lost to the request
+     * transaction. It is not: the row is readable immediately after the 422, and
+     * this test now pins that down.
+     */
+    public function test_doc_t13_infected_upload_is_rejected_and_audited(): void
+    {
+        config(['documents.scan_required' => true]);
+
+        $this->app->bind(MalwareScanner::class, fn (): MalwareScanner => new class implements MalwareScanner
+        {
+            public function scan(string $absolutePath): ScanVerdict
+            {
+                return ScanVerdict::infected('clamav', 'Eicar-Test-Signature');
+            }
+
+            public function name(): string
+            {
+                return 'clamav';
+            }
+        });
+
+        Sanctum::actingAs($this->owner);
+
+        $this->post(
+            $this->documentsPath(),
+            $this->uploadPayload(),
+            ['Accept' => 'application/json'],
+        )
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'document_infected');
+
+        $this->useWorkspace();
+
+        $this->assertSame(0, MedicalDocument::query()->count());
+        $this->assertSame([], Storage::disk('local')->allFiles());
+
+        // The deny row is written synchronously, inside the request: the audit trail
+        // must be readable immediately after the rejection, not only once something
+        // else flushes. There was no test for the infected path before this one.
+        $this->assertSame(1, SecurityAuditLog::query()->where('action', 'document.scan_infected')->count());
+        $this->assertSame('deny', SecurityAuditLog::query()->where('action', 'document.scan_infected')->value('result'));
     }
 
     public function test_doc_t12_required_scanning_fails_closed_and_stores_nothing(): void
