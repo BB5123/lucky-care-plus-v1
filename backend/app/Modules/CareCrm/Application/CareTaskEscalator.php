@@ -66,8 +66,11 @@ final class CareTaskEscalator
                 $result = ['scanned' => 0, 'escalated' => 0, 'skipped' => 0, 'reassigned' => 0];
 
                 TenantContext::run($tenantId, '', function () use ($tenantId, &$remaining, $dryRun, &$result): void {
+                    // Only active accounts escalate: a lapsed/archived workspace
+                    // gets no new task events, assignments or notifications (P2b).
                     $workspaces = Workspace::query()
                         ->where('tenant_id', $tenantId)
+                        ->acceptingBackgroundWork()
                         ->orderBy('id')
                         ->get();
 

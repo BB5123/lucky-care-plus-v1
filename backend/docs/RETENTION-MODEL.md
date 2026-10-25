@@ -203,15 +203,32 @@ cannot drift from the route file. Each refusal writes one `workspace.retention_b
 2. **The final arrow.** `scheduled_deletion -> deleted` is not automated: the member's "delete now" is P3 and the
    archive deletion is P4. `retention:advance` reports `waiting` and leaves the account in place, because marking it
    deleted while its data still exists would be a lie.
-3. **Background jobs do not read the state yet.** Reminders, task materialisation and escalation still scan by date,
-   not by workspace state, so a `read_only` account can still receive a reminder or a generated task. The HTTP gate
-   covers every member-facing path; the job filter is the next slice (P2b) and is listed in PROJECT-STATE's gaps.
-4. **No notices** (P3), **no separate archive store** (P4), and no self-service "pay to restore" screen - restore is
+3. **No notices** (P3), **no separate archive store** (P4), and no self-service "pay to restore" screen - restore is
    the audited support command.
 
 Tests are `RET-S01..S08` (`RetentionStateTest`: windows, arrows, hold pinning, restore, terminal state, commands) and
 `RET-G01..G07` (`WorkspaceStateGateTest`: 409/410 per state, export exception, metadata read, audit row, isolation
 between workspaces).
+
+### P2b: scheduled work respects the state (2026-10-25)
+
+`Workspace::acceptingBackgroundWork()` is the one query scope that decides whether an account is still processed.
+The reminder dispatcher, the recurring-task materialiser, the escalation ladder and the inactivity scan all start from
+it, so a lapsed or archived account receives no reminder, generates no occurrence and escalates nothing. The scope is
+deliberately **not** used by the retention jobs themselves: `retention:purge`, `:compact` and `:advance` must process
+lapsed accounts.
+
+A queued notification is a second window. `DispatchNotificationJob` re-checks the state inside its own transaction and
+drops the job (logging `notification.dispatch.skipped_workspace_state`, never the payload) when the account is no
+longer active, so a job queued a minute before a lapse cannot deliver afterwards. The semantic predicate is
+`RetentionState::acceptsBackgroundWork()`, shared by both places.
+
+Tests: `WIRE-T12` (due-soon reminders), `WIRE-T13` (a queued job is dropped), `REC-T14` (materialisation), `ESC-T13`
+(escalation), `RET-T04b` (inactivity scan). Each test also proves the work happens once the account is restored again,
+so the state - not a broken fixture - is what suppressed it.
+
+Still open for P3/P4: the 30/7/1-day notices, the export push, the cancellation choice screen, and the separate archive
+store. Plan-specific windows wait for D5 (billing).
 
 ## 9. Notice copy (Thai, for the privacy notice)
 

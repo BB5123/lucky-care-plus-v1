@@ -72,8 +72,11 @@ final class CareTaskMaterializer
                 $result = ['created' => 0, 'skipped' => 0, 'templates' => 0];
 
                 TenantContext::run($tenantId, '', function () use ($tenantId, $daysAhead, $dryRun, &$result): void {
+                    // Lapsed/archived accounts are not processed: generating
+                    // new work for them would contradict the state model (P2b).
                     $workspaces = Workspace::query()
                         ->where('tenant_id', $tenantId)
+                        ->acceptingBackgroundWork()
                         ->orderBy('id')
                         ->get();
 
@@ -119,14 +122,21 @@ final class CareTaskMaterializer
      */
     private function materialiseWorkspace(Workspace $workspace, int $daysAhead, bool $dryRun): array
     {
+        $result = ['created' => 0, 'skipped' => 0, 'templates' => 0];
+
+        // Fail closed even when a caller targets one workspace directly (the
+        // `$only` path): a lapsed or archived account must not receive new
+        // generated work (P2b).
+        if (! $workspace->retentionState()->acceptsBackgroundWork()) {
+            return $result;
+        }
+
         $templates = CareTaskTemplate::query()
             ->where('tenant_id', $workspace->tenant_id)
             ->where('workspace_id', $workspace->id)
             ->where('is_active', true)
             ->orderBy('id')
             ->get();
-
-        $result = ['created' => 0, 'skipped' => 0, 'templates' => 0];
 
         foreach ($templates as $template) {
             $result['templates']++;

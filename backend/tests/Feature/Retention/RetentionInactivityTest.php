@@ -3,6 +3,7 @@
 namespace Tests\Feature\Retention;
 
 use App\Models\User;
+use App\Modules\Retention\Domain\RetentionState;
 use App\Modules\Retention\Services\InactivityService;
 use App\Modules\Retention\Services\InactivityStatus;
 use App\Modules\Workspace\Models\Tenant;
@@ -80,6 +81,19 @@ class RetentionInactivityTest extends TestCase
 
         $this->artisan('retention:inactivity', ['--dry-run' => true])
             ->assertSuccessful();
+    }
+
+    public function test_ret_t04b_the_inactivity_scan_skips_non_active_workspaces(): void
+    {
+        $this->workspace->forceFill(['retention_state' => RetentionState::ReadOnly])->save();
+
+        $this->assertSame([], app(InactivityService::class)->scan());
+
+        $this->workspace->forceFill(['retention_state' => RetentionState::Active])->save();
+
+        $statuses = app(InactivityService::class)->scan();
+        $this->assertCount(1, $statuses);
+        $this->assertSame($this->workspace->id, $statuses[0]->workspaceId);
     }
 
     private function statusForWorkspace(): InactivityStatus

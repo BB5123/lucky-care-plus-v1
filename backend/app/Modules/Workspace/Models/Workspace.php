@@ -5,6 +5,7 @@ namespace App\Modules\Workspace\Models;
 use App\Modules\People\Models\Person;
 use App\Modules\Retention\Domain\RetentionState;
 use App\Support\Id\Uuid7;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -91,5 +92,22 @@ class Workspace extends Model
     public function persons(): HasMany
     {
         return $this->hasMany(Person::class, 'workspace_id');
+    }
+
+    /**
+     * Workspaces that may receive scheduled background work (P2b).
+     *
+     * This is the one place the "is this account still processed?" filter is
+     * expressed for jobs: reminders, task materialisation, escalation and the
+     * inactivity scan all start from this scope instead of re-checking the
+     * state themselves. The retention jobs deliberately do NOT use it - purge,
+     * compaction and the state advance must process lapsed accounts too.
+     *
+     * @param  Builder<Workspace>  $query
+     * @return Builder<Workspace>
+     */
+    public function scopeAcceptingBackgroundWork(Builder $query): Builder
+    {
+        return $query->where('retention_state', RetentionState::Active->value);
     }
 }
