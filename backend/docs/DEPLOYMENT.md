@@ -247,7 +247,8 @@ docker compose --profile app exec -T scheduler pgrep -af 'artisan schedule:work'
 # Scheduler: print the schedule it is driving (same code the worker evaluates).
 docker compose --profile app exec -T scheduler php artisan schedule:list
 # Expected: retention:purge, retention:compact, retention:advance, retention:notices,
-# retention:inactivity, notifications:send-due, notifications:send-appointment-reminders,
+# retention:inactivity, retention:status --verify-archives (Sundays 02:30 UTC),
+# notifications:send-due, notifications:send-appointment-reminders,
 # tasks:materialise, tasks:escalate.
 
 # Non-root check: both workers must run as www-data, not root.

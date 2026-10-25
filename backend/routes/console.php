@@ -47,6 +47,16 @@ Schedule::command('retention:inactivity')
     ->timezone('UTC')
     ->withoutOverlapping();
 
+// Weekly archive probe: the drill checks the file, its ciphertext hash, that
+// the bundle decrypts with the current APP_KEY, and that its row counts still
+// match the inventory. A backup failure is recoverable; an archive that stopped
+// verifying is the one loss a backup cannot repair. Sunday 02:30 UTC, before
+// the Sunday restore drill, so both results are in one morning's review.
+Schedule::command('retention:status --verify-archives')
+    ->weeklyOn(7, '02:30')
+    ->timezone('UTC')
+    ->withoutOverlapping();
+
 // P1.6b: reminder side of the notification slice. Both commands are
 // idempotent through the delivery ledger, not through the queue.
 Schedule::command('notifications:send-due')

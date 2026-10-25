@@ -106,6 +106,11 @@ runs with `RETENTION_DRY_RUN=false`** - which is still not the case in this repo
    message can carry bound values, so the message is not logged (N-02). Read the table, fix the disk, re-run; the
    transition is idempotent.
 
+   **The weekly archive probe.** The scheduler also runs `retention:status --verify-archives` on Sundays at 02:30 UTC,
+   before the Sunday restore drill. It re-checks every archived bundle (file, ciphertext hash, decryptability, counts)
+   and exits non-zero on the first broken one, so a failed run is visible in the same place as a failed backup. On a
+   deployment with no archived accounts it is a no-op that exits 0.
+
 ## Rehearsal recipe (the one to use before step 3)
 
 Seeding "old" rows needs a **tenant context**, because RLS hides everything without one. This is the trap: a
