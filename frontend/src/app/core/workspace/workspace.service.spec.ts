@@ -194,4 +194,25 @@ describe('WorkspaceService', () => {
     expect(service.retentionState()).toBeNull();
     expect(service.isRestricted()).toBe(false);
   });
+
+  it('reads the lifecycle once and clears it when the workspace changes', async () => {
+    const loading = service.load();
+    httpMock.expectOne('/api/v1/me').flush({ data: meResponse() });
+    await loading;
+
+    const firstRead = service.loadLifecycle();
+    httpMock.expectOne('/api/v1/workspaces/ws-2').flush({ data: { retention_state: 'read_only' } });
+    await firstRead;
+
+    // A second call for the same workspace is served from the signal, not the
+    // network (afterEach would fail on an extra request).
+    await service.loadLifecycle();
+    expect(service.isRestricted()).toBe(true);
+
+    // Switching workspace drops the previous account's banner; the shell
+    // reloads the new state itself.
+    expect(service.select('ws-3')).toBe(true);
+    expect(service.retentionState()).toBeNull();
+    expect(service.isRestricted()).toBe(false);
+  });
 });
