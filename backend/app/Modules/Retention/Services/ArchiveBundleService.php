@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use LogicException;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -45,6 +46,17 @@ class ArchiveBundleService
 
     public const AUDIT_ACTION = 'retention.archive_bundle';
 
+    /**
+     * Magic bytes at the start of a v2 bundle (the format with a per-archive
+     * key). A blob without them is a P4b-1 legacy bundle encrypted straight
+     * with APP_KEY, which the drill still reads.
+     */
+    private const BLOB_MAGIC = 'LCA2';
+
+    public const KEY_ALGORITHM = 'secretbox-xsalsa20poly1305';
+
+    private const KEY_BYTES = 32;
+
     public function __construct(private readonly SecurityAuditLogger $audit) {}
 
     public function write(Workspace $workspace, WorkspaceArchiveManifest $manifest, ?CarbonInterface $at = null): WorkspaceArchiveManifest
@@ -64,7 +76,7 @@ class ArchiveBundleService
             $manifest->id,
         );
 
-        $cipher = Crypt::encryptString(gzencode($ndjson, 6));
+        [$cipher, $key] = $this->seal($ndjson);
 
         $disk = $this->disk();
         $disk->put($path, $cipher);
@@ -73,6 +85,8 @@ class ArchiveBundleService
             'archive_path' => $path,
             'archive_sha256' => hash('sha256', $cipher),
             'archive_bytes' => strlen($cipher),
+            'key_wrapped' => Crypt::encryptString(base64_encode($key)),
+            'key_algorithm' => self::KEY_ALGORITHM,
         ])->save();
 
         $this->audit->record([
@@ -129,9 +143,9 @@ class ArchiveBundleService
         }
 
         try {
-            $ndjson = gzdecode(Crypt::decryptString($cipher));
-        } catch (Throwable) {
-            $problems[] = 'the archive bundle cannot be decrypted with the current APP_KEY';
+            $ndjson = $this->open($manifest, $cipher);
+        } catch (Throwable $exception) {
+            $problems[] = $exception->getMessage();
 
             return ['ok' => false, 'counts' => [], 'problems' => $problems, 'bytes' => strlen($cipher)];
         }
@@ -198,6 +212,74 @@ class ArchiveBundleService
             'problems' => $problems,
             'bytes' => strlen($cipher),
         ];
+    }
+
+    /**
+     * Encrypt the gzip payload with a fresh per-archive key.
+     *
+     * @return array{0: string, 1: string} the blob (magic + nonce + ciphertext) and the raw key
+     */
+    private function seal(string $ndjson): array
+    {
+        $key = random_bytes(self::KEY_BYTES);
+        $nonce = random_bytes(SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        $gzip = gzencode($ndjson, 6);
+
+        return [
+            self::BLOB_MAGIC.$nonce.sodium_crypto_secretbox($gzip, $nonce, $key),
+            $key,
+        ];
+    }
+
+    /**
+     * Decrypt a v2 blob with its wrapped key, or a P4b-1 legacy blob with APP_KEY.
+     */
+    private function open(WorkspaceArchiveManifest $manifest, string $blob): string
+    {
+        if (! str_starts_with($blob, self::BLOB_MAGIC)) {
+            $ndjson = gzdecode(Crypt::decryptString($blob));
+
+            if (! is_string($ndjson)) {
+                throw new RuntimeException('the archive bundle cannot be decompressed');
+            }
+
+            return $ndjson;
+        }
+
+        if (! is_string($manifest->key_wrapped) || $manifest->key_wrapped === '') {
+            throw new RuntimeException('the archive key is missing; the bundle cannot be read');
+        }
+
+        try {
+            $key = base64_decode(Crypt::decryptString($manifest->key_wrapped), true);
+        } catch (Throwable) {
+            throw new RuntimeException('the archive key cannot be unwrapped with the current APP_KEY');
+        }
+
+        if (! is_string($key) || strlen($key) !== self::KEY_BYTES) {
+            throw new RuntimeException('the archive key is not a valid 32-byte key');
+        }
+
+        $nonce = substr($blob, strlen(self::BLOB_MAGIC), SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+        $payload = substr($blob, strlen(self::BLOB_MAGIC) + SODIUM_CRYPTO_SECRETBOX_NONCEBYTES);
+
+        if (strlen($nonce) !== SODIUM_CRYPTO_SECRETBOX_NONCEBYTES) {
+            throw new RuntimeException('the archive bundle is truncated');
+        }
+
+        $gzip = sodium_crypto_secretbox_open($payload, $nonce, $key);
+
+        if (! is_string($gzip)) {
+            throw new RuntimeException('the archive bundle failed authentication (wrong key or modified ciphertext)');
+        }
+
+        $ndjson = gzdecode($gzip);
+
+        if (! is_string($ndjson)) {
+            throw new RuntimeException('the archive bundle cannot be decompressed');
+        }
+
+        return $ndjson;
     }
 
     private function snapshot(Workspace $workspace, CarbonInterface $at): string

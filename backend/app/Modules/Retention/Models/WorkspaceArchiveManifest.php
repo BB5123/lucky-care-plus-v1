@@ -33,6 +33,8 @@ class WorkspaceArchiveManifest extends Model
         'archive_path',
         'archive_sha256',
         'archive_bytes',
+        'key_wrapped',
+        'key_algorithm',
     ];
 
     protected function casts(): array

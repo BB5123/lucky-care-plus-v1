@@ -38,14 +38,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **487 passed / 2 skipped / 4,781 assertions** (489 tests) |
+| backend `php artisan test` | **489 passed / 2 skipped / 4,789 assertions** (491 tests) |
 | web `npm test` | **141 passed / 43 files** |
 | mobile `flutter test` | **132 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 54 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **112 merged PRs**, no open PRs.
+8 mobile feature folders, **113 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 489 (487 passed, 2 skipped)
+php artisan test                 # 491 (489 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -162,13 +162,15 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    idempotent through the delivery ledger. **P3b:** a lapse sends an in-app export offer on day 1. **P4a:** entering
    `archived` writes a hashed per-table inventory (`workspace_archive_manifests`), shown and verified by
    `retention:archive-manifest`. **P4b-1:** the same transition writes the rows as an encrypted NDJSON bundle on
-   `RETENTION_ARCHIVE_DISK` (gzip + `APP_KEY`), recorded in the manifest and verified by `retention:archive-drill`
-   (file, hash, decryptability, counts). **Web/mobile:** a `read_only`/`archived`/`scheduled_deletion` account gets one
+   `RETENTION_ARCHIVE_DISK` (gzip + sodium secretbox), recorded in the manifest and verified by `retention:archive-drill`
+   (file, hash, decryptability, counts). **P4b-2a-keys:** each bundle has its own random key, wrapped by `APP_KEY` and
+   stored as `key_wrapped`; a P4b-1 bundle without one is still read with `APP_KEY`. **Web/mobile:** a
+   `read_only`/`archived`/`scheduled_deletion` account gets one
    banner in the shell (web links to the export card; mobile shows the same copy above the tabs); the API's 409 stays
    the authority. `RETENTION_DRY_RUN` is still `true` here on purpose (`RetentionDecisionPackTest` fails if it is
    flipped). **Still open:** plan-specific windows (D5), the cancellation choice screen (P3c - blocked on a permission
-   change record), the final `scheduled_deletion -> deleted` arrow (P4b-2), the restore data path and per-archive keys
-   (P4b-2), and the self-service restore screens. The bundle is a copy, not a move: the active rows remain in place.
+   change record), the final `scheduled_deletion -> deleted` arrow (P4b-2), the restore data path and crypto-shred
+   (P4b-2/P4c), and the self-service restore screens. The bundle is a copy, not a move: the active rows remain in place.
    **Ops:** `retention:status [--verify-archives]` reports counts per state, what is due now / within 30 days, legal
    holds and archive integrity; with `--verify-archives` it exits non-zero on a broken archive, so it can be a probe.
 7. **Mobile write gaps are closed** (appointments, invites, OCR, data export) and **history pagination now
@@ -243,10 +245,10 @@ permission change record.
 4. **Owner/deployment items:** archive-disk backup + key escrow (P4b-2 depends on them), the `BACKUP_ALERT_WEBHOOK`
    secret, S3/MinIO document mirroring, and D5 plan windows.
 
-**Verified at hand-off:** backend 487 passed / 2 skipped / 4,781 assertions · web 141 · mobile 132 · 112 merged PRs ·
+**Verified at hand-off:** backend 489 passed / 2 skipped / 4,789 assertions · web 141 · mobile 132 · 113 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · P4a/P4b-1
-archive inventory + encrypted bundle tested (RET-A01..A05, RET-B01..B05) · retention:status tested (RET-STAT01..05) ·
+archive inventory + encrypted bundle tested (RET-A01..A05, RET-B01..B07) · retention:status tested (RET-STAT01..05) ·
 advance command + failure isolation tested (RET-ADV01..02) · weekly archive probe scheduled (RET-SCHED01) ·
 document backup tested (DOC-B01..B04) · APP_KEY fingerprint tested (KEY-T01..T03) · web banner (FE5-T10/T11) and
 mobile banner/provider (RET-M01..M07) tested · D2 `ai:ping` proven against the real gateway · malware scanning ON and

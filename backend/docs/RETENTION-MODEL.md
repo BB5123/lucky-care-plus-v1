@@ -118,8 +118,9 @@ cost is **exposure**. So the archive is not "the same data with a flag":
 | **UI banner for non-active states** | **yes since 2026-10-26** - the web and mobile shells read the state and show it with a link to the export card (`FE5-T10/T11`, `RET-M01..M07`); the API's 409 remains the authority |
 | **Cancellation choice screen** | **no** - needs a permission ID ("cancel my account") that the baseline does not have; waits for an owner-approved change record |
 | **Archive inventory** | **yes since 2026-10-26 (P4a)** - entering `archived` writes a hashed per-table inventory (`workspace_archive_manifests`), shown and re-verified by `retention:archive-manifest` (`RET-A01..A05`) |
-| **Encrypted archive bundle** | **yes since 2026-10-26 (P4b-1)** - the archived rows are written as NDJSON, gzipped and encrypted with `APP_KEY` on `RETENTION_ARCHIVE_DISK`; `retention:archive-drill` verifies the file, its hash, decryptability and the per-table counts (`RET-B01..B05`) |
-| **Restore data path + per-archive keys** | **no** - P4b-2; until then the final `scheduled_deletion -> deleted` arrow stays closed |
+| **Encrypted archive bundle** | **yes since 2026-10-26 (P4b-1)** - the archived rows are written as NDJSON, gzipped and encrypted with a **random key per archive** (wrapped by `APP_KEY`) on `RETENTION_ARCHIVE_DISK`; `retention:archive-drill` verifies the file, its hash, decryptability and the per-table counts (`RET-B01..B07`) |
+| **Per-archive keys** | **yes since 2026-10-26 (P4b-2a, keys only)** - `key_wrapped` + `key_algorithm` on the manifest; a P4b-1 bundle without a key is still read with `APP_KEY` (`RET-B06/B07`). Crypto-shred and the restore path remain |
+| **Restore data path** | **no** - P4b-2; until then the final `scheduled_deletion -> deleted` arrow stays closed |
 
 So until 2026-10-25 the product *hid* expired rows forever - the gap P1 closed. Rows are now removed from the
 database, but they still live in backups for up to the backup window (the privacy notice says so).
@@ -303,8 +304,11 @@ second archive appends, read_only/active have none).
 
 Right after the inventory, the same transition writes the account's rows as NDJSON - one row per line, parents before
 children (`persons`, `health_profiles`, conditions, allergies, measurements, medication, appointments, care tasks and
-their events/evidence, documents, timeline, notifications, AI conversations) - gzips it and encrypts it with the
-application key. The ciphertext goes to `RETENTION_ARCHIVE_DISK` (default: the private `local` disk) under
+their events/evidence, documents, timeline, notifications, AI conversations) - gzips it and encrypts it with a
+**random key per archive** (`sodium_crypto_secretbox`, XSalsa20-Poly1305). The per-archive key is wrapped with the
+application key and stored next to the manifest (`key_wrapped`, `key_algorithm`), so the bundle is not a single
+`APP_KEY` blast radius and deleting the wrapped key later makes the bytes unreadable (crypto-shred, P4c). The
+ciphertext goes to `RETENTION_ARCHIVE_DISK` (default: the private `local` disk) under
 `archives/{tenant}/{workspace}/manifest-{id}.json.gz.enc`; the manifest gains `archive_path`, `archive_sha256` and
 `archive_bytes`. Adding a table to the archive means adding it to `ArchiveTables::ALL`, the single list both the
 inventory and the bundle read, so counts and content cannot drift.
@@ -313,9 +317,11 @@ The file name carries ids only - no profile name, no document title, no date of 
 raw ciphertext contains neither the measurement value nor the person's name.
 
 `retention:archive-drill {workspace}` is the verification: file present, ciphertext hash equal to the manifest's,
-decryptable with the current `APP_KEY`, and the row count per table equal to the inventory. It exits non-zero on any
-mismatch, so an archive that was never verified is not reported as one that was (`RET-B01..B05`). The two migrations
-(`workspace_archive_manifests`, then its bundle columns) were rolled back and re-applied on the development database
+decryptable (unwrap the per-archive key; a P4b-1 bundle without one is still read with `APP_KEY`), and the row count
+per table equal to the inventory. It exits non-zero on any
+mismatch, so an archive that was never verified is not reported as one that was (`RET-B01..B07`). The three migrations
+(`workspace_archive_manifests`, its bundle columns, then the archive key columns) were rolled back and re-applied on the
+development database
 on 2026-10-26, so `down()` is exercised, not only written.
 
 **What P4b-1 does not do:** it does not restore rows, does not use a per-archive key, and does not delete the archive
