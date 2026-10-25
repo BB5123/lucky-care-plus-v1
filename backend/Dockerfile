@@ -153,6 +153,11 @@ PHP_HEALTH
 
 RUN chmod +x /usr/local/bin/luckycare-healthcheck
 
+# First-boot corpus seeding. The live corpus is a named volume (mutable review
+# state); the image only carries a seed copy at a different path.
+COPY docker/entrypoint.sh /usr/local/bin/luckycare-entrypoint
+RUN chmod +x /usr/local/bin/luckycare-entrypoint
+
 # ---------------------------------------------------------------------------
 # Composer dependencies. Copied on their own so a source-only change reuses
 # this layer. --no-scripts keeps package:discover out of the no-source stage.
@@ -193,7 +198,15 @@ COPY --from=vendor /var/www/html/vendor ./vendor
 # Recreate the writable directories that .dockerignore excludes, then rebuild
 # the autoloader now that app/ exists. Scripts are enabled here because
 # package:discover needs the source tree and bootstrap/cache must exist first.
-RUN mkdir -p \
+#
+# The knowledge corpus is mutable state (review decisions), not an immutable
+# image layer. Ship it as a read-only seed at database/knowledge-seed and leave
+# database/knowledge as the empty, www-data-owned mount point for the
+# `knowledgedata` volume; docker/entrypoint.sh copies the seed once on first
+# boot and never overwrites an existing corpus.
+RUN mv database/knowledge database/knowledge-seed \
+    && mkdir -p \
+        database/knowledge \
         storage/app/private \
         storage/app/public \
         storage/framework/cache/data \
@@ -201,8 +214,9 @@ RUN mkdir -p \
         storage/framework/views \
         storage/logs \
         bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache \
-    && chmod -R ug+rwX storage bootstrap/cache \
+    && chown -R www-data:www-data database/knowledge storage bootstrap/cache \
+    && chmod -R ug+rwX database/knowledge storage bootstrap/cache \
+    && chmod -R a+rX database/knowledge-seed \
     && composer dump-autoload --no-dev --optimize \
     && php artisan package:discover --ansi
 
@@ -213,6 +227,8 @@ USER www-data
 EXPOSE 9000
 
 STOPSIGNAL SIGQUIT
+
+ENTRYPOINT ["/usr/local/bin/luckycare-entrypoint"]
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD ["php", "/usr/local/bin/luckycare-healthcheck"]

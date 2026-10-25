@@ -115,6 +115,7 @@ services:
     volumes:
       - appstorage:/var/www/html/storage/app
       - applogs:/var/www/html/storage/logs
+      - knowledgedata:/var/www/html/database/knowledge
     depends_on:
       postgres:
         condition: service_healthy
@@ -160,6 +161,7 @@ services:
     volumes:
       - appstorage:/var/www/html/storage/app
       - applogs:/var/www/html/storage/logs
+      - knowledgedata:/var/www/html/database/knowledge
     depends_on:
       postgres:
         condition: service_healthy
@@ -186,6 +188,7 @@ services:
     volumes:
       - appstorage:/var/www/html/storage/app
       - applogs:/var/www/html/storage/logs
+      - knowledgedata:/var/www/html/database/knowledge
     depends_on:
       postgres:
         condition: service_healthy
@@ -201,3 +204,7 @@ volumes:
   clamavdata:
   appstorage:
   applogs:
+  # Knowledge corpus + SQLite index. Mutable review decisions live here, so the
+  # image only ships a seed (database/knowledge-seed) that is copied once on
+  # first boot. `docker compose down -v` destroys every review decision.
+  knowledgedata:

@@ -475,6 +475,29 @@ class PlatformAdminTest extends TestCase
     }
 
     /**
+     * The reviewer name is an identity in the audit trail. A Thai name that was
+     * round-tripped through a shell arrives as "??. ?????" - the real stack stored
+     * it as if it were a person while CR-005 was being verified. Reject it.
+     */
+    public function test_plt_t11_a_corrupted_reviewer_name_is_rejected(): void
+    {
+        Sanctum::actingAs($this->admin);
+
+        foreach (['??. ?????', '   ', '?!?', "\u{FFFD}\u{FFFD}\u{FFFD}"] as $bad) {
+            $this->postJson('/api/v1/admin/knowledge/sources/ddc-disease-44/review', [
+                'reviewer' => $bad,
+                'build' => false,
+            ])->assertStatus(422);
+        }
+
+        // A real name still works, and Thai letters are accepted.
+        $this->postJson('/api/v1/admin/knowledge/sources/ddc-disease-44/review', [
+            'reviewer' => 'Dr. Somchai',
+            'build' => false,
+        ])->assertOk();
+    }
+
+    /**
      * Defence in depth: the platform and workspace pipelines are mutually
      * exclusive. A user who holds the platform flag AND belongs to the workspace
      * must still be refused a platform permission through the workspace path -
@@ -499,5 +522,143 @@ class PlatformAdminTest extends TestCase
         $this->assertTrue(
             $this->authorizer()->authorizePlatform($this->admin, 'knowledge.source.read')->allowed(),
         );
+    }
+
+    /**
+     * CR-005-FIX / KRF-T01. A corpus directory the runtime user cannot write
+     * must be a typed 503, never an unhandled ErrorException (500), and it must
+     * leave the source file byte-for-byte unchanged.
+     */
+    public function test_krf_t01_unwritable_sources_directory_returns_503_and_leaves_the_source_unchanged(): void
+    {
+        $path = $this->sourcePath('ddc-disease-11');
+        $before = (string) file_get_contents($path);
+
+        Sanctum::actingAs($this->admin);
+
+        try {
+            $this->makeSourceDirectoryUnwritable();
+
+            $this->postJson('/api/v1/admin/knowledge/sources/ddc-disease-11/review', [
+                'reviewer' => 'Dr. Readonly',
+            ])
+                ->assertStatus(503)
+                ->assertJsonPath('code', 'knowledge_corpus_readonly')
+                ->assertJsonPath(
+                    'detail',
+                    (string) config('ai.provider_messages.knowledge_corpus_readonly'),
+                );
+        } finally {
+            @chmod($this->sourceDirectory, 0755);
+        }
+
+        $this->assertSame($before, (string) file_get_contents($path));
+    }
+
+    /**
+     * CR-005-FIX / KRF-T02. The failed write is audited once as a failure with
+     * the documented reason code, and the row never carries source text.
+     */
+    public function test_krf_t02_a_readonly_failure_writes_one_failed_audit_row_without_source_text(): void
+    {
+        $source = json_decode(
+            (string) file_get_contents($this->sourcePath('ddc-disease-11')),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+        $snippet = mb_substr((string) $source['text'], 0, 60);
+
+        Sanctum::actingAs($this->admin);
+
+        $before = DB::table('security_audit_logs')
+            ->where('action', 'knowledge.source.review')
+            ->where('result', 'fail')
+            ->count();
+
+        try {
+            $this->makeSourceDirectoryUnwritable();
+
+            $this->postJson('/api/v1/admin/knowledge/sources/ddc-disease-11/review', [
+                'reviewer' => 'Dr. Readonly',
+            ])->assertStatus(503);
+        } finally {
+            @chmod($this->sourceDirectory, 0755);
+        }
+
+        $rows = DB::table('security_audit_logs')
+            ->where('action', 'knowledge.source.review')
+            ->where('result', 'fail')
+            ->get();
+
+        $this->assertCount($before + 1, $rows);
+        $this->assertSame($before + 1, DB::table('security_audit_logs')
+            ->where('reason_code', 'corpus_readonly')
+            ->count());
+
+        $row = $rows->last();
+        $this->assertSame('corpus_readonly', $row->reason_code);
+        $this->assertStringNotContainsString(
+            $snippet,
+            (string) json_encode($row, JSON_UNESCAPED_UNICODE),
+        );
+    }
+
+    /**
+     * CR-005-FIX / KRF-T03. The happy path still works and rebuilds the corpus.
+     */
+    public function test_krf_t03_a_writable_directory_still_reviews_successfully(): void
+    {
+        $this->assertTrue(is_writable($this->sourceDirectory));
+
+        Sanctum::actingAs($this->admin);
+
+        $this->postJson('/api/v1/admin/knowledge/sources/ddc-disease-11/review', [
+            'reviewer' => 'Dr. Writable',
+            'build' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.id', 'ddc-disease-11')
+            ->assertJsonPath('data.review_status', 'reviewed')
+            ->assertJsonPath('data.reviewed_by', 'Dr. Writable');
+
+        $source = json_decode(
+            (string) file_get_contents($this->sourcePath('ddc-disease-11')),
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+
+        $this->assertSame('reviewed', $source['review_status']);
+
+        $pdo = new \PDO('sqlite:'.$this->sourceDirectory.'/kb.sqlite');
+        $status = $pdo->query("select review_status from documents where id = 'ddc-disease-11'")
+            ->fetchColumn();
+        $pdo = null;
+
+        $this->assertSame('reviewed', $status);
+    }
+
+    /**
+     * `chmod` is advisory on Windows and a root test runner ignores it
+     * entirely. Prove the directory is actually unwritable before asserting;
+     * otherwise skip honestly instead of faking a read-only filesystem.
+     */
+    private function makeSourceDirectoryUnwritable(): void
+    {
+        @chmod($this->sourceDirectory, 0500);
+        clearstatcache();
+
+        $probe = $this->sourceDirectory.'/.write-probe';
+        $written = @file_put_contents($probe, 'probe');
+
+        if ($written !== false) {
+            @unlink($probe);
+            @chmod($this->sourceDirectory, 0755);
+
+            $this->markTestSkipped(
+                'chmod cannot make a directory unwritable on this platform (Windows ACL or a root test runner).',
+            );
+        }
     }
 }

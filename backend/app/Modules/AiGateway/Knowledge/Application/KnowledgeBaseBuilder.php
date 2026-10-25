@@ -2,6 +2,7 @@
 
 namespace App\Modules\AiGateway\Knowledge\Application;
 
+use App\Modules\AiGateway\Knowledge\Domain\KnowledgeCorpusReadonlyException;
 use App\Modules\AiGateway\Knowledge\Domain\ThaiText;
 use PDO;
 use PDOException;
@@ -54,7 +55,9 @@ final class KnowledgeBaseBuilder
         $directory = dirname($targetPath);
 
         if (! is_dir($directory) && ! mkdir($directory, 0775, true) && ! is_dir($directory)) {
-            throw new RuntimeException('Cannot create the knowledge directory: '.$directory);
+            throw new KnowledgeCorpusReadonlyException(
+                'Cannot create the knowledge directory: '.$directory,
+            );
         }
 
         $temporary = $targetPath.'.tmp';
@@ -199,7 +202,7 @@ final class KnowledgeBaseBuilder
             $pdo->rollBack();
             @unlink($temporary);
 
-            throw new RuntimeException('Knowledge build failed: '.$exception->getMessage(), 0, $exception);
+            throw KnowledgeCorpusReadonlyException::from($exception);
         }
 
         $pdo = null;
@@ -223,7 +226,7 @@ final class KnowledgeBaseBuilder
         if (! $renamed) {
             @unlink($temporary);
 
-            throw new RuntimeException('Cannot move the built knowledge base into place.');
+            throw new KnowledgeCorpusReadonlyException('Cannot move the built knowledge base into place.');
         }
 
         return [
