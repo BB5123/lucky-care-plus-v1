@@ -4,6 +4,7 @@ namespace App\Modules\Retention\Services;
 
 use App\Modules\Audit\Services\SecurityAuditLogger;
 use App\Modules\Retention\Domain\RetentionState;
+use App\Modules\Retention\Events\WorkspaceLapsed;
 use App\Modules\Workspace\Models\Workspace;
 use App\Support\Database\TenantContext;
 use Carbon\CarbonInterface;
@@ -85,7 +86,7 @@ final class WorkspaceLifecycle
 
         $at ??= now();
 
-        return $this->apply(
+        $workspace = $this->apply(
             $workspace,
             RetentionState::ReadOnly,
             $at->copy()->addDays($this->windowDays($workspace, RetentionState::ReadOnly)),
@@ -93,6 +94,17 @@ final class WorkspaceLifecycle
             $at,
             ['lapsed_at' => $at],
         );
+
+        // The "export offered on day 1" promise (RETENTION-MODEL.md §4 case 1)
+        // is a notification concern: the listener owns the message and its
+        // recipients, so the lifecycle service stays free of the channel.
+        event(new WorkspaceLapsed(
+            (string) $workspace->tenant_id,
+            (string) $workspace->id,
+            $reason,
+        ));
+
+        return $workspace;
     }
 
     /**
