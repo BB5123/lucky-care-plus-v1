@@ -38,14 +38,14 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **492 passed / 2 skipped / 4,816 assertions** (494 tests) |
+| backend `php artisan test` | **493 passed / 2 skipped / 4,820 assertions** (495 tests) |
 | web `npm test` | **141 passed / 43 files** |
 | mobile `flutter test` | **132 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 54 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **114 merged PRs**, no open PRs.
+8 mobile feature folders, **115 merged PRs**, no open PRs.
 
 ---
 
@@ -53,7 +53,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 
 ```bash
 cd backend
-php artisan test                 # 494 (492 passed, 2 skipped)
+php artisan test                 # 495 (493 passed, 2 skipped)
 php artisan perf:smoke --iterations=10   # load smoke; see docs/PERFORMANCE.md
 php artisan ai:evaluate          # offline gate; --live uses the provider
 php artisan knowledge:bench      # hit@1/hit@3/MRR floors; --json for CI
@@ -247,10 +247,10 @@ permission change record.
 4. **Owner/deployment items:** archive-disk backup + key escrow (P4b-2 depends on them), the `BACKUP_ALERT_WEBHOOK`
    secret, S3/MinIO document mirroring, and D5 plan windows.
 
-**Verified at hand-off:** backend 492 passed / 2 skipped / 4,816 assertions · web 141 · mobile 132 · 114 merged PRs ·
+**Verified at hand-off:** backend 493 passed / 2 skipped / 4,820 assertions · web 141 · mobile 132 · 115 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · P4a/P4b-1
-archive inventory + encrypted bundle + backup tested (RET-A01..A05, RET-B01..B07, RET-AB01..03) · retention:status tested (RET-STAT01..05) ·
+archive inventory + encrypted bundle + backup tested (RET-A01..A05, RET-B01..B07, RET-AB01..04) · retention:status tested (RET-STAT01..05) ·
 advance command + failure isolation tested (RET-ADV01..02) · weekly archive probe scheduled (RET-SCHED01) ·
 document backup tested (DOC-B01..B04) · APP_KEY fingerprint tested (KEY-T01..T03) · web banner (FE5-T10/T11) and
 mobile banner/provider (RET-M01..M07) tested · D2 `ai:ping` proven against the real gateway · malware scanning ON and

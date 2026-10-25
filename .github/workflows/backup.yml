@@ -174,7 +174,7 @@ jobs:
           set -euo pipefail
           mkdir -p backend/backups/archives
           php backend/artisan retention:archive-backup --output=backend/backups/archives/archives.zip
-          php backend/artisan retention:archive-drill-backup backend/backups/archives/archives.zip
+          php backend/artisan retention:archive-drill-backup backend/backups/archives/archives.zip --check-db
 
       # `path` is resolved from the workspace root, not from the step's
       # working-directory, so the `backend/` prefix is required here.
@@ -242,7 +242,7 @@ jobs:
           fi
           ( cd "$(dirname "$archive")" && sha256sum -c ./archives.zip.sha256 )
           echo "Drilling the uploaded retention archive: $archive"
-          php artisan retention:archive-drill-backup "$archive"
+          php artisan retention:archive-drill-backup "$archive" --check-db
 
       - name: Report failure
         if: failure()

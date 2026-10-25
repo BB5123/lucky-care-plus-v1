@@ -167,6 +167,40 @@ class ArchiveBackupTest extends TestCase
         $this->assertStringContainsString('Outer checksum: NO', $out);
     }
 
+    public function test_ret_ab04_check_db_detects_an_archive_that_missed_a_bundle(): void
+    {
+        $this->measurement();
+        $this->archive();
+
+        $output = $this->temporaryPath();
+        $this->assertSame(0, Artisan::call('retention:archive-backup', ['--output' => $output]));
+
+        // A second account is archived after the backup was taken. The archive
+        // is still internally perfect, so only --check-db can see the gap.
+        $second = $this->createWorkspace($this->tenant, 'Second Archive Workspace');
+
+        TenantContext::run($this->tenant->id, $second->id, function () use ($second): void {
+            app(WorkspaceLifecycle::class)->lapse($second);
+        });
+
+        $this->travel(31)->days();
+
+        TenantContext::run($this->tenant->id, $second->id, function () use ($second): void {
+            app(WorkspaceLifecycle::class)->advance($second->fresh());
+        });
+
+        $this->assertSame(0, Artisan::call('retention:archive-drill-backup', ['archive' => $output]));
+
+        $exit = Artisan::call('retention:archive-drill-backup', [
+            'archive' => $output,
+            '--check-db' => true,
+        ]);
+        $out = Artisan::output();
+
+        $this->assertSame(1, $exit, $out);
+        $this->assertStringContainsString('missing from the archive', $out);
+    }
+
     private function archive(): WorkspaceArchiveManifest
     {
         $lifecycle = app(WorkspaceLifecycle::class);

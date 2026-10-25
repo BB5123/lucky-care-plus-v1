@@ -75,7 +75,7 @@ runs with `RETENTION_DRY_RUN=false`** - which is still not the case in this repo
    php backend/artisan knowledge:backup             # the corpus
    php backend/artisan knowledge:restore-drill      # prove the corpus archive
    php backend/artisan retention:archive-backup     # the encrypted bundles
-   php backend/artisan retention:archive-drill-backup storage/app/backups/archives-<UTC>.zip
+   php backend/artisan retention:archive-drill-backup storage/app/backups/archives-<UTC>.zip --check-db
    ```
    The retention run cannot be undone from the database alone; the dump is the only rollback.
    The **archive disk** (`RETENTION_ARCHIVE_DISK`) is not in that dump: the archive-backup command zips every

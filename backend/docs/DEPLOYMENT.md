@@ -434,15 +434,18 @@ archives the archive disk as well:
 docker compose --profile app exec -T app \
   php artisan retention:archive-backup --output=/var/www/html/storage/app/backups/archives.zip
 
-# Prove the uploaded archive: outer checksum + every entry re-hashed.
+# Prove the uploaded archive: outer checksum + every entry re-hashed,
+# and fail if the database has a bundle the archive is missing.
 docker compose --profile app exec -T app \
-  php artisan retention:archive-drill-backup /var/www/html/storage/app/backups/archives.zip
+  php artisan retention:archive-drill-backup /var/www/html/storage/app/backups/archives.zip --check-db
 ```
 
 The producer fails when a database manifest points at a missing bundle or one
 whose hash no longer matches, and still writes the archive so the operator can
-see what is missing. The per-archive keys travel in the database dump (wrapped
-by `APP_KEY`), so restoring the dump and the archive together is enough - and
+see what is missing. `--check-db` is the staleness check: an archive can be
+internally perfect and still predate the newest archived account. The
+per-archive keys travel in the database dump (wrapped by `APP_KEY`), so
+restoring the dump and the archive together is enough - and
 `app:key-fingerprint` is how the key itself is verified.
 
 ---
