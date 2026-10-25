@@ -8,8 +8,8 @@
 > written here once arrived as a three-character mojibake sequence, and `npm run check:mojibake` now fails CI
 > on that. Thai words are fine and expected; the corruption came from a PowerShell round-trip, not from Thai.
 
-**Last verified:** 2026-10-26 (Asia/Bangkok) - web suite re-run after the retention banner (140 passed); backend counts
-are from the previous run; mobile counts are from the previous verification
+**Last verified:** 2026-10-26 (Asia/Bangkok) - concurrent HTTP load run on the reference stack (3 clients / 60 s);
+backend and web counts are from the previous runs; mobile counts are from the previous verification
 
 ---
 
@@ -45,7 +45,7 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 52 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **96 merged PRs**, no open PRs.
+8 mobile feature folders, **97 merged PRs**, no open PRs.
 
 ---
 
@@ -122,14 +122,18 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    `backend/docs/KNOWLEDGE-REVIEW-SHEET.md` (the four questions each Group-1 source must answer, drawn from the
    benchmark, plus the 45-minute runbook and the nine remaining sources), and the console itself. The remaining
    work is the clinical decision.
-3. **Load behaviour is measured by an in-process harness, not by concurrent load.** `php artisan perf:smoke`
+3. **Load behaviour has two measurements now, and neither is capacity evidence.** `php artisan perf:smoke`
    seeds a dedicated `perf-smoke` tenant (500 measurements over 24 months, 120 care tasks, 60 medication
    records, 12 appointments), drives the real HTTP kernel for the dashboard aggregate, the timeline and the
    care-task list, and reports p50/p95/p99 plus queries per request. Xdebug-off baseline on this machine
    (10 iterations): dashboard p95 156 ms / 36 queries, timeline p95 137 ms / 48 queries, care-tasks p95
-   150 ms / 40 queries, all inside the 800/800/300 ms budgets. See `backend/docs/PERFORMANCE.md`. It is
-   single-process and sequential; a real concurrent load test against the deployed stack is still a
-   pre-launch task and the numbers are not capacity evidence.
+   150 ms / 40 queries, all inside the 800/800/300 ms budgets. Since 2026-10-26 a k6 script
+   (`backend/scripts/load/read-paths.js`) also drives the **deployed stack over HTTP** with 3 concurrent
+   clients for 60 s, warm-up included, staying inside the per-user throttles: dashboard p95 281 ms,
+   timeline 297 ms, **care-tasks 358 ms (over its 300 ms in-process gate - a finding, not a pass)**, 0 failed
+   and 0 throttled of 96 requests. The gap is the HTTP stack on this laptop (~100 ms constant), not the query
+   shape; re-measure on a production-like host before changing the gate. See `backend/docs/PERFORMANCE.md` §8.
+   Still a pre-launch task: many clients, network, soak duration, connection pools.
 4. **Backups cover the database, the corpus and the local document objects.** The nightly workflow dumps
    PostgreSQL (row counts + RLS probes on the restored copy) and archives the knowledge corpus
    (`knowledge:backup` -> `knowledge:restore-drill`: source JSON, unique ids, SQLite integrity, index counts,
@@ -229,7 +233,7 @@ P3c (the cancellation choice screen) is blocked on a permission change record.
 3. **P3c** once the owner approves a "cancel my account" permission change record.
 4. **F** (16 sources) once the clinician is available; **D1** (send `DPA-REQUEST-OKMD.md`).
 
-**Verified at hand-off:** backend 466 passed / 2 skipped / 4,689 assertions · web 140 · mobile 125 · 96 merged PRs ·
+**Verified at hand-off:** backend 466 passed / 2 skipped / 4,689 assertions · web 140 · mobile 125 · 97 merged PRs ·
 CI green · P1 rehearsed on the live stack · P2 states + gate tested (RET-S01..S08, RET-G01..G07) · P2b job filter
 tested (WIRE-T12/T13, REC-T14, ESC-T13, RET-T04b) · P3a/P3b notices + export offer tested (RET-N01..N08) · document
 backup tested (DOC-B01..B04) · web retention banner tested (FE5-T10/T11) · D2 `ai:ping` proven against the real
