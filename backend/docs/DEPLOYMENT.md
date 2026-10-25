@@ -329,8 +329,8 @@ A production deployment still needs:
 - a **tested restore procedure** with a measured restore time, not just a
   successful dump exit code;
 - a stated **RPO/RTO** and key management (who holds the encryption key);
-- document/object storage coverage if `FILESYSTEM_DISK=s3` is not used (the
-  `appstorage` volume holds uploads and exports).
+- document/object storage coverage: the local disk has a producer (section 5.1);
+  `DOCUMENTS_DISK=s3`/MinIO still needs an external mirror.
 
 Manual dump for the reference stack:
 
@@ -354,7 +354,38 @@ them before a real deployment (section 10, items 4-5).
 
 ---
 
-## 5.1 Knowledge corpus (mutable state)
+## 5.1 Uploaded document objects (local disk)
+
+`php artisan documents:backup` archives the private objects under
+`storage/app/private/documents/` into `storage/app/backups/documents-<UTC>.zip`,
+writes a `.sha256`, and **fails when a `medical_documents` row has no object**
+(the archive is still written, so the run shows what is missing). Orphan objects
+are reported but do not fail the run.
+
+```bash
+# Producer (writes into the appstorage volume).
+docker compose --profile app exec -T app php artisan documents:backup
+
+# Prove the archive: every file is re-read and checked against the manifest.
+docker compose --profile app exec -T app \
+  php artisan documents:restore-drill /var/www/html/storage/app/backups/documents-<UTC>.zip
+
+# Copy it off the host with the database dump and the corpus archive.
+docker compose cp app:/var/www/html/storage/app/backups/documents-<UTC>.zip ./backups/
+```
+
+The command supports the **local** disk only; with `DOCUMENTS_DISK=s3` it refuses
+rather than archiving nothing. Mirror the bucket with `mc mirror` / `aws s3 sync`
+on the same schedule and run the drill on the archive that produces
+(`backend/docs/BACKUP-COVERAGE.md`).
+
+A demo workspace seeded by `demo:seed` creates the three document rows as
+metadata only, so a backup of a pure demo install reports them as missing - that
+is the check working, not a backup failure to ignore.
+
+---
+
+## 5.2 Knowledge corpus (mutable state)
 
 The knowledge corpus is **not** immutable application code. It has two parts:
 
