@@ -34,18 +34,18 @@ Design authority, in order: `.ai/00-CONSTITUTION.md` -> `docs/baseline-v1.0.0/*`
 | **3 - AI** | **G4 not signed off** | gateway, evaluation, OKMD adapter, vision drafts, 16-document knowledge base with a measured benchmark, web + mobile AI surfaces |
 | **4 - Scale/compliance** | not started | |
 
-**Verified test counts (2026-10-25 19:25):**
+**Verified test counts (2026-10-25 19:50):**
 
 | Suite | Result |
 |---|---|
-| backend `php artisan test` | **419 passed / 2 skipped / 4,457 assertions** (421 tests) |
+| backend `php artisan test` | **422 passed / 2 skipped / 4,463 assertions** (424 tests) |
 | web `npm test` | **135 passed / 43 files** |
 | mobile `flutter test` | **125 passed** |
 | `php artisan ai:evaluate` | all suites pass (offline) |
 | `php artisan knowledge:bench` | **28 questions - hit@1 0.929, hit@3 1.000, MRR 0.964** (16 docs / 183 chunks) |
 
 **Repo shape:** 15 backend modules, 51 migrations, 88 API routes, 22 web feature folders,
-8 mobile feature folders, **79 merged PRs**, no open PRs.
+8 mobile feature folders, **81 merged PRs**, no open PRs.
 
 ---
 
@@ -111,10 +111,13 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
    questions (Ollama 0.40.7 + bge-m3, 181 chunks). The vector store is still not justified: the symptom question was
    fixed with one source and two alias entries instead. Details, reproduction and the recommended alternative (re-rank the lexical
    top-20 with embeddings instead of replacing retrieval) are in `backend/docs/RAG-VECTOR-OPTIONS.md`.
-2. **All 16 sources are `unreviewed`** - every answer carries the "not yet reviewed" warning until a
-   clinician marks them with `knowledge:review` (or the `/admin/knowledge` screen). The generated
-   `backend/docs/KNOWLEDGE-REVIEW-PACK.md` puts provenance, section excerpts and the clinician checklist
-   for every source in one document so the review can be done in one sitting.
+2. **All 16 sources are `unreviewed` in the repository** (2 are reviewed in the local volume only), so every
+   answer still carries the "not yet reviewed" warning until a clinician marks them with `knowledge:review` or
+   the `/admin/knowledge` screen. Three tools now exist for that session: the generated
+   `backend/docs/KNOWLEDGE-REVIEW-PACK.md` (provenance + excerpts + checklist),
+   `backend/docs/KNOWLEDGE-REVIEW-SHEET.md` (the four questions each Group-1 source must answer, drawn from the
+   benchmark, plus the 45-minute runbook and the nine remaining sources), and the console itself. The remaining
+   work is the clinical decision.
 3. **Load behaviour is measured by an in-process harness, not by concurrent load.** `php artisan perf:smoke`
    seeds a dedicated `perf-smoke` tenant (500 measurements over 24 months, 120 care tasks, 60 medication
    records, 12 appointments), drives the real HTTP kernel for the dashboard aggregate, the timeline and the
@@ -140,8 +143,10 @@ Workflow used throughout: branch -> verify -> commit -> `gh pr create` -> `gh pr
 8. **AI and export surfaces are at parity** (summary, knowledge answers, OCR, data export) on web and mobile.
    Mobile's download hands the short-lived URL to the clipboard because `url_launcher` is not a dependency.
 9. **No knowledge source is reviewed yet.** The review path exists in the product (`/admin/knowledge`,
-   CR-005) and in the console (`knowledge:review`); the remaining work is the clinical decision, not
-   tooling. Start from the generated `backend/docs/KNOWLEDGE-REVIEW-PACK.md`.
+   CR-005) and in the console (`knowledge:review`); the remaining work is the clinical decision, not tooling.
+   Start from `backend/docs/KNOWLEDGE-REVIEW-SHEET.md` (questions first), then the pack for the excerpts.
+   Beware one API detail when scripting it: send `Accept: application/json`, otherwise Laravel redirects and
+   the caller sees a misleading 500 instead of the 401.
 10. **The demo smoke check uses password login, not OTP as the first step.** `/auth/otp/request` and
     `/auth/otp/verify` require an existing bearer token, so `scripts/smoke.sh` logs in with the seeded demo
     password, then exercises the OTP round-trip with that token. With `OTP_DEMO_MODE=true` it verifies the
